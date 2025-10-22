@@ -1,0 +1,39 @@
+﻿<Window x:Class="ManagerApp.Pages.MainWindows"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:ManagerApp.Pages"
+        mc:Ignorable="d"
+        Title="MainWindows" Height="450" Width="800">
+    <StackPanel>
+        <Button x:Name="LoadButton" Content="Загрузить товары и категории" 
+                Click="LoadProducts_Click" Padding="10" Margin="10"/>
+
+        <!-- Исправлено название: categoryesListBox → categoriesListBox -->
+        <ListBox x:Name="categoriesListBox" Height="175" Margin="0,0,0,10">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Margin="5">
+                        <TextBlock Text="{Binding Name}" FontWeight="Bold"/>
+                        <TextBlock Text="{Binding Id}" Foreground="Gray"/>
+                        <TextBlock Text="Parent ID: " Foreground="Blue"/>
+                        <TextBlock Text="{Binding SelectionId}" Foreground="Blue"/>
+                    </StackPanel>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <ListBox x:Name="productsListBox" Height="175">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Margin="5">
+                        <TextBlock Text="{Binding Name}" FontWeight="Bold"/>
+                        <TextBlock Text="{Binding Id}" Foreground="Gray"/>
+                        <TextBlock Text="{Binding Code}" Foreground="Blue"/>
+                    </StackPanel>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </StackPanel>
+</Window>
