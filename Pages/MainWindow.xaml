@@ -1,39 +1,64 @@
 ﻿<Window x:Class="ManagerApp.Pages.MainWindows"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:ManagerApp.Pages"
-        mc:Ignorable="d"
-        Title="MainWindows" Height="450" Width="800">
-    <StackPanel>
-        <Button x:Name="LoadButton" Content="Загрузить товары и категории" 
-                Click="LoadProducts_Click" Padding="10" Margin="10"/>
+        Title="Менеджер товаров" 
+        MinHeight="500" MinWidth="800"
+        WindowStartupLocation="CenterScreen">
 
-        <!-- Исправлено название: categoryesListBox → categoriesListBox -->
-        <ListBox x:Name="categoriesListBox" Height="175" Margin="0,0,0,10">
-            <ListBox.ItemTemplate>
-                <DataTemplate>
-                    <StackPanel Margin="5">
-                        <TextBlock Text="{Binding Name}" FontWeight="Bold"/>
-                        <TextBlock Text="{Binding Id}" Foreground="Gray"/>
-                        <TextBlock Text="Parent ID: " Foreground="Blue"/>
-                        <TextBlock Text="{Binding SelectionId}" Foreground="Blue"/>
-                    </StackPanel>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
+    <Grid Margin="10">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="200"/>
+            <ColumnDefinition Width="5"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
 
-        <ListBox x:Name="productsListBox" Height="175">
-            <ListBox.ItemTemplate>
-                <DataTemplate>
-                    <StackPanel Margin="5">
-                        <TextBlock Text="{Binding Name}" FontWeight="Bold"/>
-                        <TextBlock Text="{Binding Id}" Foreground="Gray"/>
-                        <TextBlock Text="{Binding Code}" Foreground="Blue"/>
-                    </StackPanel>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
-    </StackPanel>
+        <!-- Левая панель - кнопки -->
+        <StackPanel Grid.Column="0">
+            <TextBlock Text="Действия" FontWeight="Bold" Margin="0,0,0,10"/>
+
+            <Button x:Name="btnLoadRequest" 
+                    Content="Загрузить заявку" 
+                    Height="30" 
+                    Margin="0,0,0,5"
+                    Click="btnLoadRequest_Click"/>
+
+            <Button x:Name="btnCreateDocument" 
+                    Content="Сформировать документ" 
+                    Height="30" 
+                    Margin="0,0,0,5"
+                    IsEnabled="False"/>
+
+            <Button x:Name="btnSettings" 
+                    Content="Настройки" 
+                    Height="30" 
+                    Margin="0,0,0,5"/>
+
+            <Button x:Name="btnHistory" 
+                    Content="История" 
+                    Height="30" 
+                    Margin="0,0,0,10"/>
+
+            <Button x:Name="btnTestBitrix" 
+                    Content="Тест Битрикс" 
+                    Height="30" 
+                    Margin="0,0,0,5"/>
+        </StackPanel>
+
+        <!-- Разделитель -->
+        <GridSplitter Grid.Column="1" 
+                      HorizontalAlignment="Stretch" 
+                      Width="5" 
+                      Background="LightGray"
+                      ResizeBehavior="PreviousAndNext"/>
+
+        <!-- Правая панель - текстовое поле для вывода данных -->
+        <TextBox Grid.Column="2" 
+                 x:Name="txtOutput" 
+                 TextWrapping="Wrap" 
+                 VerticalScrollBarVisibility="Auto"
+                 FontFamily="Consolas"
+                 FontSize="12"
+                 AcceptsReturn="True"
+                 Text="Здесь будут данные из Битрикс..."/>
+    </Grid>
 </Window>
