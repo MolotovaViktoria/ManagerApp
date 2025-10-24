@@ -1,4 +1,5 @@
 ﻿using ManagerApp.Data.StructureList;
+using Microsoft.Office.Interop.Word;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -18,7 +19,7 @@ namespace ManagerApp.Data.GetInfo
             _httpClient = new HttpClient();
         }
 
-        public async Task<List<Category>> GetСategories()
+        public async Task<List<StructureList.Category>> GetСategories()
         {
             string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.productsection.list";
 
@@ -31,13 +32,32 @@ namespace ManagerApp.Data.GetInfo
             // Парсим JSON и берем только нужные поля
             BitrixCategoryResponse data = JsonConvert.DeserializeObject<BitrixCategoryResponse>(jsonResponse);
 
-            return data.Categories;
+
+            List<StructureList.Category> anwer = new List<StructureList.Category>();
+
+            foreach(var  item in data.Categories)
+            {
+                try
+                {
+                    
+                    StructureList.Category category = new StructureList.Category();
+                    category.Name = item.Name;
+                    category.SelectionId = item.SelectionId + 1;
+                    anwer.Add(category);
+                }
+                catch
+                {
+
+                }
+            }
+
+            return anwer;
         }
 
         public async Task<List<Product>> GetProducts()
         {
             string categoryId = "683";
-            string webhookUrl = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.product.list?filter[SECTION_ID]={categoryId}";
+            string webhookUrl = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.product.list";
 
             // Делаем запрос
             var response = await _httpClient.GetAsync(webhookUrl);
@@ -51,15 +71,34 @@ namespace ManagerApp.Data.GetInfo
             return data.Products;
         }
 
-        public async Task<List<Product>> GetProductsByCategory(string categoryId)
+        public async Task<List<Product>> GetProductsByCategory(int categoryId)
         {
-            string webhookUrl = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.product.list?filter[SECTION_ID]={categoryId}";
+            var allProducts = new List<Product>();
+            int start = 0;
+            const int pageSize = 50; // Bitrix24 обычно использует 50
 
-            var response = await _httpClient.GetAsync(webhookUrl);
-            string jsonResponse = await response.Content.ReadAsStringAsync();
+            while (true)
+            {
+                string webhookUrl = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.product.list?filter[SECTION_ID]={categoryId}&start={start}";
 
-            BitrixProductResponse data = JsonConvert.DeserializeObject<BitrixProductResponse>(jsonResponse);
-            return data.Products;
+                var response = await _httpClient.GetAsync(webhookUrl);
+                string jsonResponse = await response.Content.ReadAsStringAsync();
+
+                BitrixProductResponse data = JsonConvert.DeserializeObject<BitrixProductResponse>(jsonResponse);
+
+                if (data.Products == null || data.Products.Count == 0)
+                    break;
+
+                allProducts.AddRange(data.Products);
+
+                // Если получено меньше записей, чем размер страницы - значит это последняя страница
+                if (data.Products.Count < pageSize)
+                    break;
+
+                start += pageSize;
+            }
+
+            return allProducts;
         }
 
 

@@ -17,7 +17,7 @@ namespace ManagerApp.Data.StructureList
     {
 
         [JsonProperty("SECTION_ID")]
-        public string SelectionId { get; set; }
+        public int? SelectionId { get; set; }
 
         [JsonProperty("NAME")]
         public string Name { get; set; }

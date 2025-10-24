@@ -41,7 +41,8 @@
             <Button x:Name="btnTestBitrix" 
                     Content="Тест Битрикс" 
                     Height="30" 
-                    Margin="0,0,0,5"/>
+                    Margin="0,0,0,5"
+                    Click="btnTestBitrix_Click"/>
         </StackPanel>
 
         <!-- Разделитель -->

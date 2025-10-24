@@ -22,22 +22,55 @@ namespace ManagerApp.Pages
     /// </summary>
     public partial class MainWindows : Window
     {
+        private BitrixService _bitrixService;
         public MainWindows()
         {
             InitializeComponent();
 
-
-
-           
-
-
+            _bitrixService = new BitrixService();
         }
 
         private void btnLoadRequest_Click(object sender, RoutedEventArgs e)
         {
-            Classes.Read.ReadRequst readRequst = new Classes.Read.ReadRequst();
-            //txtOutput.Text = readRequst.ReadWorldFile(@"C:\Users\vimol\Desktop\Work\ManagerApi\Заявки\Приложение 1 спецификация_Испр1.docx");
-            txtOutput.Text = readRequst.ReadFileAll(@"C:\Users\vimol\Desktop\Work\ManagerApi\Заявки\SupplierPositions (7).xls");
+            // Создаем диалог выбора файла
+            var openFileDialog = new Microsoft.Win32.OpenFileDialog();
+
+            // Устанавливаем фильтры для форматов файлов
+            openFileDialog.Filter = "Документы Word (*.docx, *.dotx, *.docm, *.dotm)|*.docx;*.dotx;*.docm;*.dotm|" +
+                                   "PDF файлы (*.pdf)|*.pdf|" +
+                                   "Excel файлы (*.xlsx, *.xls, *.xlsm, *.xlsb, *.csv)|*.xlsx;*.xls;*.xlsm;*.xlsb;*.csv|" +
+                                   "Все файлы (*.*)|*.*";
+
+            openFileDialog.FilterIndex = 1; // Устанавливаем фильтр по умолчанию
+            openFileDialog.Multiselect = false; // Разрешаем выбор только одного файла
+
+            // Показываем диалог и проверяем, был ли выбран файл
+            if (openFileDialog.ShowDialog() == true)
+            {
+                string selectedFilePath = openFileDialog.FileName;
+
+                // Получаем расширение файла для проверки типа
+                string fileExtension = System.IO.Path.GetExtension(selectedFilePath).ToLower();
+
+                Classes.Read.ReadRequst readRequst = new Classes.Read.ReadRequst();
+
+                txtOutput.Text = readRequst.ReadFileAll(selectedFilePath);
+            }
+        }
+
+        private async void btnTestBitrix_Click(object sender, RoutedEventArgs e)
+        {
+            var categories = await _bitrixService.GetProductsByCategory(691);
+
+            //var categories = await _bitrixService.GetСategories();
+            string text = "";
+
+            foreach(var category in categories)
+            {
+                text += "\n" + category.Name + " " + category.Price + " рублей";
+            }
+
+            txtOutput.Text = text; 
         }
     }
 }
