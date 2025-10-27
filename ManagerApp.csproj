@@ -111,13 +111,19 @@
     </Compile>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Classes\Normalizer\SimpleProductParser.cs" />
     <Compile Include="Classes\Read\FormatLists.cs" />
     <Compile Include="Classes\Read\ReadRequst.cs" />
+    <Compile Include="Data\GetInfo\BitrixCache.cs" />
     <Compile Include="Data\GetInfo\BitrixService.cs" />
     <Compile Include="Data\StructureList\BitrixCategoryResponse.cs" />
     <Compile Include="Data\StructureList\BitrixProductResponse.cs" />
+    <Compile Include="Data\StructureList\ProductRequst.cs" />
     <Compile Include="Pages\MainWindow.xaml.cs">
       <DependentUpon>MainWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Pages\SplashScreen.xaml.cs">
+      <DependentUpon>SplashScreen.xaml</DependentUpon>
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>
@@ -148,6 +154,10 @@
   <ItemGroup />
   <ItemGroup>
     <Page Include="Pages\MainWindow.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Pages\SplashScreen.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

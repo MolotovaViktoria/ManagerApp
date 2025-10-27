@@ -1,4 +1,5 @@
-﻿using ManagerApp.Classes.Read;
+﻿using ManagerApp.Classes.Normalizer;
+using ManagerApp.Classes.Read;
 using ManagerApp.Data.GetInfo;
 using ManagerApp.Data.StructureList;
 using System;
@@ -26,9 +27,19 @@ namespace ManagerApp.Pages
         public MainWindows()
         {
             InitializeComponent();
-
             _bitrixService = new BitrixService();
+
+                                      
         }
+
+
+        private async void ShowLoadedData()
+        {
+            // Данные уже в кеше, просто отображаем
+            var products = await BitrixCache.GetProductsByCategory(691);
+            txtOutput.Text = $"Готово! Загружено {products.Count} товаров";
+        }
+
 
         private void btnLoadRequest_Click(object sender, RoutedEventArgs e)
         {
@@ -54,23 +65,30 @@ namespace ManagerApp.Pages
 
                 Classes.Read.ReadRequst readRequst = new Classes.Read.ReadRequst();
 
-                txtOutput.Text = readRequst.ReadFileAll(selectedFilePath);
+                //txtOutput.Text = readRequst.ReadFileAll(selectedFilePath);
+
+
+                string requestText = readRequst.ReadFileAll(selectedFilePath);
+                var products = SimpleProductParser.ExtractProducts(requestText);
+
+              foreach(var product in products )
+                {
+                    txtOutput.Text += "\n" + product.Name  + product.Quantity;
+                }
             }
         }
 
         private async void btnTestBitrix_Click(object sender, RoutedEventArgs e)
         {
-            var categories = await _bitrixService.GetProductsByCategory(691);
+            var categories = await BitrixCache.GetProductsByCategory(691);
 
-            //var categories = await _bitrixService.GetСategories();
-            string text = "";
-
-            foreach(var category in categories)
+            string text = $"Товаров: {categories.Count}\n";
+            foreach (var category in categories.Take(10))
             {
-                text += "\n" + category.Name + " " + category.Price + " рублей";
+                text += $"\n{category.Name} - {category.Price} рублей";
             }
 
-            txtOutput.Text = text; 
+            txtOutput.Text = text;
         }
     }
 }

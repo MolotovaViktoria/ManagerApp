@@ -56,7 +56,6 @@ namespace ManagerApp.Data.GetInfo
 
         public async Task<List<Product>> GetProducts()
         {
-            string categoryId = "683";
             string webhookUrl = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.product.list";
 
             // Делаем запрос
@@ -100,6 +99,8 @@ namespace ManagerApp.Data.GetInfo
 
             return allProducts;
         }
+
+         
 
 
     }
