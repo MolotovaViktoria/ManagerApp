@@ -111,7 +111,7 @@
     </Compile>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Classes\Normalizer\SimpleProductParser.cs" />
+    <Compile Include="Classes\Normalizer\ParserRequst.cs" />
     <Compile Include="Classes\Read\FormatLists.cs" />
     <Compile Include="Classes\Read\ReadRequst.cs" />
     <Compile Include="Data\GetInfo\BitrixCache.cs" />

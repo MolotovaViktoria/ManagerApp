@@ -2,6 +2,7 @@
 using ManagerApp.Classes.Read;
 using ManagerApp.Data.GetInfo;
 using ManagerApp.Data.StructureList;
+using Org.BouncyCastle.Asn1.Pkcs;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -69,11 +70,13 @@ namespace ManagerApp.Pages
 
 
                 string requestText = readRequst.ReadFileAll(selectedFilePath);
-                var products = SimpleProductParser.ExtractProducts(requestText);
+                var parser = new ParserRequst();
+                List<ProductRequst> products = parser.ParseProducts(requestText);
 
-              foreach(var product in products )
+                txtOutput.Text = "всего товаров " + products.Count + "\n";
+                foreach (var product in products)
                 {
-                    txtOutput.Text += "\n" + product.Name  + product.Quantity;
+                    txtOutput.Text += "\n ИМЯ: " + product.Name + " КОЛИЧЕСТВО " + product.Quantity;
                 }
             }
         }
