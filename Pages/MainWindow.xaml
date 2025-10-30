@@ -14,37 +14,10 @@
 
         <!-- Левая панель - кнопки -->
         <StackPanel Grid.Column="0">
-            <TextBlock Text="Действия" FontWeight="Bold" Margin="0,0,0,10"/>
-
-            <Button x:Name="btnLoadRequest" 
-                    Content="Загрузить заявку" 
-                    Height="30" 
-                    Margin="0,0,0,5"
-                    Click="btnLoadRequest_Click"/>
-
-            <Button x:Name="btnCreateDocument" 
-                    Content="Сформировать документ" 
-                    Height="30" 
-                    Margin="0,0,0,5"
-                    IsEnabled="False"/>
-
-            <Button x:Name="btnSettings" 
-                    Content="Настройки" 
-                    Height="30" 
-                    Margin="0,0,0,5"/>
-
-            <Button x:Name="btnHistory" 
-                    Content="История" 
-                    Height="30" 
-                    Margin="0,0,0,10"/>
-
-            <Button x:Name="btnTestBitrix" 
-                    Content="Тест Битрикс" 
-                    Height="30" 
-                    Margin="0,0,0,5"
-                    Click="btnTestBitrix_Click"/>
+            <Button Content="📁 Загрузить файл" Click="btnLoadRequest_Click" Padding="15,8" Margin="0,0,5,0"/>
+            <Button Content="🧠 Обучить модель" Click="TrainModelButton_Click" Padding="15,8" Margin="5,0,5,0" Background="#17a2b8" Foreground="White"/>
+            <Button Content="👀 Предпросмотр данных" Click="btnPreviewTrainingData_Click" Padding="15,8" Margin="5,0,0,0" Background="#6c757d" Foreground="White"/>
         </StackPanel>
-
         <!-- Разделитель -->
         <GridSplitter Grid.Column="1" 
                       HorizontalAlignment="Stretch" 

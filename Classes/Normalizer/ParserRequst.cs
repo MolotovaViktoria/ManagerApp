@@ -17,8 +17,8 @@ namespace ManagerApp.Classes.Normalizer
             if (string.IsNullOrWhiteSpace(data))
                 return products;
 
-            // Ищем все строки с паттерном: число + название + число (количество)
-            var matches = Regex.Matches(data, @"(\d+)[^\w]*(КАБЕЛЬ[^0-9]{10,}?|ПРОВОД[^0-9]{10,}?)(\d+)", RegexOptions.IgnoreCase);
+            // Улучшенный паттерн - ищем любой товар (не только кабели)
+            var matches = Regex.Matches(data, @"(\d+)[^\w]*([А-ЯA-Z][^0-9]{10,}?)(\d+)", RegexOptions.IgnoreCase);
 
             foreach (Match match in matches)
             {
@@ -27,7 +27,8 @@ namespace ManagerApp.Classes.Normalizer
                     var name = match.Groups[2].Value.Trim();
                     var quantityStr = match.Groups[3].Value;
 
-                    if (decimal.TryParse(quantityStr, out decimal quantity))
+                    // Проверяем что это действительно товар, а не мусор
+                    if (IsValidProductName(name) && decimal.TryParse(quantityStr, out decimal quantity))
                     {
                         products.Add(new ProductRequst
                         {
@@ -41,12 +42,32 @@ namespace ManagerApp.Classes.Normalizer
             return products;
         }
 
+        private bool IsValidProductName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name) || name.Length < 5)
+                return false;
+
+            // Ключевые слова, которые указывают на товар
+            var productKeywords = new[]
+            {
+                "блок", "вилка", "выключатель", "коробка", "патрон", "розетка",
+                "стартер", "штепсель", "разъем", "переходник", "кабель", "провод",
+                "лампа", "предохранитель", "трансформатор", "реле", "диод", "конденсатор"
+            };
+
+            return productKeywords.Any(keyword =>
+                name.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+
         private string CleanName(string name)
         {
             // Убираем лишние пробелы
             name = Regex.Replace(name, @"\s+", " ").Trim();
+
+            // Убираем цифры в начале
+            name = Regex.Replace(name, @"^\d+\s*", "");
+
             return name;
         }
-
     }
 }
