@@ -1,12 +1,15 @@
 ﻿using ManagerApp.Classes.ModelsStudy;
 using ManagerApp.Classes.Normalizer;
 using ManagerApp.Classes.Read;
+using ManagerApp.Classes.Search;
 using ManagerApp.Data.GetInfo;
 using ManagerApp.Data.StructureList;
+using Newtonsoft.Json;
 using Org.BouncyCastle.Asn1.Pkcs;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -16,7 +19,6 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
 
 namespace ManagerApp.Pages
 {
@@ -26,7 +28,8 @@ namespace ManagerApp.Pages
     public partial class MainWindows : Window
     {
         private BitrixService _bitrixService;
-        private string _originalFileText; // ← ДОБАВЬТЕ ЭТУ ПЕРЕМЕННУЮ
+        private string _originalFileText;
+        private const string API_URL = "https://localhost:7199/api/ProductAnalysis/analyze";
 
         public MainWindows()
         {
@@ -34,7 +37,7 @@ namespace ManagerApp.Pages
             _bitrixService = new BitrixService();
         }
 
-        private void btnLoadRequest_Click(object sender, RoutedEventArgs e)
+        private async void btnLoadRequest_Click(object sender, RoutedEventArgs e)
         {
             var openFileDialog = new Microsoft.Win32.OpenFileDialog();
             openFileDialog.Filter = "Документы Word (*.docx, *.dotx, *.docm, *.dotm)|*.docx;*.dotx;*.docm;*.dotm|" +
@@ -47,119 +50,124 @@ namespace ManagerApp.Pages
                 string selectedFilePath = openFileDialog.FileName;
                 Classes.Read.ReadRequst readRequst = new Classes.Read.ReadRequst();
 
-                // СОХРАНЯЕМ исходный текст в переменную
-                _originalFileText = readRequst.ReadFileAll(selectedFilePath);
+                try
+                {
+                    // Показываем индикатор загрузки
+                    btnLoadRequest.IsEnabled = false;
+                    btnLoadRequest.Content = "Загрузка...";
 
-                // Показываем пользователю только часть текста или количество товаров
-                txtOutput.Text = $"Файл загружен! Текст содержит {_originalFileText.Length} символов\n";
+                    // СОХРАНЯЕМ исходный текст в переменную
+                    _originalFileText = readRequst.ReadFileAll(selectedFilePath);
 
-                // Можно показать первые 500 символов для preview
-                txtOutput.Text += "Текст файла:\n" + _originalFileText;
+                    // Показываем исходный текст
+                    txtOutput1.Text = $"Файл загружен!\nИсходный текст:\n{_originalFileText}";
+
+                    // Анализируем текст через API
+                    string analysisResult = await AnalyzeViaApiAsync(_originalFileText);
+
+                    // Показываем результат анализа
+                    txtOutput2.Text = $"Результат анализа API:\n{analysisResult}";
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Ошибка при обработке файла: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                    txtOutput2.Text = $"Ошибка: {ex.Message}";
+                }
+                finally
+                {
+                    // Восстанавливаем кнопку
+                    btnLoadRequest.IsEnabled = true;
+                    btnLoadRequest.Content = "Загрузить запрос";
+                }
             }
         }
 
-        private void StartModelTraining()
+        public static async Task<string> AnalyzeViaApiAsync(string text)
         {
+            var requestData = new
+            {
+                text = text
+            };
+
+            string jsonRequest = JsonConvert.SerializeObject(requestData);
+            var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+
+            // Игнорируем SSL ошибки для локальной разработки
+            var handler = new HttpClientHandler
+            {
+                ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
+            };
+
+            using (var client = new HttpClient(handler))
+            {
+                HttpResponseMessage response = await client.PostAsync(API_URL, content);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new HttpRequestException($"Ошибка API: {response.StatusCode} - {await response.Content.ReadAsStringAsync()}");
+                }
+
+                string jsonResponse = await response.Content.ReadAsStringAsync();
+                return ParseApiResponse(jsonResponse);
+            }
+        }
+
+        private static string ParseApiResponse(string jsonResponse)
+        {
+            // Используем Newtonsoft.Json вместо System.Text.Json для совместимости с C# 7.3
             try
             {
-                if (string.IsNullOrWhiteSpace(_originalFileText))
+                var responseObject = JsonConvert.DeserializeObject<dynamic>(jsonResponse);
+
+                if (responseObject.analysisResult != null)
                 {
-                    MessageBox.Show("Сначала загрузите файл с данными!",
-                                  "Нет данных",
-                                  MessageBoxButton.OK,
-                                  MessageBoxImage.Warning);
-                    return;
+                    return responseObject.analysisResult?.ToString()?.Trim() ?? "Пустой ответ от API";
                 }
 
-                // Используем сохраненный исходный текст
-                var parser = new MLParserRequst();
-                var allPotentialProducts = parser.ExtractAllPotentialProducts(_originalFileText);
-
-                // Берем только названия для обучения
-                var textsToClassify = new List<string>();
-
-                foreach (var product in allPotentialProducts)
+                // Если ответ является простой строкой
+                if (responseObject is string)
                 {
-                    if (!string.IsNullOrWhiteSpace(product.Name))
-                    {
-                        textsToClassify.Add(product.Name);
-                    }
+                    return responseObject?.ToString()?.Trim() ?? "Пустой ответ";
                 }
 
-                // Добавляем также явные не-товары для баланса
-                textsToClassify.AddRange(new List<string>
-            {
-                "Российская Федерация РФ Россия",
-                "Нет в наличии",
-                "Страна происхождения",
-                "Максимальная цена поставщиков",
-                "ООО ТД МК НВР",
-                "Ценовой запрос №829183",
-                "ГАЗПРОМ ТРАНСГАЗ СУРГУТ",
-                "Ответ на ценовой запрос",
-                "Наименование позиции площадки",
-                "Комментарий заказчика"
-            });
-
-                if (textsToClassify.Count == 0)
+                // Альтернативный вариант - если структура другая
+                if (responseObject.result != null)
                 {
-                    MessageBox.Show("Не найдено текстов для обучения.",
-                                  "Нет данных",
-                                  MessageBoxButton.OK,
-                                  MessageBoxImage.Warning);
-                    return;
+                    return responseObject.result?.ToString()?.Trim() ?? "Пустой ответ от API";
                 }
 
-                // Запускаем окно обучения
-                var trainWindow = new TrainModelWindow(textsToClassify);
-                trainWindow.Owner = this;
-                trainWindow.ShowDialog();
-
-                MessageBox.Show($"Обучение завершено! Обработано {textsToClassify.Count} текстов.",
-                              "Готово",
-                              MessageBoxButton.OK,
-                              MessageBoxImage.Information);
-
+                throw new Exception("Не удалось распарсить ответ от API");
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка при запуске обучения: {ex.Message}",
-                              "Ошибка",
-                              MessageBoxButton.OK,
-                              MessageBoxImage.Error);
+                // Если десериализация не удалась, возможно это просто строка
+                if (!string.IsNullOrWhiteSpace(jsonResponse))
+                {
+                    return jsonResponse.Trim();
+                }
+                throw new Exception($"Не удалось распарсить ответ от API: {ex.Message}");
             }
         }
 
-        private void TrainModelButton_Click(object sender, RoutedEventArgs e)
+        // Старый метод для обработки через ProductListIdentifier (оставлен для обратной совместимости)
+        private string ProcessTextWithProductIdentifier(string text)
         {
-            StartModelTraining();
-        }
-
-        // Дополнительный метод для просмотра что именно будет обучаться
-        private void btnPreviewTrainingData_Click(object sender, RoutedEventArgs e)
-        {
-            if (string.IsNullOrWhiteSpace(_originalFileText))
+            try
             {
-                MessageBox.Show("Сначала загрузите файл!", "Нет данных", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
+                var productIdentifier = new ProductListIdentifier();
+                string result = productIdentifier.ExtractProductList(text);
+
+                if (string.IsNullOrEmpty(result))
+                {
+                    return "Список товаров не обнаружен в документе.";
+                }
+
+                return result;
             }
-
-            var parser = new MLParserRequst();
-            var allPotentialProducts = parser.ExtractAllPotentialProducts(_originalFileText);
-
-            string previewText = $"Найдено потенциальных товаров: {allPotentialProducts.Count}\n\n";
-
-            foreach (var product in allPotentialProducts.Take(20)) // Покажем первые 20
+            catch (Exception ex)
             {
-                previewText += $"📦 {product.Name} - {product.Quantity} шт.\n";
+                return $"Ошибка при обработке текста: {ex.Message}";
             }
-
-            if (allPotentialProducts.Count > 20)
-            {
-                previewText += $"\n... и еще {allPotentialProducts.Count - 20} товаров";
-            }
-
-            txtOutput.Text = previewText;
         }
     }
 }

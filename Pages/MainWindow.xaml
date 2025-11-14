@@ -10,29 +10,68 @@
             <ColumnDefinition Width="200"/>
             <ColumnDefinition Width="5"/>
             <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="5"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="5"/>
+            <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
         <!-- Левая панель - кнопки -->
         <StackPanel Grid.Column="0">
-            <Button Content="📁 Загрузить файл" Click="btnLoadRequest_Click" Padding="15,8" Margin="0,0,5,0"/>
-            <Button Content="🧠 Обучить модель" Click="TrainModelButton_Click" Padding="15,8" Margin="5,0,5,0" Background="#17a2b8" Foreground="White"/>
-            <Button Content="👀 Предпросмотр данных" Click="btnPreviewTrainingData_Click" Padding="15,8" Margin="5,0,0,0" Background="#6c757d" Foreground="White"/>
+            <Button x:Name="btnLoadRequest" Content="📁 Загрузить файл" 
+            Click="btnLoadRequest_Click" Width="120" Height="30" Margin="5"/>
+
         </StackPanel>
-        <!-- Разделитель -->
+
+        <!-- Первый разделитель (между кнопками и первым текстовым блоком) -->
         <GridSplitter Grid.Column="1" 
                       HorizontalAlignment="Stretch" 
                       Width="5" 
                       Background="LightGray"
                       ResizeBehavior="PreviousAndNext"/>
 
-        <!-- Правая панель - текстовое поле для вывода данных -->
+        <!-- Левый текстовый блок -->
         <TextBox Grid.Column="2" 
-                 x:Name="txtOutput" 
+                 x:Name="txtOutput1" 
                  TextWrapping="Wrap" 
                  VerticalScrollBarVisibility="Auto"
                  FontFamily="Consolas"
                  FontSize="12"
                  AcceptsReturn="True"
-                 Text="Здесь будут данные из Битрикс..."/>
+                 Text="Левый текстовый блок..."/>
+
+        <!-- Второй разделитель (между текстовыми блоками) -->
+        <GridSplitter Grid.Column="3" 
+                      HorizontalAlignment="Stretch" 
+                      Width="5" 
+                      Background="LightGray"
+                      ResizeBehavior="PreviousAndNext"/>
+
+        <!-- Правый текстовый блок -->
+        <TextBox Grid.Column="4" 
+                 x:Name="txtOutput2" 
+                 TextWrapping="Wrap" 
+                 VerticalScrollBarVisibility="Auto"
+                 FontFamily="Consolas"
+                 FontSize="12"
+                 AcceptsReturn="True"
+                 Text="Средний текстовый блок..."/>
+
+        <!-- Второй разделитель (между текстовыми блоками) -->
+        <GridSplitter Grid.Column="5" 
+                      HorizontalAlignment="Stretch" 
+                      Width="5" 
+                      Background="LightGray"
+                      ResizeBehavior="PreviousAndNext"/>
+
+        <!-- Правый текстовый блок -->
+        <TextBox Grid.Column="6" 
+                 x:Name="txtOutput3" 
+                 TextWrapping="Wrap" 
+                 VerticalScrollBarVisibility="Auto"
+                 FontFamily="Consolas"
+                 FontSize="12"
+                 AcceptsReturn="True"
+                 Text="Правый текстовый блок..."/>
     </Grid>
 </Window>
