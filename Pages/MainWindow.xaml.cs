@@ -5,7 +5,6 @@ using ManagerApp.Classes.Search;
 using ManagerApp.Data.GetInfo;
 using ManagerApp.Data.StructureList;
 using Newtonsoft.Json;
-using Org.BouncyCastle.Asn1.Pkcs;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -28,13 +27,15 @@ namespace ManagerApp.Pages
     public partial class MainWindows : Window
     {
         private BitrixService _bitrixService;
+        private SmartProductSearch _productSearch;
         private string _originalFileText;
-        private const string API_URL = "https://localhost:7199/api/ProductAnalysis/analyze";
+        private const string API_URL = "http://localhost:5266/api/ProductAnalysis/analyze";
 
         public MainWindows()
         {
             InitializeComponent();
             _bitrixService = new BitrixService();
+            _productSearch = new SmartProductSearch();
         }
 
         private async void btnLoadRequest_Click(object sender, RoutedEventArgs e)
@@ -67,6 +68,9 @@ namespace ManagerApp.Pages
 
                     // Показываем результат анализа
                     txtOutput2.Text = $"Результат анализа API:\n{analysisResult}";
+
+                    // Активируем кнопку поиска
+                    btnSearchProducts.IsEnabled = true;
                 }
                 catch (Exception ex)
                 {
@@ -82,6 +86,103 @@ namespace ManagerApp.Pages
             }
         }
 
+        private async void btnSearchProducts_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(txtOutput2.Text))
+            {
+                MessageBox.Show("Сначала загрузите файл с товарами", "Информация", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            try
+            {
+                // Показываем индикатор загрузки
+                btnSearchProducts.IsEnabled = false;
+                btnSearchProducts.Content = "Поиск...";
+                txtOutput3.Text = "Начинаем поиск товаров...";
+
+                // Получаем список товаров из txtOutput2
+                var products = ExtractProductsFromText(txtOutput2.Text);
+
+                if (!products.Any())
+                {
+                    txtOutput3.Text = "Не удалось найти товары для поиска";
+                    return;
+                }
+
+                var searchResults = new StringBuilder();
+                searchResults.AppendLine($"Найдено товаров для поиска: {products.Count}");
+                searchResults.AppendLine("==========================================");
+
+                int processed = 0;
+                foreach (var productName in products)
+                {
+                    if (string.IsNullOrWhiteSpace(productName)) continue;
+
+                    // Ищем товар
+                    var result = await _productSearch.SearchSimple(productName.Trim());
+
+                    searchResults.AppendLine($"🔍 Поиск: {productName}");
+                    searchResults.AppendLine($"📋 Результат: {result}");
+                    searchResults.AppendLine("──────────────────────────────────────────");
+
+                    processed++;
+
+                    // Обновляем прогресс в реальном времени
+                    txtOutput3.Text = $"Обработано {processed} из {products.Count} товаров...\n\n{searchResults}";
+
+                    // Небольшая задержка чтобы не перегружать API
+                    await Task.Delay(100);
+                }
+
+                searchResults.AppendLine($"✅ Поиск завершен! Обработано товаров: {processed}");
+                txtOutput3.Text = searchResults.ToString();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при поиске товаров: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                txtOutput3.Text = $"Ошибка при поиске: {ex.Message}";
+            }
+            finally
+            {
+                // Восстанавливаем кнопку
+                btnSearchProducts.IsEnabled = true;
+                btnSearchProducts.Content = "Найти товары в системе";
+            }
+        }
+
+        /// <summary>
+        /// Извлекает список товаров из текста (каждая строка - отдельный товар)
+        /// </summary>
+        private List<string> ExtractProductsFromText(string text)
+        {
+            var products = new List<string>();
+
+            if (string.IsNullOrEmpty(text)) return products;
+
+            // Разбиваем текст на строки
+            var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (var line in lines)
+            {
+                var cleanLine = line.Trim();
+
+                // Пропускаем пустые строки и служебную информацию
+                if (string.IsNullOrEmpty(cleanLine) ||
+                    cleanLine.StartsWith("Результат анализа API:") ||
+                    cleanLine.StartsWith("Файл загружен!") ||
+                    cleanLine.StartsWith("Исходный текст:") ||
+                    cleanLine.Length < 2) // Слишком короткие строки
+                {
+                    continue;
+                }
+
+                products.Add(cleanLine);
+            }
+
+            return products;
+        }
+
         public static async Task<string> AnalyzeViaApiAsync(string text)
         {
             var requestData = new
@@ -92,29 +193,37 @@ namespace ManagerApp.Pages
             string jsonRequest = JsonConvert.SerializeObject(requestData);
             var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
 
-            // Игнорируем SSL ошибки для локальной разработки
-            var handler = new HttpClientHandler
+            using (var client = new HttpClient())
             {
-                ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
-            };
+                // Добавляем таймаут 5 минут
+                client.Timeout = TimeSpan.FromMinutes(5);
 
-            using (var client = new HttpClient(handler))
-            {
-                HttpResponseMessage response = await client.PostAsync(API_URL, content);
-
-                if (!response.IsSuccessStatusCode)
+                try
                 {
-                    throw new HttpRequestException($"Ошибка API: {response.StatusCode} - {await response.Content.ReadAsStringAsync()}");
-                }
+                    HttpResponseMessage response = await client.PostAsync(API_URL, content);
 
-                string jsonResponse = await response.Content.ReadAsStringAsync();
-                return ParseApiResponse(jsonResponse);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        string errorContent = await response.Content.ReadAsStringAsync();
+                        throw new HttpRequestException($"Ошибка API: {response.StatusCode} - {errorContent}");
+                    }
+
+                    string jsonResponse = await response.Content.ReadAsStringAsync();
+                    return ParseApiResponse(jsonResponse);
+                }
+                catch (TaskCanceledException ex)
+                {
+                    throw new HttpRequestException($"Таймаут подключения к API. Убедитесь что API запущено на {API_URL}", ex);
+                }
+                catch (HttpRequestException ex)
+                {
+                    throw new HttpRequestException($"Ошибка подключения к API: {ex.Message}. Убедитесь что API запущено на {API_URL}", ex);
+                }
             }
         }
 
         private static string ParseApiResponse(string jsonResponse)
         {
-            // Используем Newtonsoft.Json вместо System.Text.Json для совместимости с C# 7.3
             try
             {
                 var responseObject = JsonConvert.DeserializeObject<dynamic>(jsonResponse);
@@ -140,7 +249,6 @@ namespace ManagerApp.Pages
             }
             catch (Exception ex)
             {
-                // Если десериализация не удалась, возможно это просто строка
                 if (!string.IsNullOrWhiteSpace(jsonResponse))
                 {
                     return jsonResponse.Trim();

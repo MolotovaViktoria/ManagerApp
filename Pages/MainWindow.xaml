@@ -20,7 +20,12 @@
         <StackPanel Grid.Column="0">
             <Button x:Name="btnLoadRequest" Content="📁 Загрузить файл" 
             Click="btnLoadRequest_Click" Width="120" Height="30" Margin="5"/>
-
+            <Button x:Name="btnSearchProducts" 
+        Content="Найти товары в системе" 
+        Click="btnSearchProducts_Click" 
+        IsEnabled="True"
+        Margin="5" 
+        Padding="10,5"/>
         </StackPanel>
 
         <!-- Первый разделитель (между кнопками и первым текстовым блоком) -->
