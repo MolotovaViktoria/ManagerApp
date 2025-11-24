@@ -29,7 +29,7 @@ namespace ManagerApp.Pages
         private BitrixService _bitrixService;
         private SmartProductSearch _productSearch;
         private string _originalFileText;
-        private const string API_URL = "http://localhost:5266/api/ProductAnalysis/analyze";
+        private const string API_URL = "http://185.177.216.82:5000/api/ProductAnalysis/analyze";
 
         public MainWindows()
         {
@@ -37,6 +37,25 @@ namespace ManagerApp.Pages
             _bitrixService = new BitrixService();
             _productSearch = new SmartProductSearch();
         }
+
+        private async Task<bool> CheckApiAvailability()
+        {
+            try
+            {
+                using (var client = new HttpClient())
+                {
+                    client.Timeout = TimeSpan.FromSeconds(10);
+                    var response = await client.GetAsync("http://185.177.216.82:5000/swagger/index.html");
+                    return response.IsSuccessStatusCode;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+
 
         private async void btnLoadRequest_Click(object sender, RoutedEventArgs e)
         {
@@ -57,11 +76,25 @@ namespace ManagerApp.Pages
                     btnLoadRequest.IsEnabled = false;
                     btnLoadRequest.Content = "Загрузка...";
 
+                    // Проверяем доступность API
+                    txtOutput1.Text = "Проверяем доступность API...";
+                    bool isApiAvailable = await CheckApiAvailability();
+
+                    if (!isApiAvailable)
+                    {
+                        MessageBox.Show($"API недоступно по адресу {API_URL}. Пожалуйста, проверьте:\n\n1. Запущен ли API сервер\n2. Доступность сети\n3. Файрволы и антивирусы", "Ошибка подключения", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        txtOutput1.Text = "API недоступно. Проверьте подключение и настройки.";
+                        return;
+                    }
+
                     // СОХРАНЯЕМ исходный текст в переменную
                     _originalFileText = readRequst.ReadFileAll(selectedFilePath);
 
                     // Показываем исходный текст
                     txtOutput1.Text = $"Файл загружен!\nИсходный текст:\n{_originalFileText}";
+
+                    // Показываем прогресс анализа
+                    txtOutput2.Text = "Анализируем текст через API...";
 
                     // Анализируем текст через API
                     string analysisResult = await AnalyzeViaApiAsync(_originalFileText);
@@ -76,6 +109,12 @@ namespace ManagerApp.Pages
                 {
                     MessageBox.Show($"Ошибка при обработке файла: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
                     txtOutput2.Text = $"Ошибка: {ex.Message}";
+
+                    // Показываем подсказку для пользователя
+                    if (ex.Message.Contains("таймаут") || ex.Message.Contains("Timeout"))
+                    {
+                        txtOutput2.Text += $"\n\nРекомендации:\n1. Проверьте доступность API по адресу: {API_URL}\n2. Убедитесь что API сервер запущен\n3. Проверьте настройки сети";
+                    }
                 }
                 finally
                 {
