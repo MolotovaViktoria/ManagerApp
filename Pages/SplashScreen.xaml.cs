@@ -59,24 +59,25 @@ namespace ManagerApp.Pages
         {
             try
             {
-                // Создаем задачу загрузки
-                var loadTask = BitrixCache.GetProductsByCategory(691);
+                // Задачи загрузки обеих категорий
+                var loadTask691 = BitrixCache.GetProductsByCategory(691);
+                var loadTask692 = BitrixCache.GetProductsByCategory(692);
 
-                // Запускаем анимацию прогресса во время загрузки
+                // Задача анимации прогресса
                 var progressTask = AnimateProgressDuringLoad();
 
-                // Ждем завершения обеих задач
-                await Task.WhenAll(loadTask, progressTask);
+                // Ждём, пока обе загрузки завершатся
+                await Task.WhenAll(loadTask691, loadTask692, progressTask);
 
                 // Устанавливаем точное значение 80%
                 progressBar.Value = 80;
             }
             catch (Exception ex)
             {
-                // В случае ошибки просто продолжаем
                 Console.WriteLine($"Ошибка загрузки: {ex.Message}");
             }
         }
+
 
         private async Task AnimateProgressDuringLoad()
         {
