@@ -47,35 +47,7 @@
                            Background="Transparent"
                            Margin="5,5,5,0">
 
-                    <Button x:Name="btnDebug" 
-                            Content="Дебаг" 
-                            Click="btnDebug_Click" 
-                            Background="White"
-                            Foreground="Black"
-                            BorderThickness="0"
-                            Margin="0,2" 
-                            Padding="5,2"
-                            HorizontalAlignment="Stretch"/>
-
-                    <Button x:Name="btnCheckServer" 
-                            Content="Проверить сервер" 
-                            Click="btnCheckServer_Click" 
-                            Background="White"
-                            Foreground="Black"
-                            BorderThickness="0"
-                            Margin="0,2" 
-                            Padding="5,2"
-                            HorizontalAlignment="Stretch"/>
-
-                    <Button x:Name="btnTestApi" 
-                            Content="Тест API" 
-                            Click="btnTestApi_Click" 
-                            Background="White"
-                            Foreground="Black"
-                            BorderThickness="0"
-                            Margin="0,2" 
-                            Padding="5,2"
-                            HorizontalAlignment="Stretch"/>
+                    <!-- Удалены кнопки Debug, TestApi, CheckServer -->
 
                     <Button x:Name="btnLoadRequest" 
                             Content="📁 Загрузить файл" 
@@ -93,15 +65,21 @@
                             Background="White"
                             Foreground="Black"
                             BorderThickness="0"
-                            IsEnabled="True"
+                            IsEnabled="False"
                             Margin="0,2" 
                             Padding="5,2"
                             HorizontalAlignment="Stretch"/>
 
-                    <Button x:Name="btnCacheInfo" 
-                        Content="Показать статус кеша" 
-                        Click="btnShowCache_Click"
-                        Margin="10"/>
+                    <Button x:Name="btnCancelAnalysis" 
+                            Content="❌ Отменить анализ" 
+                            Click="btnCancelAnalysis_Click"
+                            Background="White"
+                            Foreground="Red"
+                            BorderThickness="0"
+                            Margin="0,10,0,2" 
+                            Padding="5,2"
+                            HorizontalAlignment="Stretch"/>
+
                 </StackPanel>
             </StackPanel>
         </Border>
@@ -121,7 +99,7 @@
                  FontFamily="Consolas"
                  FontSize="12"
                  AcceptsReturn="True"
-                 Text="Левый текстовый блок..."/>
+                 Text="Оригинальный текст файла..."/>
 
         <!-- Второй разделитель -->
         <GridSplitter Grid.Column="3" 
@@ -164,7 +142,7 @@
                  FontFamily="Consolas"
                  FontSize="12"
                  AcceptsReturn="True"
-                 Text="Третий текстовый блок..."/>
+                 Text="Результаты поиска товаров..."/>
 
         <!-- Четвертый разделитель (после третьего текстового блока) -->
         <GridSplitter Grid.Column="7" 
@@ -181,6 +159,6 @@
                  FontFamily="Consolas"
                  FontSize="12"
                  AcceptsReturn="True"
-                 Text="Четвертый текстовый блок..."/>
+                 Text="Логи анализа файла..."/>
     </Grid>
 </Window>

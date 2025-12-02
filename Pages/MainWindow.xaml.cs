@@ -1,9 +1,6 @@
-﻿using ManagerApp.Classes.ModelsStudy;
-using ManagerApp.Classes.Normalizer;
-using ManagerApp.Classes.Read;
+﻿using ManagerApp.Classes.Read;
 using ManagerApp.Classes.Search;
 using ManagerApp.Data.GetInfo;
-using ManagerApp.Data.StructureList;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Concurrent;
@@ -27,11 +24,8 @@ namespace ManagerApp.Pages
         private const string API_URL = "http://185.177.216.82:5000/api/ProductAnalysis/analyze";
 
         private static readonly Dictionary<string, bool> _aiCache = new Dictionary<string, bool>();
-        private static readonly Dictionary<string, bool> _bitrixCache = new Dictionary<string, bool>();
         private static readonly object _cacheLock = new object();
         private readonly StringBuilder _output4Buffer = new StringBuilder();
-        private int _uiUpdateCounter = 0;
-        private System.Windows.Threading.DispatcherTimer _uiUpdateTimer;
         private CancellationTokenSource _analysisCancellationTokenSource;
 
         public MainWindows()
@@ -39,98 +33,11 @@ namespace ManagerApp.Pages
             InitializeComponent();
             _bitrixService = new BitrixService();
             _productSearch = new SmartProductSearch();
-
-            _uiUpdateTimer = new System.Windows.Threading.DispatcherTimer();
-            _uiUpdateTimer.Interval = TimeSpan.FromMilliseconds(300);
-            _uiUpdateTimer.Tick += (s, e) => UpdateUIFromBuffer();
         }
 
         private void btnMenu_Click(object sender, RoutedEventArgs e)
         {
             pnlMenu.Visibility = pnlMenu.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
-        }
-
-        private void btnShowCache_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                var bitrixCacheType = typeof(BitrixCache);
-                var allProductsField = bitrixCacheType.GetField("_allProductsCache",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-
-                if (allProductsField?.GetValue(null) is List<Product> products && products != null)
-                    MessageBox.Show($"Загружено товаров: {products.Count}");
-                else
-                    MessageBox.Show("Кеш товаров пуст");
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка: {ex.Message}");
-            }
-        }
-
-        private async void btnTestApi_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                btnTestApi.IsEnabled = false;
-                btnTestApi.Content = "Тестируем...";
-                txtOutput1.Text = "Тестируем API...";
-
-                var requestData = new { text = "Тестовый запрос" };
-                string json = JsonConvert.SerializeObject(requestData);
-
-                using (var client = new HttpClient())
-                {
-                    client.Timeout = TimeSpan.FromSeconds(30);
-                    var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-                    var response = await client.PostAsync(API_URL, content);
-                    string responseText = await response.Content.ReadAsStringAsync();
-
-                    txtOutput1.Text = response.IsSuccessStatusCode
-                        ? $"✅ API работает!\nОтвет: {responseText}"
-                        : $"❌ Ошибка: {response.StatusCode}\n{responseText}";
-                }
-            }
-            catch (Exception ex)
-            {
-                txtOutput1.Text = $"❌ Ошибка: {ex.Message}";
-            }
-            finally
-            {
-                btnTestApi.IsEnabled = true;
-                btnTestApi.Content = "Тест API";
-            }
-        }
-
-        private async void btnCheckServer_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                btnCheckServer.IsEnabled = false;
-                btnCheckServer.Content = "Проверяем...";
-                txtOutput1.Text = "Проверяем сервер...";
-
-                using (var client = new HttpClient())
-                {
-                    client.Timeout = TimeSpan.FromSeconds(5);
-                    try
-                    {
-                        var response = await client.GetAsync("http://185.177.216.82:5000/");
-                        txtOutput1.Text = response.IsSuccessStatusCode ? "✅ Сервер доступен" : "❌ Сервер недоступен";
-                    }
-                    catch
-                    {
-                        txtOutput1.Text = "❌ Не удалось подключиться к серверу";
-                    }
-                }
-            }
-            finally
-            {
-                btnCheckServer.IsEnabled = true;
-                btnCheckServer.Content = "Проверить сервер";
-            }
         }
 
         private async void btnLoadRequest_Click(object sender, RoutedEventArgs e)
@@ -148,7 +55,7 @@ namespace ManagerApp.Pages
                     btnLoadRequest.IsEnabled = false;
                     btnLoadRequest.Content = "Загрузка...";
 
-                    var reader = new Classes.Read.ReadRequst();
+                    var reader = new ReadRequst();
                     _originalFileText = reader.ReadFileAll(dialog.FileName);
 
                     txtOutput1.Text = _originalFileText;
@@ -156,7 +63,6 @@ namespace ManagerApp.Pages
                     lstProducts.Items.Clear();
                     txtOutput4.Text = "🚀 Начинаем анализ...\n";
 
-                    // Отмена предыдущего анализа, если есть
                     _analysisCancellationTokenSource?.Cancel();
                     _analysisCancellationTokenSource = new CancellationTokenSource();
 
@@ -167,7 +73,7 @@ namespace ManagerApp.Pages
                 }
                 catch (OperationCanceledException)
                 {
-                    txtOutput1.Text += "\n❌ Анализ прерван пользователем";
+                    txtOutput1.Text += "\n❌ Анализ прерван";
                 }
                 catch (Exception ex)
                 {
@@ -185,14 +91,14 @@ namespace ManagerApp.Pages
         {
             try
             {
-                // 1. Разбиваем на строки и фильтруем по длине
                 var allLines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
                                   .Select(l => l.Trim())
-                                  .Where(l => l.Length >= 3 && l.Length <= 60) // Шаг 1: длина 3-100 символов
+                                  .Where(l => l.Length >= 5 && l.Length <= 100)
                                   .ToList();
 
                 AddStatusMessage($"Всего строк: {allLines.Count}");
-                UpdateOutput4Fast($"📄 Строк для анализа: {allLines.Count}\n\n");
+                UpdateOutput4Fast($"📄 Всего строк: {allLines.Count}\n");
+                UpdateOutput4Fast($"Фильтр: 5-100 символов\n\n");
 
                 if (allLines.Count == 0)
                 {
@@ -200,24 +106,23 @@ namespace ManagerApp.Pages
                     return;
                 }
 
-                // Ограничиваем количество для скорости
                 var linesToProcess = allLines.Take(100).ToList();
                 UpdateOutput4Fast($"Будет обработано: {linesToProcess.Count}\n\n");
 
-                var results = new ConcurrentBag<(string line, bool bitrixOk, bool aiOk)>();
+                int directlyAdded = 0;
+                int aiChecked = 0;
+                int aiApproved = 0;
+                int skipped = 0;
                 int processed = 0;
                 int total = linesToProcess.Count;
 
-                // ПАРАЛЛЕЛЬНАЯ обработка 2 строк за раз
-                var parallelOptions = new ParallelOptions
-                {
-                    MaxDegreeOfParallelism = 2, // Две строки одновременно
-                    CancellationToken = cancellationToken
-                };
-
                 await Task.Run(() =>
                 {
-                    Parallel.ForEach(linesToProcess, parallelOptions, (line, state) =>
+                    Parallel.ForEach(linesToProcess, new ParallelOptions
+                    {
+                        MaxDegreeOfParallelism = 2,
+                        CancellationToken = cancellationToken
+                    }, (line, state) =>
                     {
                         if (cancellationToken.IsCancellationRequested)
                         {
@@ -226,55 +131,76 @@ namespace ManagerApp.Pages
                         }
 
                         int current = Interlocked.Increment(ref processed);
-                        bool bitrixOk = false;
+                        double matchPercent = 0;
                         bool aiOk = false;
+                        bool aiCheckedThis = false;
 
                         try
                         {
                             UpdateOutput4Fast($"[{current}/{total}] {Truncate(line, 50)}\n");
 
-                            // Шаг 2: Проверка Bitrix (минимум 20%)
+                            // Шаг 1: Проверка Bitrix
                             var bitrixResult = _productSearch.SearchSimple(line).Result;
-                            bitrixOk = IsGoodBitrixMatchSimple(bitrixResult);
-                            UpdateOutput4Fast($"  Bitrix: {(bitrixOk ? "✅" : "❌")}\n");
+                            matchPercent = GetPercentFromText(bitrixResult);
 
-                            if (bitrixOk)
+                            UpdateOutput4Fast($"  Совпадение Bitrix: {matchPercent:F1}%\n");
+
+                            // Шаг 2: Логика по процентам
+                            if (matchPercent >= 45)
                             {
-                                // Шаг 3: Проверка ИИ
+                                // Высокое совпадение - добавляем сразу
+                                Dispatcher.Invoke(() => lstProducts.Items.Add(line));
+                                UpdateOutput4Fast($"  🎯 Высокое совпадение - добавлено сразу!\n");
+                                Interlocked.Increment(ref directlyAdded);
+                            }
+                            else if (matchPercent >= 20 && matchPercent < 45)
+                            {
+                                // Среднее совпадение - проверяем ИИ
+                                Interlocked.Increment(ref aiChecked);
+                                aiCheckedThis = true;
+
                                 try
                                 {
+                                    UpdateOutput4Fast($"  🤔 Среднее совпадение - проверяем ИИ...\n");
                                     aiOk = CheckWithAISimple(line).Result;
+
                                     UpdateOutput4Fast($"  ИИ: {(aiOk ? "✅" : "❌")}\n");
 
                                     if (aiOk)
                                     {
                                         Dispatcher.Invoke(() => lstProducts.Items.Add(line));
-                                        UpdateOutput4Fast($"  🎯 Добавлено!\n");
+                                        UpdateOutput4Fast($"  🎯 Добавлено по решению ИИ!\n");
+                                        Interlocked.Increment(ref aiApproved);
                                     }
                                 }
-                                catch
+                                catch (Exception aiEx)
                                 {
-                                    UpdateOutput4Fast($"  ИИ: ❌ (ошибка)\n");
+                                    UpdateOutput4Fast($"  ИИ: ❌ (ошибка: {aiEx.Message})\n");
                                 }
+                            }
+                            else
+                            {
+                                // Низкое совпадение - пропускаем
+                                UpdateOutput4Fast($"  ⏭️ Низкое совпадение - пропущено\n");
+                                Interlocked.Increment(ref skipped);
                             }
                         }
                         catch (Exception ex)
                         {
                             UpdateOutput4Fast($"❌ Ошибка: {ex.Message}\n");
                         }
-
-                        results.Add((line, bitrixOk, aiOk));
                     });
                 }, cancellationToken);
 
-                int bitrixPassed = results.Count(r => r.bitrixOk);
-                int aiPassed = results.Count(r => r.aiOk);
-
-                UpdateOutput4Fast($"\n📊 ИТОГИ:\n" +
-                                 $"Обработано: {processed}\n" +
-                                 $"Прошли Bitrix: {bitrixPassed}\n" +
-                                 $"Подтверждено ИИ: {aiPassed}\n" +
-                                 $"✅ Добавлено: {aiPassed}\n");
+                // Итоговая статистика
+                UpdateOutput4Fast($"\n📊 ИТОГИ АНАЛИЗА:\n" +
+                                 $"Всего обработано: {processed}\n" +
+                                 $"├─ Высокое (>45%): {directlyAdded} (добавлено сразу)\n" +
+                                 $"├─ Среднее (20-45%): {aiChecked} (проверено ИИ)\n" +
+                                 $"│  └─ Подтверждено ИИ: {aiApproved}\n" +
+                                 $"└─ Низкое (<20%): {skipped} (пропущено)\n" +
+                                 $"\n" +
+                                 $"✅ Всего добавлено: {directlyAdded + aiApproved} строк\n");
             }
             catch (Exception ex)
             {
@@ -282,27 +208,30 @@ namespace ManagerApp.Pages
             }
         }
 
-        // Простая проверка Bitrix - только 20% порог
-        private bool IsGoodBitrixMatchSimple(string searchResult)
+        private double GetPercentFromText(string text)
         {
-            if (string.IsNullOrWhiteSpace(searchResult))
-                return false;
+            if (string.IsNullOrWhiteSpace(text))
+                return 0;
 
-            // Ищем проценты совпадения
-            var percentMatches = Regex.Matches(searchResult, @"(\d+)%");
-            foreach (Match match in percentMatches)
+            var matches = Regex.Matches(text, @"(\d+)%");
+            if (matches.Count == 0)
+                return 0;
+
+            double maxPercent = 0;
+            foreach (Match match in matches)
             {
-                if (int.TryParse(match.Groups[1].Value, out int percentage) && percentage >= 20)
-                    return true;
+                if (double.TryParse(match.Groups[1].Value, out double percent))
+                {
+                    if (percent > maxPercent)
+                        maxPercent = percent;
+                }
             }
 
-            return false;
+            return maxPercent;
         }
 
-        // СУПЕР простая проверка ИИ
         private async Task<bool> CheckWithAISimple(string text)
         {
-            // Проверяем кеш
             lock (_cacheLock)
             {
                 if (_aiCache.TryGetValue(text, out bool cached))
@@ -311,9 +240,7 @@ namespace ManagerApp.Pages
 
             try
             {
-                // ТОЛЬКО ОДНА СТРОКА ПРОМПТА как просили
                 var prompt = $"Это позиция/наименование/материал/продукция/изделие/ТМЦ? 1=да, 2=нет. Текст: {text}";
-
                 var requestData = new { text = prompt };
                 string json = JsonConvert.SerializeObject(requestData);
 
@@ -330,8 +257,6 @@ namespace ManagerApp.Pages
                             return false;
 
                         string responseText = await response.Content.ReadAsStringAsync();
-
-                        // Очень простой парсинг - ищем "1"
                         bool isProduct = responseText.Contains("1") && !responseText.Contains("2");
 
                         lock (_cacheLock)
@@ -351,34 +276,11 @@ namespace ManagerApp.Pages
 
         private void UpdateOutput4Fast(string message)
         {
-            lock (_output4Buffer)
+            Dispatcher.Invoke(() =>
             {
-                _output4Buffer.Append(message);
-                _uiUpdateCounter++;
-
-                if (_uiUpdateCounter >= 1) // Обновляем после каждого сообщения
-                    UpdateUIFromBuffer();
-                else if (!_uiUpdateTimer.IsEnabled)
-                    _uiUpdateTimer.Start();
-            }
-        }
-
-        private void UpdateUIFromBuffer()
-        {
-            lock (_output4Buffer)
-            {
-                if (_output4Buffer.Length > 0)
-                {
-                    Dispatcher.Invoke(() =>
-                    {
-                        txtOutput4.Text += _output4Buffer.ToString();
-                        txtOutput4.ScrollToEnd();
-                    });
-                    _output4Buffer.Clear();
-                }
-                _uiUpdateTimer.Stop();
-                _uiUpdateCounter = 0;
-            }
+                txtOutput4.Text += message;
+                txtOutput4.ScrollToEnd();
+            });
         }
 
         private void AddStatusMessage(string message)
@@ -452,53 +354,6 @@ namespace ManagerApp.Pages
             return string.IsNullOrEmpty(text) || text.Length <= maxLength
                 ? text
                 : text.Substring(0, maxLength) + "...";
-        }
-
-        private async void btnDebug_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                txtOutput4.Text = "🧪 Простой тест...\n";
-
-                var testLines = new[]
-                {
-                    "1 Провод ПНСВ 1,2 ГОСТ 26445-85",
-                    "УТВЕРЖДАЮ: Директор",
-                    "Кабель ВВГ 3х2,5",
-                    "Приложение №1"
-                };
-
-                foreach (var testLine in testLines)
-                {
-                    UpdateOutput4Fast($"\nТест: {Truncate(testLine, 40)}\n");
-
-                    // Проверяем Bitrix
-                    var bitrixResult = await _productSearch.SearchSimple(testLine);
-                    bool bitrixOk = IsGoodBitrixMatchSimple(bitrixResult);
-                    UpdateOutput4Fast($"Bitrix: {(bitrixOk ? "✅" : "❌")}\n");
-
-                    if (bitrixOk)
-                    {
-                        bool aiOk = await CheckWithAISimple(testLine);
-                        UpdateOutput4Fast($"ИИ: {(aiOk ? "✅ ТОВАР" : "❌ НЕ ТОВАР")}\n");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                UpdateOutput4Fast($"❌ Ошибка: {ex.Message}\n");
-            }
-        }
-
-        private void btnClearCache_Click(object sender, RoutedEventArgs e)
-        {
-            lock (_cacheLock)
-            {
-                _aiCache.Clear();
-                _bitrixCache.Clear();
-            }
-
-            MessageBox.Show("Кеш очищен", "Информация", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void btnCancelAnalysis_Click(object sender, RoutedEventArgs e)
