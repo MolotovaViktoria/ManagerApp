@@ -56,18 +56,36 @@ namespace ManagerApp.Data.GetInfo
 
         public async Task<List<Product>> GetProducts()
         {
-            string webhookUrl = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.product.list";
+            var allProducts = new List<Product>();
+            int start = 0;
+            const int pageSize = 50; // Bitrix24 обычно использует 50
 
-            // Делаем запрос
-            var response = await _httpClient.GetAsync(webhookUrl);
+            while (true)
+            {
+                string webhookUrl = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.product.list?start={start}";
 
-            // Получаем ответ как текст
-            string jsonResponse = await response.Content.ReadAsStringAsync();
+                // Делаем запрос
+                var response = await _httpClient.GetAsync(webhookUrl);
 
-            // Парсим JSON и берем только нужные поля
-            BitrixProductResponse data = JsonConvert.DeserializeObject<BitrixProductResponse>(jsonResponse);
+                // Получаем ответ как текст
+                string jsonResponse = await response.Content.ReadAsStringAsync();
 
-            return data.Products;
+                // Парсим JSON и берем только нужные поля
+                BitrixProductResponse data = JsonConvert.DeserializeObject<BitrixProductResponse>(jsonResponse);
+
+                if (data.Products == null || data.Products.Count == 0)
+                    break;
+
+                allProducts.AddRange(data.Products);
+
+                // Если получено меньше записей, чем размер страницы - значит это последняя страница
+                if (data.Products.Count < pageSize)
+                    break;
+
+                start += pageSize;
+            }
+
+            return allProducts;
         }
 
         public async Task<List<Product>> GetProductsByCategory(int categoryId)

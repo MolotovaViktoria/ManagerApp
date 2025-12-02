@@ -6,19 +6,16 @@ using ManagerApp.Data.GetInfo;
 using ManagerApp.Data.StructureList;
 using Newtonsoft.Json;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 
 namespace ManagerApp.Pages
 {
@@ -29,42 +26,46 @@ namespace ManagerApp.Pages
         private string _originalFileText;
         private const string API_URL = "http://185.177.216.82:5000/api/ProductAnalysis/analyze";
 
+        private static readonly Dictionary<string, bool> _aiCache = new Dictionary<string, bool>();
+        private static readonly Dictionary<string, bool> _bitrixCache = new Dictionary<string, bool>();
+        private static readonly object _cacheLock = new object();
+        private readonly StringBuilder _output4Buffer = new StringBuilder();
+        private int _uiUpdateCounter = 0;
+        private System.Windows.Threading.DispatcherTimer _uiUpdateTimer;
+        private CancellationTokenSource _analysisCancellationTokenSource;
+
         public MainWindows()
         {
             InitializeComponent();
             _bitrixService = new BitrixService();
             _productSearch = new SmartProductSearch();
+
+            _uiUpdateTimer = new System.Windows.Threading.DispatcherTimer();
+            _uiUpdateTimer.Interval = TimeSpan.FromMilliseconds(300);
+            _uiUpdateTimer.Tick += (s, e) => UpdateUIFromBuffer();
         }
 
         private void btnMenu_Click(object sender, RoutedEventArgs e)
         {
-            if (pnlMenu.Visibility == Visibility.Visible)
+            pnlMenu.Visibility = pnlMenu.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        private void btnShowCache_Click(object sender, RoutedEventArgs e)
+        {
+            try
             {
-                pnlMenu.Visibility = Visibility.Collapsed;
-                // Возвращаем узкую ширину для синей панели
-                var border = VisualTreeHelper.GetParent(pnlMenu) as StackPanel;
-                if (border != null)
-                {
-                    var mainBorder = VisualTreeHelper.GetParent(border) as Border;
-                    if (mainBorder != null)
-                    {
-                        mainBorder.Width = 40;
-                    }
-                }
+                var bitrixCacheType = typeof(BitrixCache);
+                var allProductsField = bitrixCacheType.GetField("_allProductsCache",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+
+                if (allProductsField?.GetValue(null) is List<Product> products && products != null)
+                    MessageBox.Show($"Загружено товаров: {products.Count}");
+                else
+                    MessageBox.Show("Кеш товаров пуст");
             }
-            else
+            catch (Exception ex)
             {
-                pnlMenu.Visibility = Visibility.Visible;
-                // Расширяем синюю панель чтобы вместить кнопки
-                var border = VisualTreeHelper.GetParent(pnlMenu) as StackPanel;
-                if (border != null)
-                {
-                    var mainBorder = VisualTreeHelper.GetParent(border) as Border;
-                    if (mainBorder != null)
-                    {
-                        mainBorder.Width = 150;
-                    }
-                }
+                MessageBox.Show($"Ошибка: {ex.Message}");
             }
         }
 
@@ -74,104 +75,32 @@ namespace ManagerApp.Pages
             {
                 btnTestApi.IsEnabled = false;
                 btnTestApi.Content = "Тестируем...";
+                txtOutput1.Text = "Тестируем API...";
 
-                // Точная копия работающего запроса из Swagger
-                var exactRequestData = new
-                {
-                    text = "Файл загружен!\nИсходный текст:\nПриложение 1\nСпецификация МТРиО\nна поставку кабеля \n№ п/п\tПолное наименование МТРиО, тип, марка\tКл. безоп.\tКатегория сейсмос.\tКол-во\tЕд. изм\tСрок  поставки\tЦех-заказчик(справочно)\n1.\tКабель АВВГнг(A)-LS 4х120мс(N)-1\tОбщепром\t\t900\tМ\t01.12.2025 -29.12.2025.\tСП"
-                };
-
-                string jsonRequest = JsonConvert.SerializeObject(exactRequestData);
-                txtOutput1.Text = "Подготавливаем запрос...";
+                var requestData = new { text = "Тестовый запрос" };
+                string json = JsonConvert.SerializeObject(requestData);
 
                 using (var client = new HttpClient())
                 {
-                    client.DefaultRequestHeaders.Add("accept", "text/plain");
-                    client.Timeout = TimeSpan.FromMinutes(2); // Увеличиваем таймаут до 2 минут
+                    client.Timeout = TimeSpan.FromSeconds(30);
+                    var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                    txtOutput1.Text = "Отправляем тестовый запрос...";
+                    var response = await client.PostAsync(API_URL, content);
+                    string responseText = await response.Content.ReadAsStringAsync();
 
-                    var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
-
-                    // Добавляем обработку отмены
-                    using (var cancellationTokenSource = new CancellationTokenSource(TimeSpan.FromMinutes(2)))
-                    {
-                        try
-                        {
-                            HttpResponseMessage response = await client.PostAsync(API_URL, content, cancellationTokenSource.Token);
-                            string responseContent = await response.Content.ReadAsStringAsync();
-
-                            if (response.IsSuccessStatusCode)
-                            {
-                                txtOutput1.Text = $"✅ API работает!\nСтатус: {response.StatusCode}\nОтвет: {responseContent}";
-                            }
-                            else
-                            {
-                                txtOutput1.Text = $"❌ Ошибка API: {response.StatusCode}\n{responseContent}";
-                            }
-                        }
-                        catch (TaskCanceledException)
-                        {
-                            txtOutput1.Text = "❌ Таймаут: Запрос отменен по времени. Проверьте:\n" +
-                                             "1. Доступность API по адресу: http://185.177.216.82:5000\n" +
-                                             "2. Настройки брандмауэра\n" +
-                                             "3. Сетевое подключение";
-                        }
-                        catch (HttpRequestException httpEx)
-                        {
-                            txtOutput1.Text = $"❌ Ошибка сети: {httpEx.Message}\n" +
-                                             "Проверьте сетевое подключение и доступность сервера";
-                        }
-                    }
+                    txtOutput1.Text = response.IsSuccessStatusCode
+                        ? $"✅ API работает!\nОтвет: {responseText}"
+                        : $"❌ Ошибка: {response.StatusCode}\n{responseText}";
                 }
             }
             catch (Exception ex)
             {
-                txtOutput1.Text = $"❌ Неожиданная ошибка: {ex.Message}\n\nДетали:\n{ex}";
+                txtOutput1.Text = $"❌ Ошибка: {ex.Message}";
             }
             finally
             {
                 btnTestApi.IsEnabled = true;
                 btnTestApi.Content = "Тест API";
-            }
-        }
-
-        private async Task<bool> CheckServerAvailability()
-        {
-            try
-            {
-                using (var client = new HttpClient())
-                {
-                    client.Timeout = TimeSpan.FromSeconds(10);
-
-                    // Пробуем разные эндпоинты
-                    var endpoints = new[]
-                    {
-                "http://185.177.216.82:5000/",
-                "http://185.177.216.82:5000/swagger",
-                "http://185.177.216.82:5000/api/ProductAnalysis/analyze"
-            };
-
-                    foreach (var endpoint in endpoints)
-                    {
-                        try
-                        {
-                            var response = await client.GetAsync(endpoint);
-                            if (response.IsSuccessStatusCode)
-                            {
-                                txtOutput1.Text = $"✅ Сервер доступен: {endpoint}";
-                                return true;
-                            }
-                        }
-                        catch { }
-                    }
-
-                    return false;
-                }
-            }
-            catch
-            {
-                return false;
             }
         }
 
@@ -181,23 +110,21 @@ namespace ManagerApp.Pages
             {
                 btnCheckServer.IsEnabled = false;
                 btnCheckServer.Content = "Проверяем...";
+                txtOutput1.Text = "Проверяем сервер...";
 
-                txtOutput1.Text = "Проверяем доступность сервера...";
-
-                bool isAvailable = await CheckServerAvailability();
-
-                if (!isAvailable)
+                using (var client = new HttpClient())
                 {
-                    txtOutput1.Text = "❌ Сервер недоступен!\n\nВозможные причины:\n" +
-                                     "• API сервер не запущен\n" +
-                                     "• Проблемы с сетью\n" +
-                                     "• Блокировка брандмауэром\n" +
-                                     "• Неправильный адрес сервера";
+                    client.Timeout = TimeSpan.FromSeconds(5);
+                    try
+                    {
+                        var response = await client.GetAsync("http://185.177.216.82:5000/");
+                        txtOutput1.Text = response.IsSuccessStatusCode ? "✅ Сервер доступен" : "❌ Сервер недоступен";
+                    }
+                    catch
+                    {
+                        txtOutput1.Text = "❌ Не удалось подключиться к серверу";
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                txtOutput1.Text = $"❌ Ошибка проверки: {ex.Message}";
             }
             finally
             {
@@ -205,50 +132,46 @@ namespace ManagerApp.Pages
                 btnCheckServer.Content = "Проверить сервер";
             }
         }
+
         private async void btnLoadRequest_Click(object sender, RoutedEventArgs e)
         {
-            var openFileDialog = new Microsoft.Win32.OpenFileDialog();
-            openFileDialog.Filter = "Документы Word (*.docx, *.dotx, *.docm, *.dotm)|*.docx;*.dotx;*.docm;*.dotm|" +
-                                   "PDF файлы (*.pdf)|*.pdf|" +
-                                   "Excel файлы (*.xlsx, *.xls, *.xlsm, *.xlsb, *.csv)|*.xlsx;*.xls;*.xlsm;*.xlsb;*.csv|" +
-                                   "Все файлы (*.*)|*.*";
+            var dialog = new Microsoft.Win32.OpenFileDialog();
+            dialog.Filter = "Документы Word (*.docx, *.dotx, *.docm, *.dotm)|*.docx;*.dotx;*.docm;*.dotm|" +
+                           "PDF (*.pdf)|*.pdf|" +
+                           "Excel (*.xlsx, *.xls, *.xlsm, *.xlsb, *.csv)|*.xlsx;*.xls;*.xlsm;*.xlsb;*.csv|" +
+                           "Все файлы (*.*)|*.*";
 
-            if (openFileDialog.ShowDialog() == true)
+            if (dialog.ShowDialog() == true)
             {
-                string selectedFilePath = openFileDialog.FileName;
-                Classes.Read.ReadRequst readRequst = new Classes.Read.ReadRequst();
-
                 try
                 {
                     btnLoadRequest.IsEnabled = false;
                     btnLoadRequest.Content = "Загрузка...";
 
-                    // Читаем файл
-                    _originalFileText = readRequst.ReadFileAll(selectedFilePath);
+                    var reader = new Classes.Read.ReadRequst();
+                    _originalFileText = reader.ReadFileAll(dialog.FileName);
 
-                    // Показываем только начало текста в txtOutput1
-                    //string previewText = _originalFileText.Length > 1000
-                    //    ? _originalFileText.Substring(0, 1000) + "...\n\n[текст сокращен для удобства просмотра]"
-                    //    : _originalFileText;
+                    txtOutput1.Text = _originalFileText;
 
-                    txtOutput1.Text = $"Файл загружен!\nИсходный текст (превью):\n{_originalFileText}";
+                    lstProducts.Items.Clear();
+                    txtOutput4.Text = "🚀 Начинаем анализ...\n";
 
-                    // Очищаем ListView перед началом загрузки
-                    lstProducts.ItemsSource = new List<string> { "Начинаем анализ... Товары будут появляться по мере обработки" };
+                    // Отмена предыдущего анализа, если есть
+                    _analysisCancellationTokenSource?.Cancel();
+                    _analysisCancellationTokenSource = new CancellationTokenSource();
 
-                    // Запускаем анализ - товары будут добавляться постепенно
-                    string analysisResult = await AnalyzeViaApiAsync(_originalFileText);
+                    await AnalyzeFileSimple(_originalFileText, _analysisCancellationTokenSource.Token);
 
-                    // Финальное обновление статуса
-                    var finalProducts = lstProducts.Items.Cast<string>().Where(x => !x.Contains("Начинаем анализ")).ToList();
-                    UpdateStatus($"\n✅ Анализ завершен! Итоговое количество товаров: {finalProducts.Count}");
-
-                    btnSearchProducts.IsEnabled = true;
+                    txtOutput1.Text += $"\n✅ Анализ завершен! Найдено товаров: {lstProducts.Items.Count}";
+                    btnSearchProducts.IsEnabled = lstProducts.Items.Count > 0;
+                }
+                catch (OperationCanceledException)
+                {
+                    txtOutput1.Text += "\n❌ Анализ прерван пользователем";
                 }
                 catch (Exception ex)
                 {
                     MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-                    lstProducts.ItemsSource = new List<string> { $"Ошибка: {ex.Message}" };
                 }
                 finally
                 {
@@ -258,390 +181,330 @@ namespace ManagerApp.Pages
             }
         }
 
+        private async Task AnalyzeFileSimple(string text, CancellationToken cancellationToken)
+        {
+            try
+            {
+                // 1. Разбиваем на строки и фильтруем по длине
+                var allLines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                                  .Select(l => l.Trim())
+                                  .Where(l => l.Length >= 3 && l.Length <= 60) // Шаг 1: длина 3-100 символов
+                                  .ToList();
+
+                AddStatusMessage($"Всего строк: {allLines.Count}");
+                UpdateOutput4Fast($"📄 Строк для анализа: {allLines.Count}\n\n");
+
+                if (allLines.Count == 0)
+                {
+                    UpdateOutput4Fast("⚠️ Нет строк для анализа.\n");
+                    return;
+                }
+
+                // Ограничиваем количество для скорости
+                var linesToProcess = allLines.Take(100).ToList();
+                UpdateOutput4Fast($"Будет обработано: {linesToProcess.Count}\n\n");
+
+                var results = new ConcurrentBag<(string line, bool bitrixOk, bool aiOk)>();
+                int processed = 0;
+                int total = linesToProcess.Count;
+
+                // ПАРАЛЛЕЛЬНАЯ обработка 2 строк за раз
+                var parallelOptions = new ParallelOptions
+                {
+                    MaxDegreeOfParallelism = 2, // Две строки одновременно
+                    CancellationToken = cancellationToken
+                };
+
+                await Task.Run(() =>
+                {
+                    Parallel.ForEach(linesToProcess, parallelOptions, (line, state) =>
+                    {
+                        if (cancellationToken.IsCancellationRequested)
+                        {
+                            state.Stop();
+                            return;
+                        }
+
+                        int current = Interlocked.Increment(ref processed);
+                        bool bitrixOk = false;
+                        bool aiOk = false;
+
+                        try
+                        {
+                            UpdateOutput4Fast($"[{current}/{total}] {Truncate(line, 50)}\n");
+
+                            // Шаг 2: Проверка Bitrix (минимум 20%)
+                            var bitrixResult = _productSearch.SearchSimple(line).Result;
+                            bitrixOk = IsGoodBitrixMatchSimple(bitrixResult);
+                            UpdateOutput4Fast($"  Bitrix: {(bitrixOk ? "✅" : "❌")}\n");
+
+                            if (bitrixOk)
+                            {
+                                // Шаг 3: Проверка ИИ
+                                try
+                                {
+                                    aiOk = CheckWithAISimple(line).Result;
+                                    UpdateOutput4Fast($"  ИИ: {(aiOk ? "✅" : "❌")}\n");
+
+                                    if (aiOk)
+                                    {
+                                        Dispatcher.Invoke(() => lstProducts.Items.Add(line));
+                                        UpdateOutput4Fast($"  🎯 Добавлено!\n");
+                                    }
+                                }
+                                catch
+                                {
+                                    UpdateOutput4Fast($"  ИИ: ❌ (ошибка)\n");
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            UpdateOutput4Fast($"❌ Ошибка: {ex.Message}\n");
+                        }
+
+                        results.Add((line, bitrixOk, aiOk));
+                    });
+                }, cancellationToken);
+
+                int bitrixPassed = results.Count(r => r.bitrixOk);
+                int aiPassed = results.Count(r => r.aiOk);
+
+                UpdateOutput4Fast($"\n📊 ИТОГИ:\n" +
+                                 $"Обработано: {processed}\n" +
+                                 $"Прошли Bitrix: {bitrixPassed}\n" +
+                                 $"Подтверждено ИИ: {aiPassed}\n" +
+                                 $"✅ Добавлено: {aiPassed}\n");
+            }
+            catch (Exception ex)
+            {
+                UpdateOutput4Fast($"\n❌ Ошибка анализа: {ex.Message}\n");
+            }
+        }
+
+        // Простая проверка Bitrix - только 20% порог
+        private bool IsGoodBitrixMatchSimple(string searchResult)
+        {
+            if (string.IsNullOrWhiteSpace(searchResult))
+                return false;
+
+            // Ищем проценты совпадения
+            var percentMatches = Regex.Matches(searchResult, @"(\d+)%");
+            foreach (Match match in percentMatches)
+            {
+                if (int.TryParse(match.Groups[1].Value, out int percentage) && percentage >= 20)
+                    return true;
+            }
+
+            return false;
+        }
+
+        // СУПЕР простая проверка ИИ
+        private async Task<bool> CheckWithAISimple(string text)
+        {
+            // Проверяем кеш
+            lock (_cacheLock)
+            {
+                if (_aiCache.TryGetValue(text, out bool cached))
+                    return cached;
+            }
+
+            try
+            {
+                // ТОЛЬКО ОДНА СТРОКА ПРОМПТА как просили
+                var prompt = $"Это позиция/наименование/материал/продукция/изделие/ТМЦ? 1=да, 2=нет. Текст: {text}";
+
+                var requestData = new { text = prompt };
+                string json = JsonConvert.SerializeObject(requestData);
+
+                using (var client = new HttpClient())
+                {
+                    client.Timeout = TimeSpan.FromSeconds(15);
+                    var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                    using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
+                    {
+                        var response = await client.PostAsync(API_URL, content, cts.Token);
+
+                        if (!response.IsSuccessStatusCode)
+                            return false;
+
+                        string responseText = await response.Content.ReadAsStringAsync();
+
+                        // Очень простой парсинг - ищем "1"
+                        bool isProduct = responseText.Contains("1") && !responseText.Contains("2");
+
+                        lock (_cacheLock)
+                        {
+                            _aiCache[text] = isProduct;
+                        }
+
+                        return isProduct;
+                    }
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void UpdateOutput4Fast(string message)
+        {
+            lock (_output4Buffer)
+            {
+                _output4Buffer.Append(message);
+                _uiUpdateCounter++;
+
+                if (_uiUpdateCounter >= 1) // Обновляем после каждого сообщения
+                    UpdateUIFromBuffer();
+                else if (!_uiUpdateTimer.IsEnabled)
+                    _uiUpdateTimer.Start();
+            }
+        }
+
+        private void UpdateUIFromBuffer()
+        {
+            lock (_output4Buffer)
+            {
+                if (_output4Buffer.Length > 0)
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        txtOutput4.Text += _output4Buffer.ToString();
+                        txtOutput4.ScrollToEnd();
+                    });
+                    _output4Buffer.Clear();
+                }
+                _uiUpdateTimer.Stop();
+                _uiUpdateCounter = 0;
+            }
+        }
+
+        private void AddStatusMessage(string message)
+        {
+            Dispatcher.Invoke(() => txtOutput1.Text += "\n" + message);
+        }
+
         private async void btnSearchProducts_Click(object sender, RoutedEventArgs e)
         {
             if (lstProducts.Items.Count == 0)
             {
-                MessageBox.Show("Сначала загрузите файл с товарами", "Информация", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show("Нет товаров для поиска", "Информация", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
             try
             {
-                // Показываем индикатор загрузки
                 btnSearchProducts.IsEnabled = false;
                 btnSearchProducts.Content = "Поиск...";
-                txtOutput3.Text = "Начинаем поиск товаров...";
+                txtOutput3.Text = "Начинаем поиск в системе...\n";
 
-                // Получаем список товаров из ListView
                 var products = lstProducts.Items.Cast<string>().ToList();
-
-                // Фильтруем служебные сообщения
-                products = products.Where(p => !p.Contains("Начинаем анализ") && !p.Contains("Ошибка")).ToList();
-
-                if (!products.Any())
-                {
-                    txtOutput3.Text = "Не удалось найти товары для поиска";
-                    return;
-                }
-
-                var searchResults = new StringBuilder();
-                searchResults.AppendLine($"Найдено товаров для поиска: {products.Count}");
-                searchResults.AppendLine("==========================================");
+                var results = new StringBuilder();
+                results.AppendLine($"🔍 Поиск {products.Count} товаров:\n");
 
                 int processed = 0;
-                foreach (var productName in products)
+                foreach (var product in products)
                 {
-                    if (string.IsNullOrWhiteSpace(productName)) continue;
+                    if (string.IsNullOrWhiteSpace(product)) continue;
 
-                    // Ищем товар
-                    var result = await _productSearch.SearchSimple(productName.Trim());
-
-                    searchResults.AppendLine($"🔍 Поиск: {productName}");
-                    searchResults.AppendLine($"📋 Результат: {result}");
-                    searchResults.AppendLine("──────────────────────────────────────────");
-
-                    processed++;
-
-                    // Обновляем прогресс в реальном времени
-                    txtOutput3.Text = $"Обработано {processed} из {products.Count} товаров...\n\n{searchResults}";
-
-                    // Небольшая задержка чтобы не перегружать API
-                    await Task.Delay(100);
-                }
-
-                searchResults.AppendLine($"✅ Поиск завершен! Обработано товаров: {processed}");
-                txtOutput3.Text = searchResults.ToString();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка при поиске товаров: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-                txtOutput3.Text = $"Ошибка при поиске: {ex.Message}";
-            }
-            finally
-            {
-                // Восстанавливаем кнопку
-                btnSearchProducts.IsEnabled = true;
-                btnSearchProducts.Content = "Найти товары в системе";
-            }
-        }
-
-
-        //private async Task<string> AnalyzeViaApiAsync(string text)
-        //{
-        //    try
-        //    {
-        //        // Разбиваем текст на строки
-        //        string[] allLines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-
-        //        // Группируем строки по 5 штук
-        //        var lineGroups = new List<List<string>>();
-        //        var currentGroup = new List<string>();
-
-        //        foreach (var line in allLines)
-        //        {
-        //            currentGroup.Add(line);
-        //            if (currentGroup.Count >= 5)
-        //            {
-        //                lineGroups.Add(currentGroup);
-        //                currentGroup = new List<string>();
-        //            }
-        //        }
-
-        //        // Добавляем последнюю группу, если она не пустая
-        //        if (currentGroup.Count > 0)
-        //        {
-        //            lineGroups.Add(currentGroup);
-        //        }
-
-        //        UpdateStatus($"Разбили текст на {lineGroups.Count} групп по 5 строк...\n");
-
-        //        var results = new List<string>();
-        //        var tempProducts = new List<string>();
-
-        //        // ОГРАНИЧИВАЕМ до 2 параллельных запросов
-        //        var semaphore = new SemaphoreSlim(2);
-        //        var tasks = new List<Task<string>>();
-
-        //        for (int i = 0; i < lineGroups.Count; i++)
-        //        {
-        //            var lineGroup = lineGroups[i];
-        //            var groupText = string.Join("\n", lineGroup);
-        //            var groupNumber = i + 1;
-
-        //            // Ждем свободный слот
-        //            await semaphore.WaitAsync();
-
-        //            tasks.Add(Task.Run(async () =>
-        //            {
-        //                try
-        //                {
-        //                    UpdateStatus($"Обрабатываем группу {groupNumber} из {lineGroups.Count} ({lineGroup.Count} строк)...");
-
-        //                    var requestData = new { text = groupText };
-        //                    string jsonRequest = JsonConvert.SerializeObject(requestData);
-        //                    var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
-
-        //                    using (var client = new HttpClient())
-        //                    {
-        //                        client.DefaultRequestHeaders.Add("accept", "text/plain");
-        //                        client.Timeout = TimeSpan.FromMinutes(2);
-
-        //                        var response = await client.PostAsync(API_URL, content);
-        //                        string jsonResponse = await response.Content.ReadAsStringAsync();
-
-        //                        if (response.IsSuccessStatusCode)
-        //                        {
-        //                            var responseObj = JsonConvert.DeserializeObject<dynamic>(jsonResponse);
-        //                            string result = responseObj.analysisResult?.ToString();
-        //                            txtOutput1.Text += result;
-
-        //                            if (!string.IsNullOrEmpty(result))
-        //                            {
-        //                                UpdateStatus($"✅ Группа {groupNumber} обработана");
-
-        //                                // НЕМЕДЛЕННО обрабатываем результат и добавляем в ListView
-        //                                var productsFromGroup = ExtractProductsFromResult(result);
-        //                                if (productsFromGroup.Any())
-        //                                {
-        //                                    lock (tempProducts)
-        //                                    {
-        //                                        tempProducts.AddRange(productsFromGroup);
-        //                                        Dispatcher.Invoke(() =>
-        //                                        {
-        //                                            // Получаем текущие товары, исключая служебные сообщения
-        //                                            var currentProducts = lstProducts.Items.Cast<string>()
-        //                                                .Where(item => !item.Contains("Начинаем анализ") && !item.Contains("Ошибка"))
-        //                                                .ToList();
-
-        //                                            // Добавляем новые товары
-        //                                            currentProducts.AddRange(productsFromGroup);
-
-        //                                            // Обновляем ListView
-        //                                            lstProducts.ItemsSource = currentProducts;
-        //                                        });
-        //                                    }
-        //                                }
-
-        //                                return $"--- Группа {groupNumber} ---\n{result}";
-        //                            }
-        //                        }
-        //                        else
-        //                        {
-        //                            UpdateStatus($"❌ Ошибка в группе {groupNumber}: {response.StatusCode}");
-        //                            return $"❌ Ошибка в группе {groupNumber}: {response.StatusCode}";
-        //                        }
-        //                    }
-        //                    return string.Empty;
-        //                }
-        //                finally
-        //                {
-        //                    semaphore.Release();
-        //                }
-        //            }));
-
-        //            // Небольшая задержка между запуском задач
-        //            if (i < lineGroups.Count - 1)
-        //            {
-        //                await Task.Delay(200);
-        //            }
-        //        }
-
-        //        // Ждем завершения ВСЕХ задач
-        //        var completedResults = await Task.WhenAll(tasks);
-        //        results.AddRange(completedResults.Where(r => !string.IsNullOrEmpty(r)));
-
-        //        // ОБЪЕДИНЯЕМ все результаты
-        //        string finalResult = string.Join("\n\n", results);
-        //        UpdateStatus($"✅ Обработка завершена! Групп: {lineGroups.Count}. Найдено товаров: {tempProducts.Count}");
-
-        //        return finalResult;
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        return $"❌ Ошибка обработки: {ex.Message}";
-        //    }
-        //}
-
-        private async Task<string> AnalyzeViaApiAsync(string text)
-        {
-            try
-            {
-                // ВРЕМЕННАЯ ЗАГЛУШКА - ищем строки, начинающиеся с цифры
-                var tempProducts = new List<string>();
-
-                // Разбиваем текст на строки
-                string[] allLines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-
-                UpdateStatus($"Найдено строк: {allLines.Length}");
-
-                int foundCount = 0;
-
-                foreach (var line in allLines)
-                {
-                    var cleanLine = line.Trim();
-
-                    // Ищем строки, которые начинаются с цифры
-                    if (!string.IsNullOrEmpty(cleanLine) && char.IsDigit(cleanLine[0]))
+                    try
                     {
-                        // Пропускаем очевидно не товарные строки
-                        if (cleanLine.StartsWith("---") ||
-                            cleanLine.StartsWith("Раздел") ||
-                            cleanLine.StartsWith("Подраздел") ||
-                            cleanLine.StartsWith("Содержание") ||
-                            cleanLine.StartsWith("Техническое") ||
-                            cleanLine.Contains("Наименование") && cleanLine.Contains("Ед.изм."))
+                        var searchResult = await _productSearch.SearchSimple(product.Trim());
+                        results.AppendLine($"📦 {product}");
+                        results.AppendLine($"📋 {searchResult}");
+                        results.AppendLine("─".PadRight(50, '─'));
+
+                        processed++;
+
+                        if (processed % 3 == 0)
                         {
-                            continue;
+                            Dispatcher.Invoke(() =>
+                                txtOutput3.Text = $"Обработано {processed} из {products.Count}...\n\n{results}");
                         }
 
-                        // ФЕЙКОВАЯ ЗАГРУЗКА - 1 секунда
-                        UpdateStatus($"⏳ Обрабатываем строку: {Truncate(cleanLine, 50)}...");
-                        await Task.Delay(1000);
-
-                        tempProducts.Add(cleanLine);
-                        foundCount++;
-                        //UpdateStatus($"✅ Найдена строка с цифрой: {Truncate(cleanLine, 50)}");
-
-                        // Немедленно обновляем ListView после каждой найденной строки
-                        Dispatcher.Invoke(() =>
-                        {
-                            var currentProducts = lstProducts.Items.Cast<string>()
-                                .Where(item => !item.Contains("Начинаем анализ") && !item.Contains("Ошибка"))
-                                .ToList();
-                            currentProducts.Add(cleanLine); // Добавляем по одной строке
-                            lstProducts.ItemsSource = currentProducts;
-                        });
+                        await Task.Delay(50);
+                    }
+                    catch
+                    {
+                        results.AppendLine($"❌ Ошибка при поиске: {product}");
                     }
                 }
 
-                //UpdateStatus($"✅ Заглушка: найдено строк с цифрами: {foundCount}");
-
-                return $"Найдено строк с товарами: {foundCount}\n" + string.Join("\n", tempProducts);
+                results.AppendLine($"\n✅ Поиск завершен! Найдено: {processed} товаров");
+                Dispatcher.Invoke(() => txtOutput3.Text = results.ToString());
             }
             catch (Exception ex)
             {
-                return $"❌ Ошибка обработки: {ex.Message}";
+                MessageBox.Show($"Ошибка поиска: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                txtOutput3.Text = $"Ошибка: {ex.Message}";
+            }
+            finally
+            {
+                btnSearchProducts.IsEnabled = true;
+                btnSearchProducts.Content = "Найти товары";
             }
         }
 
-        // Вспомогательный метод для обрезки длинного текста
         private string Truncate(string text, int maxLength)
         {
-            if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
-                return text;
-            return text.Substring(0, maxLength) + "...";
-        }
-
-
-        // Метод для извлечения товаров из результата одной части
-        private List<string> ExtractProductsFromResult(string result)
-        {
-            var products = new List<string>();
-
-            if (string.IsNullOrEmpty(result))
-                return products;
-
-            var lines = result.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-
-            foreach (var line in lines)
-            {
-                var cleanLine = line.Trim();
-
-                // Пропускаем строки, которые не начинаются с цифры
-                if (string.IsNullOrEmpty(cleanLine) ||
-                    !char.IsDigit(cleanLine[0]) ||
-                    cleanLine.StartsWith("---") ||
-                    cleanLine.StartsWith("Результат анализа") ||
-                    cleanLine.StartsWith("Файл загружен!") ||
-                    cleanLine.StartsWith("Исходный текст:"))
-                {
-                    continue;
-                }
-
-                // Добавляем товар в список
-                products.Add(cleanLine);
-            }
-
-            return products;
-        }
-
-        // Метод для безопасного обновления UI
-        private void UpdateStatus(string message)
-        {
-            Dispatcher.Invoke(() =>
-            {
-                txtOutput1.Text += message + "\n";
-            });
-        }
-
-        private static List<string> SplitTextIntoParts(string text, int maxPartSize)
-        {
-            var parts = new List<string>();
-
-            for (int i = 0; i < text.Length; i += maxPartSize)
-            {
-                int length = Math.Min(maxPartSize, text.Length - i);
-                string part = text.Substring(i, length);
-                parts.Add(part);
-            }
-
-            return parts;
-        }
-
-        // Метод для загрузки элементов в ListView (для обратной совместимости)
-        private void LoadProductsToListView(string analysisResult)
-        {
-            try
-            {
-                var products = ExtractProductsFromResult(analysisResult);
-
-                // Обновляем ListView
-                lstProducts.ItemsSource = products;
-
-                // Показываем количество загруженных товаров
-                UpdateStatus($"✅ Загружено товаров: {products.Count}");
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка при загрузке товаров: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            return string.IsNullOrEmpty(text) || text.Length <= maxLength
+                ? text
+                : text.Substring(0, maxLength) + "...";
         }
 
         private async void btnDebug_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                lstProducts.ItemsSource = new List<string> { "Дебаг..." };
+                txtOutput4.Text = "🧪 Простой тест...\n";
 
-                // Тест 1: Простой текст
-                string result1 = await AnalyzeViaApiAsync("Кабель АВВГнг(A)-LS 4х120мс(N)-1");
-                LoadProductsToListView(result1);
-
-                // Тест 2: Текст из файла (ограниченный)
-                if (!string.IsNullOrEmpty(_originalFileText))
+                var testLines = new[]
                 {
-                    string result2 = await AnalyzeViaApiAsync(_originalFileText);
-                    LoadProductsToListView(result2);
+                    "1 Провод ПНСВ 1,2 ГОСТ 26445-85",
+                    "УТВЕРЖДАЮ: Директор",
+                    "Кабель ВВГ 3х2,5",
+                    "Приложение №1"
+                };
+
+                foreach (var testLine in testLines)
+                {
+                    UpdateOutput4Fast($"\nТест: {Truncate(testLine, 40)}\n");
+
+                    // Проверяем Bitrix
+                    var bitrixResult = await _productSearch.SearchSimple(testLine);
+                    bool bitrixOk = IsGoodBitrixMatchSimple(bitrixResult);
+                    UpdateOutput4Fast($"Bitrix: {(bitrixOk ? "✅" : "❌")}\n");
+
+                    if (bitrixOk)
+                    {
+                        bool aiOk = await CheckWithAISimple(testLine);
+                        UpdateOutput4Fast($"ИИ: {(aiOk ? "✅ ТОВАР" : "❌ НЕ ТОВАР")}\n");
+                    }
                 }
             }
             catch (Exception ex)
             {
-                lstProducts.ItemsSource = new List<string> { $"Дебаг ошибка: {ex.Message}" };
+                UpdateOutput4Fast($"❌ Ошибка: {ex.Message}\n");
             }
         }
 
-        private static string ParseApiResponse(string jsonResponse)
+        private void btnClearCache_Click(object sender, RoutedEventArgs e)
         {
-            try
+            lock (_cacheLock)
             {
-                var responseObject = JsonConvert.DeserializeObject<dynamic>(jsonResponse);
-                return responseObject.analysisResult?.ToString()?.Trim() ?? jsonResponse;
+                _aiCache.Clear();
+                _bitrixCache.Clear();
             }
-            catch
-            {
-                return jsonResponse;
-            }
+
+            MessageBox.Show("Кеш очищен", "Информация", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void btnCancelAnalysis_Click(object sender, RoutedEventArgs e)
+        {
+            _analysisCancellationTokenSource?.Cancel();
+            UpdateOutput4Fast("\n❌ Анализ прерван\n");
         }
     }
 }

@@ -246,19 +246,27 @@ namespace ManagerApp.Classes.Search
         }
         private async Task<List<Product>> GetAllCachedProducts()
         {
-            var allProducts = new List<Product>();
-            var categoryIds = GetLoadedCategoryIds();
-
-            foreach (var categoryId in categoryIds)
+            try
             {
-                if (BitrixCache.IsCategoryCached(categoryId))
-                {
-                    var products = await BitrixCache.GetProductsByCategory(categoryId);
-                    allProducts.AddRange(products);
-                }
-            }
+                // Загружаем все продукты из единого кеша
+                var products = await BitrixCache.GetAllProductsSimple();
 
-            return allProducts;
+                if (products == null || products.Count == 0)
+                {
+                    Console.WriteLine("Кеш продуктов пуст, пытаемся загрузить...");
+
+                    // Если кеш пустой, пробуем принудительно загрузить
+                    BitrixCache.ClearCache(); // Очищаем старый кеш
+                    products = await BitrixCache.GetAllProductsSimple();
+                }
+
+                return products ?? new List<Product>();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка загрузки продуктов из кеша: {ex.Message}");
+                return new List<Product>();
+            }
         }
 
         private List<int> GetLoadedCategoryIds()

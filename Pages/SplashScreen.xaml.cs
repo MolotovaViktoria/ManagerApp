@@ -60,14 +60,15 @@ namespace ManagerApp.Pages
             try
             {
                 // Задачи загрузки обеих категорий
-                var loadTask691 = BitrixCache.GetProductsByCategory(691);
-                var loadTask692 = BitrixCache.GetProductsByCategory(692);
+                var loadTask691 = BitrixCache.GetAllProductsSimple();
+                //var loadTask692 = BitrixCache.GetProductsByCategory(692);
+                //var loadTask685 = BitrixCache.GetProductsByCategory(685);
 
                 // Задача анимации прогресса
                 var progressTask = AnimateProgressDuringLoad();
 
                 // Ждём, пока обе загрузки завершатся
-                await Task.WhenAll(loadTask691, loadTask692, progressTask);
+                await Task.WhenAll(loadTask691, progressTask);
 
                 // Устанавливаем точное значение 80%
                 progressBar.Value = 80;
