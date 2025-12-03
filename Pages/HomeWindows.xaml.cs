@@ -56,7 +56,25 @@ namespace ManagerApp.Pages
                 MessageBox.Show($"Ошибка загрузки главной страницы: {ex.Message}");
             }
         }
+        private void btnHome_Click(object sender, RoutedEventArgs e)
+        {
+            LoadMainPage();
+        }
 
+        public void OpenExcelFilePage(string filePath)
+        {
+            try
+            {
+                // Создаем страницу ExcelFile и передаем файл
+                ExcelFile excelFilePage = new ExcelFile();
+                excelFilePage.LoadFile(filePath);
+                MainFrame.Navigate(excelFilePage);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка открытия Excel файла: {ex.Message}");
+            }
+        }
         // Метод для навигации на любую страницу
         public void NavigateToPage(Page page)
         {
@@ -69,7 +87,7 @@ namespace ManagerApp.Pages
             try
             {
                 // Создаем страницу CheakFile и передаем путь к файлу
-                CheakFile cheakFilePage = new CheakFile();
+                DombPage cheakFilePage = new DombPage();
                 MainFrame.Navigate(cheakFilePage);
             }
             catch (Exception ex)
@@ -78,11 +96,8 @@ namespace ManagerApp.Pages
             }
         }
 
-        // Обработчики кнопок меню
-        private void btnHome_Click(object sender, RoutedEventArgs e)
-        {
-            LoadMainPage();
-        }
+
+
 
         private void btnHistory_Click(object sender, RoutedEventArgs e)
         {

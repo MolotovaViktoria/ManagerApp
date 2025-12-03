@@ -139,49 +139,19 @@ namespace ManagerApp.Pages
 
             return filter;
         }
-
-        // Обработка загруженного файла
         private void ProcessFile(string filePath)
         {
-            CheakFile cheakFile = new CheakFile();
-            this.NavigationService.Navigate(cheakFile);
+            // Создаем страницу ExcelFile
+            ExcelFile excelFilePage = new ExcelFile();
 
-            //try
-            //{
-            //    string fileExtension = Path.GetExtension(filePath).ToLower();
+            // Загружаем файл на страницу
+            excelFilePage.LoadFile(filePath);
 
-            //    // Проверяем поддерживаемый формат
-            //    if (IsSupportedFormat(fileExtension))
-            //    {
-            //        // Показываем имя файла
-            //        FileNameText.Text = $"Загружен файл: {Path.GetFileName(filePath)}";
-            //        FileNameText.Visibility = Visibility.Visible;
-
-            //        // Здесь можно добавить обработку файла
-            //        // Например: CheakFile cheakFile = new CheakFile(filePath);
-            //        // this.NavigationService?.Navigate(cheakFile);
-
-            //        MessageBox.Show($"Файл успешно загружен!\nПуть: {filePath}",
-            //                        "Успешно",
-            //                        MessageBoxButton.OK,
-            //                        MessageBoxImage.Information);
-            //    }
-            //    else
-            //    {
-            //        MessageBox.Show($"Неподдерживаемый формат файла: {fileExtension}",
-            //                        "Ошибка",
-            //                        MessageBoxButton.OK,
-            //                        MessageBoxImage.Error);
-            //    }
-            //}
-            //catch (Exception ex)
-            //{
-            //    MessageBox.Show($"Ошибка при обработке файла: {ex.Message}",
-            //                    "Ошибка",
-            //                    MessageBoxButton.OK,
-            //                    MessageBoxImage.Error);
-            //}
+            // Переходим на страницу
+            this.NavigationService.Navigate(excelFilePage);
         }
+        // Обработка загруженного файла
+       
 
         // Проверка поддерживаемого формата
         private bool IsSupportedFormat(string extension)
