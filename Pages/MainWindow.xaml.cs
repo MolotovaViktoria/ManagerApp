@@ -87,6 +87,37 @@ namespace ManagerApp.Pages
             }
         }
 
+
+
+
+
+
+
+      
+        // Метод извлечения процента из текста (остается без изменений)
+        private double GetPercentFromText(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return 0;
+
+            var matches = Regex.Matches(text, @"(\d+)%");
+            if (matches.Count == 0)
+                return 0;
+
+            double maxPercent = 0;
+            foreach (Match match in matches)
+            {
+                if (double.TryParse(match.Groups[1].Value, out double percent))
+                {
+                    if (percent > maxPercent)
+                        maxPercent = percent;
+                }
+            }
+
+            return maxPercent;
+        }
+
+
         private async Task AnalyzeFileSimple(string text, CancellationToken cancellationToken)
         {
             try
@@ -109,20 +140,20 @@ namespace ManagerApp.Pages
                 var linesToProcess = allLines.Take(100).ToList();
                 UpdateOutput4Fast($"Будет обработано: {linesToProcess.Count}\n\n");
 
-                int directlyAdded = 0;
-                int aiChecked = 0;
-                int aiApproved = 0;
-                int skipped = 0;
+                int totalAdded = 0;
                 int processed = 0;
                 int total = linesToProcess.Count;
 
+                // Создаем список для анализа соседних строк
+                var linesArray = linesToProcess.ToArray();
+
                 await Task.Run(() =>
                 {
-                    Parallel.ForEach(linesToProcess, new ParallelOptions
+                    Parallel.For(0, linesArray.Length, new ParallelOptions
                     {
                         MaxDegreeOfParallelism = 2,
                         CancellationToken = cancellationToken
-                    }, (line, state) =>
+                    }, (i, state) =>
                     {
                         if (cancellationToken.IsCancellationRequested)
                         {
@@ -131,58 +162,72 @@ namespace ManagerApp.Pages
                         }
 
                         int current = Interlocked.Increment(ref processed);
-                        double matchPercent = 0;
-                        bool aiOk = false;
-                        bool aiCheckedThis = false;
+                        var line = linesArray[i];
 
                         try
                         {
                             UpdateOutput4Fast($"[{current}/{total}] {Truncate(line, 50)}\n");
 
-                            // Шаг 1: Проверка Bitrix
-                            var bitrixResult = _productSearch.SearchSimple(line).Result;
-                            matchPercent = GetPercentFromText(bitrixResult);
-
-                            UpdateOutput4Fast($"  Совпадение Bitrix: {matchPercent:F1}%\n");
-
-                            // Шаг 2: Логика по процентам
-                            if (matchPercent >= 45)
+                            // Шаг 0: Быстрая проверка на ОЧЕНЬ ОЧЕВИДНЫЙ не товар
+                            if (IsVeryObviousNotProduct(line))
                             {
-                                // Высокое совпадение - добавляем сразу
-                                Dispatcher.Invoke(() => lstProducts.Items.Add(line));
-                                UpdateOutput4Fast($"  🎯 Высокое совпадение - добавлено сразу!\n");
-                                Interlocked.Increment(ref directlyAdded);
+                                UpdateOutput4Fast($"  ⛔️ ОЧЕВИДНЫЙ НЕ ТОВАР\n");
+                                return;
                             }
-                            else if (matchPercent >= 20 && matchPercent < 45)
+
+                            // Шаг 1: Проверка Bitrix (базовый процент)
+                            var bitrixResult = _productSearch.SearchSimple(line).Result;
+                            double basePercent = GetPercentFromText(bitrixResult);
+
+                            UpdateOutput4Fast($"  Базовое совпадение Bitrix: {basePercent:F1}%\n");
+
+                            // Шаг 2: Проверяем наличие ключевых слов и формата
+                            double keywordBonus = CheckKeywordsAndFormatBonus(line);
+                            if (keywordBonus > 0)
                             {
-                                // Среднее совпадение - проверяем ИИ
-                                Interlocked.Increment(ref aiChecked);
-                                aiCheckedThis = true;
+                                UpdateOutput4Fast($"  Бонус за ключевые слова/формат: +{keywordBonus:F1}%\n");
+                            }
 
-                                try
+                            // Шаг 3: Проверяем специфические признаки товара
+                            double specialBonus = CheckSpecialProductSigns(line);
+                            if (specialBonus > 0)
+                            {
+                                UpdateOutput4Fast($"  Бонус за спец.признаки: +{specialBonus:F1}%\n");
+                            }
+
+                            // Шаг 4: Проверяем соседние строки (если basePercent между 15 и 35)
+                            double neighborBonus = 0;
+                            if (basePercent >= 15 && basePercent < 35)
+                            {
+                                neighborBonus = CheckNeighborBonus(i, linesArray, basePercent);
+                                if (neighborBonus > 0)
                                 {
-                                    UpdateOutput4Fast($"  🤔 Среднее совпадение - проверяем ИИ...\n");
-                                    aiOk = CheckWithAISimple(line).Result;
-
-                                    UpdateOutput4Fast($"  ИИ: {(aiOk ? "✅" : "❌")}\n");
-
-                                    if (aiOk)
-                                    {
-                                        Dispatcher.Invoke(() => lstProducts.Items.Add(line));
-                                        UpdateOutput4Fast($"  🎯 Добавлено по решению ИИ!\n");
-                                        Interlocked.Increment(ref aiApproved);
-                                    }
+                                    UpdateOutput4Fast($"  Бонус за соседние строки: +{neighborBonus:F1}%\n");
                                 }
-                                catch (Exception aiEx)
-                                {
-                                    UpdateOutput4Fast($"  ИИ: ❌ (ошибка: {aiEx.Message})\n");
-                                }
+                            }
+
+                            // Шаг 5: Итоговый процент
+                            double finalPercent = basePercent + keywordBonus + specialBonus + neighborBonus;
+
+                            // Ограничиваем максимум 100%
+                            finalPercent = Math.Min(finalPercent, 100);
+
+                            UpdateOutput4Fast($"  ИТОГО: {finalPercent:F1}%\n");
+
+                            // Шаг 6: Принимаем решение - ПОНИЗИЛИ ПОРОГ ДО 35%!
+                            if (finalPercent >= 35) // ПОНИЗИЛИ С 45% ДО 35%
+                            {
+                                Dispatcher.Invoke(() => lstProducts.Items.Add(line));
+                                UpdateOutput4Fast($"  🎯 ТОВАР (итог ≥35%)\n");
+                                Interlocked.Increment(ref totalAdded);
+                            }
+                            else if (basePercent < 15) // ПОНИЗИЛИ С 25% ДО 15%
+                            {
+                                UpdateOutput4Fast($"  ⏭️ НЕ ТОВАР (<15%)\n");
                             }
                             else
                             {
-                                // Низкое совпадение - пропускаем
-                                UpdateOutput4Fast($"  ⏭️ Низкое совпадение - пропущено\n");
-                                Interlocked.Increment(ref skipped);
+                                UpdateOutput4Fast($"  ⏭️ НЕ ТОВАР (итог <35%)\n");
                             }
                         }
                         catch (Exception ex)
@@ -195,12 +240,7 @@ namespace ManagerApp.Pages
                 // Итоговая статистика
                 UpdateOutput4Fast($"\n📊 ИТОГИ АНАЛИЗА:\n" +
                                  $"Всего обработано: {processed}\n" +
-                                 $"├─ Высокое (>45%): {directlyAdded} (добавлено сразу)\n" +
-                                 $"├─ Среднее (20-45%): {aiChecked} (проверено ИИ)\n" +
-                                 $"│  └─ Подтверждено ИИ: {aiApproved}\n" +
-                                 $"└─ Низкое (<20%): {skipped} (пропущено)\n" +
-                                 $"\n" +
-                                 $"✅ Всего добавлено: {directlyAdded + aiApproved} строк\n");
+                                 $"✅ Добавлено товаров: {totalAdded}\n");
             }
             catch (Exception ex)
             {
@@ -208,27 +248,184 @@ namespace ManagerApp.Pages
             }
         }
 
-        private double GetPercentFromText(string text)
+        // Метод для быстрой проверки ОЧЕНЬ ОЧЕВИДНЫХ не-товаров
+        private bool IsVeryObviousNotProduct(string line)
         {
-            if (string.IsNullOrWhiteSpace(text))
-                return 0;
+            if (string.IsNullOrEmpty(line))
+                return true;
 
-            var matches = Regex.Matches(text, @"(\d+)%");
-            if (matches.Count == 0)
-                return 0;
+            string lowerLine = line.ToLower();
 
-            double maxPercent = 0;
-            foreach (Match match in matches)
+            // Только САМЫЕ очевидные не-товары
+            var veryObviousNegativeKeywords = new[]
             {
-                if (double.TryParse(match.Groups[1].Value, out double percent))
+        "утверждаю", "согласовано", "разработано",
+        "директор", "инженер", "начальник", "заместитель",
+        "подраздел", "приложение", "приложение №", "прил. №",
+        "техническое", "задание", "техзадание", "тз",
+        "утверждаю:", "согласовано:", "разработано:"
+    };
+
+            // Если строка СОВПАДАЕТ полностью или начинается с этих слов - точно не товар
+            foreach (var keyword in veryObviousNegativeKeywords)
+            {
+                if (lowerLine == keyword || lowerLine.StartsWith(keyword + " ") || lowerLine.StartsWith(keyword + ":"))
+                    return true;
+            }
+
+            // Если начинается с "РАЗДЕЛ [число]" или "РАЗДЕЛ [число]." - не товар
+            if (Regex.IsMatch(lowerLine, @"^раздел\s+\d"))
+                return true;
+
+            return false;
+        }
+
+        // Метод проверки ключевых слов и формата (упрощенный)
+        private double CheckKeywordsAndFormatBonus(string line)
+        {
+            if (string.IsNullOrEmpty(line) || line.Length < 3)
+                return 0;
+
+            string lowerLine = line.ToLower();
+            double bonus = 0;
+
+            // Ключевые слова ТОВАРА
+            var productKeywords = new[]
+            {
+        "кабель", "провод", "труба", "арматура", "вентиль",
+        "кран", "счетчик", "розетка", "выключатель", "автомат",
+        "трансформатор", "щит", "панель", "бокс", "изоляция",
+        "муфта", "фитинг", "задвижка", "клапан", "насос",
+        "двигатель", "компрессор", "вентилятор", "радиатор",
+        "светильник", "лампа", "кабель-канал", "трубопровод",
+        "соединитель", "переходник", "адаптер", "разветвитель"
+    };
+
+            bool hasProductKeyword = productKeywords.Any(keyword => lowerLine.Contains(keyword));
+
+            // БОНУС 1: Ключевое слово (ОСНОВНОЙ БОНУС)
+            if (hasProductKeyword)
+            {
+                bonus += 30; // УВЕЛИЧИЛИ С 15 ДО 30
+                UpdateOutput4Fast($"    🔤 Ключевое слово (+30%)\n");
+            }
+
+            // БОНУС 2: Начинается с числа (номер позиции)
+            bool startsWithNumber = Regex.IsMatch(line, @"^\d+[\.\s\t]+");
+            if (startsWithNumber)
+            {
+                bonus += 15; // ДОПОЛНИТЕЛЬНЫЙ БОНУС
+                UpdateOutput4Fast($"    🔢 Начинается с числа (+15%)\n");
+            }
+
+            // БОНУС 3: Единицы измерения
+            var units = new[] { "м.", "шт.", "кг.", "т.", "л.", "м2", "м3", "п.м.", "км", "мп" };
+            bool hasUnit = units.Any(unit => lowerLine.Contains(unit));
+            if (hasUnit && hasProductKeyword)
+            {
+                bonus += 10;
+                UpdateOutput4Fast($"    📏 Единица измерения (+10%)\n");
+            }
+
+            return bonus;
+        }
+
+        // Проверка специальных признаков товара
+        private double CheckSpecialProductSigns(string line)
+        {
+            if (string.IsNullOrEmpty(line))
+                return 0;
+
+            double bonus = 0;
+            string lowerLine = line.ToLower();
+
+            // Признак 1: Содержит сечение кабеля/провода (3х2,5, 4х120, 5*16 и т.д.)
+            if (Regex.IsMatch(line, @"\b\d+[хx\*]\d+([,\.]\d+)?\b"))
+            {
+                bonus += 25; // ОЧЕНЬ СИЛЬНЫЙ ПРИЗНАК
+                UpdateOutput4Fast($"    ⚡️ Сечение кабеля (+25%)\n");
+            }
+
+            // Признак 2: Содержит маркировку кабеля (ВВГ, ПНСВ, КГВВ и т.д.)
+            var cableMarkings = new[] { "ввг", "пнсв", "кгвв", "кввг", "пвс", "пугв", "кпсэ", "ксб", "ftp", "utp", "stp" };
+            bool hasCableMarking = cableMarkings.Any(marking => lowerLine.Contains(marking));
+            if (hasCableMarking)
+            {
+                bonus += 20;
+                UpdateOutput4Fast($"    🔌 Маркировка кабеля (+20%)\n");
+            }
+
+            // Признак 3: Содержит ГОСТ или ТУ
+            if (Regex.IsMatch(line, @"(ГОСТ|ТУ|TU|GOST)\s*[\d\-\.]+", RegexOptions.IgnoreCase))
+            {
+                bonus += 15;
+                UpdateOutput4Fast($"    📋 ГОСТ/ТУ (+15%)\n");
+            }
+
+            // Признак 4: Табличный формат (число пробел/таб текст пробел/таб число)
+            if (Regex.IsMatch(line, @"^\d+[\s\t]+\S+[\s\t]+\d+"))
+            {
+                bonus += 20;
+                UpdateOutput4Fast($"    📊 Табличный формат (+20%)\n");
+            }
+
+            return bonus;
+        }
+
+        // Метод проверки соседних строк (обновленный)
+        private double CheckNeighborBonus(int currentIndex, string[] lines, double currentPercent)
+        {
+            double bonus = 0;
+            int checkedNeighbors = 0;
+
+            // Проверяем в радиусе 2 строки
+            for (int offset = -2; offset <= 2; offset++)
+            {
+                if (offset == 0) continue; // Пропускаем текущую строку
+
+                int neighborIndex = currentIndex + offset;
+                if (neighborIndex >= 0 && neighborIndex < lines.Length && checkedNeighbors < 2)
                 {
-                    if (percent > maxPercent)
-                        maxPercent = percent;
+                    var neighborLine = lines[neighborIndex];
+
+                    // Не проверяем очевидные не-товары
+                    if (!IsVeryObviousNotProduct(neighborLine))
+                    {
+                        try
+                        {
+                            var neighborResult = _productSearch.SearchSimple(neighborLine).Result;
+                            double neighborPercent = GetPercentFromText(neighborResult);
+
+                            // Если сосед имеет высокий процент
+                            if (neighborPercent >= 40)
+                            {
+                                bonus += 15; // БОНУС ЗА КАЖДОГО ХОРОШЕГО СОСЕДА
+                                checkedNeighbors++;
+                                UpdateOutput4Fast($"    {GetDirectionSymbol(offset)} Соседняя строка - товар ({neighborPercent:F1}%)\n");
+
+                                if (checkedNeighbors >= 2) break;
+                            }
+                        }
+                        catch
+                        {
+                            // Игнорируем ошибки при проверке соседей
+                        }
+                    }
                 }
             }
 
-            return maxPercent;
+            return Math.Min(bonus, 30); // Максимум 30% за соседей
         }
+
+        private string GetDirectionSymbol(int offset)
+        {
+            if (offset < 0) return "←";
+            if (offset > 0) return "→";
+            return "";
+        }
+
+        // Метод извлечения процента из текста (остается без изменений)
+      
 
         private async Task<bool> CheckWithAISimple(string text)
         {

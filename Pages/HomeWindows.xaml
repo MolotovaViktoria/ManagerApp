@@ -1,0 +1,191 @@
+﻿<Window x:Class="ManagerApp.Pages.HomeWindows"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:pages="clr-namespace:ManagerApp.Pages"
+        Title="Менеджер товаров" 
+        Height="600" Width="1000"
+        MinHeight="500" MinWidth="800"
+        WindowStartupLocation="CenterScreen"
+        Background="White">
+
+    <Window.Resources>
+        <!-- Стиль для кнопок меню с КАСТОМНОЙ подсветкой -->
+        <Style x:Key="MenuButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" 
+                                Background="Transparent"
+                                CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center" 
+                                            VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#D64C21"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#C03E1A"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <!-- Сетка с двумя колонками: меню и контент -->
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="MenuColumn" Width="60"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Левая панель меню (оранжевая) -->
+        <Border Grid.Column="0" 
+                Background="#E2542A"
+                x:Name="LeftMenuPanel"
+                MinWidth="60">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Кнопка гамбургер-меню -->
+                <Button x:Name="btnMenu" 
+                        Grid.Row="0"
+                        Style="{StaticResource MenuButtonStyle}"
+                        Width="50" 
+                        Height="50"
+                        Margin="5,10,5,5"
+                        HorizontalAlignment="Center"
+                        Click="btnMenu_Click">
+                    <Image Source="/ManagerApp;component/Image/menu_icon.png" 
+                           Width="30" 
+                           Height="30"/>
+                </Button>
+
+                <!-- Контейнер для кнопок меню -->
+                <StackPanel x:Name="pnlMenu" 
+                           Grid.Row="1"
+                           Orientation="Vertical"
+                           VerticalAlignment="Top"
+                           Margin="0,20,0,0">
+
+                    <!-- Кнопка Главная -->
+                    <Grid x:Name="gridHome" Height="60" Margin="0,0,0,5">
+                        <Button x:Name="btnHome" 
+                                Style="{StaticResource MenuButtonStyle}"
+                                Click="btnHome_Click"
+                                HorizontalAlignment="Stretch">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="60"/>
+                                    <ColumnDefinition Width="140" x:Name="colTextHome"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Image Source="/Image/add_button.png" 
+                                       Width="32" 
+                                       Height="32"
+                                       Grid.Column="0"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+
+                                <TextBlock x:Name="txtHome" 
+                                           Text="Главная"
+                                           Grid.Column="1"
+                                           HorizontalAlignment="Left"
+                                           VerticalAlignment="Center"
+                                           Foreground="White"
+                                           FontSize="16"
+                                           FontWeight="Medium"
+                                           Margin="10,0,0,0"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Button>
+                    </Grid>
+
+                    <!-- Кнопка История -->
+                    <Grid x:Name="gridHistory" Height="60" Margin="0,0,0,5">
+                        <Button x:Name="btnHistory" 
+                                Style="{StaticResource MenuButtonStyle}"
+                                Click="btnHistory_Click"
+                                HorizontalAlignment="Stretch">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="60"/>
+                                    <ColumnDefinition Width="140" x:Name="colTextHistory"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Image Source="/ManagerApp;component/Image/hostory_button.png" 
+                                       Width="32" 
+                                       Height="32"
+                                       Grid.Column="0"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+
+                                <TextBlock x:Name="txtHistory" 
+                                           Text="История"
+                                           Grid.Column="1"
+                                           HorizontalAlignment="Left"
+                                           VerticalAlignment="Center"
+                                           Foreground="White"
+                                           FontSize="16"
+                                           FontWeight="Medium"
+                                           Margin="10,0,0,0"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Button>
+                    </Grid>
+
+                    <!-- Кнопка Настройки -->
+                    <Grid x:Name="gridSettings" Height="60" Margin="0,10,0,5">
+                        <Button x:Name="btnSettings" 
+                                Style="{StaticResource MenuButtonStyle}"
+                                Click="btnSettings_Click"
+                                HorizontalAlignment="Stretch">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="60"/>
+                                    <ColumnDefinition Width="140" x:Name="colTextSettings"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Image Source="/ManagerApp;component/Image/setting_button.png" 
+                                       Width="32" 
+                                       Height="32"
+                                       Grid.Column="0"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+
+                                <TextBlock x:Name="txtSettings" 
+                                           Text="Настройки"
+                                           Grid.Column="1"
+                                           HorizontalAlignment="Left"
+                                           VerticalAlignment="Center"
+                                           Foreground="White"
+                                           FontSize="16"
+                                           FontWeight="Medium"
+                                           Margin="10,0,0,0"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Главная область контента с Frame для навигации -->
+        <Grid Grid.Column="1" x:Name="MainContentArea">
+
+            <!-- Frame для отображения страниц -->
+            <Frame x:Name="MainFrame"
+                   NavigationUIVisibility="Hidden"
+                   Source="Pages/MainPage.xaml"/>
+
+        </Grid>
+    </Grid>
+</Window>
