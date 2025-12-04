@@ -14,6 +14,8 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <!-- Новая строка для кнопок -->
         </Grid.RowDefinitions>
 
         <!-- Панель шагов -->
@@ -191,32 +193,64 @@
                                 BorderBrush="#E0E0E0"
                                 BorderThickness="1"
                                 CornerRadius="5">
+
+
                             <DataGrid x:Name="dgExcelData"
-                                      AutoGenerateColumns="True"
-                                      SelectionMode="Extended"
-                                      SelectionUnit="CellOrRowHeader"
-                                      CanUserAddRows="False"
-                                      CanUserDeleteRows="False"
-                                      CanUserReorderColumns="False"
-                                      CanUserSortColumns="True"
-                                      AlternatingRowBackground="#F9F9F9"
-                                      RowBackground="White"
-                                      GridLinesVisibility="All"
-                                      BorderThickness="0"
-                                      HeadersVisibility="All"
-                                      SelectionChanged="dgExcelData_SelectionChanged"
-                                      LoadingRow="dgExcelData_LoadingRow"
-                                      ScrollViewer.CanContentScroll="True"
-                                      ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                      ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                                      MouseUp="dgExcelData_MouseUp">
+          AutoGenerateColumns="True"
+          SelectionMode="Extended"
+          SelectionUnit="Cell"
+          CanUserAddRows="False"
+          CanUserDeleteRows="False"
+          CanUserReorderColumns="False"
+          CanUserSortColumns="True"
+          AlternatingRowBackground="#F9F9F9"
+          RowBackground="White"
+          GridLinesVisibility="All"
+          BorderThickness="0"
+          HeadersVisibility="All"
+          LoadingRow="dgExcelData_LoadingRow"
+          ScrollViewer.CanContentScroll="True"
+          ScrollViewer.VerticalScrollBarVisibility="Auto"
+          ScrollViewer.HorizontalScrollBarVisibility="Auto"
+          PreviewMouseLeftButtonDown="dgExcelData_PreviewMouseLeftButtonDown"
+          PreviewMouseMove="dgExcelData_PreviewMouseMove"
+          PreviewMouseLeftButtonUp="dgExcelData_PreviewMouseLeftButtonUp">
+
+                                <DataGrid.CellStyle>
+                                    <Style TargetType="DataGridCell">
+                                        <Setter Property="BorderBrush" Value="Transparent"/>
+                                        <Setter Property="BorderThickness" Value="1"/>
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="DataGridCell">
+                                                    <Border BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}" 
+                                Background="{TemplateBinding Background}" 
+                                SnapsToDevicePixels="True">
+                                                        <ContentPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <!-- Оранжевый цвет выделения ячеек #E2542A -->
+                                                        <Trigger Property="IsSelected" Value="True">
+                                                            <Setter Property="Background" Value="#E2542A"/>
+                                                            <Setter Property="Foreground" Value="White"/>
+                                                            <Setter Property="BorderBrush" Value="#E2542A"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </DataGrid.CellStyle>
+
                                 <DataGrid.Resources>
-                                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#E2542A"/>
-                                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="White"/>
-                                    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}" Color="#FFE0D0"/>
-                                    <SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightTextBrushKey}" Color="Black"/>
+                                    <!-- Отключаем стандартное выделение строки -->
+                                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="Transparent"/>
+                                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="Black"/>
                                 </DataGrid.Resources>
                             </DataGrid>
+
+
                         </Border>
                     </Grid>
                 </Border>
@@ -230,14 +264,14 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
-                            <RowDefinition Height="Auto"/>
+
                         </Grid.RowDefinitions>
 
                         <!-- Заголовок -->
                         <Border Grid.Row="0"
                                 Background="#E2542A"
                                 Padding="15,10">
-                            <TextBlock Text="ВЫБРАННЫЕ ЯЧЕЙКИ"
+                            <TextBlock Text="Список товаров"
                                        Foreground="White"
                                        FontWeight="Bold"
                                        FontSize="14"
@@ -245,142 +279,191 @@
                         </Border>
 
                         <!-- Список выбранных ячеек -->
+
+                        <!-- Список выбранных ячеек -->
                         <Border Grid.Row="1"
-                                Margin="10">
-                            <ListView x:Name="lvSelectedCells"
-                                      Background="White"
-                                      BorderBrush="#E0E0E0"
-                                      BorderThickness="1"
-                                      ScrollViewer.VerticalScrollBarVisibility="Auto">
-                                <ListView.View>
-                                    <GridView>
-                                        <GridViewColumn Header="Лист" Width="60">
-                                            <GridViewColumn.CellTemplate>
-                                                <DataTemplate>
-                                                    <TextBlock Text="{Binding SheetName}" 
-                                                               Margin="5,2"
-                                                               FontWeight="SemiBold"/>
-                                                </DataTemplate>
-                                            </GridViewColumn.CellTemplate>
-                                        </GridViewColumn>
-                                        <GridViewColumn Header="Строка" Width="50">
-                                            <GridViewColumn.CellTemplate>
-                                                <DataTemplate>
-                                                    <TextBlock Text="{Binding Row}" 
-                                                               Margin="5,2"
-                                                               HorizontalAlignment="Center"/>
-                                                </DataTemplate>
-                                            </GridViewColumn.CellTemplate>
-                                        </GridViewColumn>
-                                        <GridViewColumn Header="Столбец" Width="60">
-                                            <GridViewColumn.CellTemplate>
-                                                <DataTemplate>
-                                                    <TextBlock Text="{Binding ColumnName}" 
-                                                               Margin="5,2"/>
-                                                </DataTemplate>
-                                            </GridViewColumn.CellTemplate>
-                                        </GridViewColumn>
-                                        <GridViewColumn Header="Значение" Width="120">
-                                            <GridViewColumn.CellTemplate>
-                                                <DataTemplate>
-                                                    <TextBlock Text="{Binding Value}" 
-                                                               Margin="5,2"
-                                                               TextWrapping="Wrap"/>
-                                                </DataTemplate>
-                                            </GridViewColumn.CellTemplate>
-                                        </GridViewColumn>
-                                    </GridView>
-                                </ListView.View>
-                                <ListView.ItemContainerStyle>
-                                    <Style TargetType="ListViewItem">
-                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                        <Setter Property="Background" Value="White"/>
-                                        <Setter Property="BorderBrush" Value="#E0E0E0"/>
-                                        <Setter Property="BorderThickness" Value="0,0,0,1"/>
-                                        <Style.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="#FFF0F0"/>
-                                            </Trigger>
-                                            <EventTrigger RoutedEvent="MouseDoubleClick">
-                                                <EventTrigger.Actions>
-                                                    <BeginStoryboard>
-                                                        <Storyboard>
-                                                            <ColorAnimation Storyboard.TargetProperty="Background.Color"
-                                                                            To="#FFE0D0"
-                                                                            Duration="0:0:0.1"
-                                                                            AutoReverse="True"/>
-                                                        </Storyboard>
-                                                    </BeginStoryboard>
-                                                </EventTrigger.Actions>
-                                            </EventTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </ListView.ItemContainerStyle>
-                            </ListView>
-                        </Border>
+        Margin="10">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
 
-                        <!-- Панель управления -->
-                        <Border Grid.Row="2"
-                                Background="#F5F5F5"
-                                Padding="10"
-                                BorderBrush="#E0E0E0"
-                                BorderThickness="0,1,0,0">
-                            <StackPanel>
-                                <TextBlock Text="Управление:"
-                                           FontWeight="Bold"
-                                           Margin="0,0,0,5"/>
-
-                                <WrapPanel>
-                                    <Button x:Name="btnClearAllSelections"
-                                            Content="Очистить всё"
-                                            Background="#FF5252"
-                                            Foreground="White"
-                                            FontWeight="Bold"
-                                            Padding="10,5"
-                                            Margin="0,0,5,5"
-                                            Click="btnClearAllSelections_Click"/>
-
-                                    <Button x:Name="btnRemoveSelected"
-                                            Content="Удалить выбранное"
-                                            Background="#2196F3"
-                                            Foreground="White"
-                                            FontWeight="Bold"
-                                            Padding="10,5"
-                                            Margin="0,0,5,5"
-                                            Click="btnRemoveSelected_Click"/>
-
-                                    <Button x:Name="btnExportSelections"
-                                            Content="Экспорт"
-                                            Background="#4CAF50"
-                                            Foreground="White"
-                                            FontWeight="Bold"
-                                            Padding="10,5"
-                                            Margin="0,0,0,5"
-                                            Click="btnExportSelections_Click"/>
-                                </WrapPanel>
-
-                                <!-- Информация -->
-                                <Border Background="#E8F5E8"
-                                        CornerRadius="5"
-                                        Padding="8"
-                                        Margin="0,10,0,0"
-                                        BorderBrush="#4CAF50"
-                                        BorderThickness="1">
-                                    <StackPanel>
-                                        <TextBlock Text="Статистика:"
-                                                   FontWeight="SemiBold"
-                                                   FontSize="12"/>
-                                        <TextBlock x:Name="txtSelectionStats"
-                                                   Text="Выбрано: 0 ячеек"
-                                                   FontSize="11"
-                                                   Foreground="#2E7D32"
-                                                   Margin="0,2,0,0"/>
-                                    </StackPanel>
+                                <!-- Список выбранных ячеек -->
+                                <Border Grid.Row="0"
+                BorderBrush="#E0E0E0"
+                BorderThickness="1"
+                Margin="0,0,0,8">
+                                    <ListView x:Name="lvSelectedCells"
+                      Background="White"
+                      ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                        <ListView.View>
+                                            <GridView>
+                                                <GridViewColumn Header="Наименование товара">
+                                                    <GridViewColumn.CellTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock Text="{Binding Value}" 
+                                               Margin="5,2"
+                                               TextWrapping="Wrap"/>
+                                                        </DataTemplate>
+                                                    </GridViewColumn.CellTemplate>
+                                                </GridViewColumn>
+                                            </GridView>
+                                        </ListView.View>
+                                        <ListView.ItemContainerStyle>
+                                            <Style TargetType="ListViewItem">
+                                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                                <Setter Property="Background" Value="White"/>
+                                                <Setter Property="BorderBrush" Value="#E0E0E0"/>
+                                                <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                                                <Style.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Background" Value="#FFF0F0"/>
+                                                    </Trigger>
+                                                    <EventTrigger RoutedEvent="MouseDoubleClick">
+                                                        <EventTrigger.Actions>
+                                                            <BeginStoryboard>
+                                                                <Storyboard>
+                                                                    <ColorAnimation Storyboard.TargetProperty="Background.Color"
+                                                            To="#FFE0D0"
+                                                            Duration="0:0:0.1"
+                                                            AutoReverse="True"/>
+                                                                </Storyboard>
+                                                            </BeginStoryboard>
+                                                        </EventTrigger.Actions>
+                                                    </EventTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </ListView.ItemContainerStyle>
+                                    </ListView>
                                 </Border>
-                            </StackPanel>
+
+                                <!-- Панель с кнопкой очистки (СНИЗУ) -->
+                                <Border Grid.Row="1"
+                Background="#F5F5F5"
+                Padding="8"
+                CornerRadius="4">
+                                    <Button x:Name="btnClearList"
+                    Content="ОЧИСТИТЬ ВЕСЬ СПИСОК"
+                    Background="#E2542A"
+                    Foreground="White"
+                    FontWeight="Bold"
+                    FontSize="14"
+                    FontFamily="Segoe UI"
+                    Padding="15,8"
+                    BorderThickness="0"
+                    HorizontalAlignment="Stretch"
+                    Height="40"
+                    Click="btnClearList_Click">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border Background="{TemplateBinding Background}"
+                                            CornerRadius="4">
+                                                                <ContentPresenter HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center"/>
+                                                            </Border>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                                <Style.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Background" Value="#D1431E"/>
+                                                        <Setter Property="Cursor" Value="Hand"/>
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </Border>
+                            </Grid>
                         </Border>
+
+
+
+
+
+
                     </Grid>
                 </Border>
+            </Grid>
+        </Border>
+
+        <!-- Панель кнопок навигации -->
+        <Border Grid.Row="2"
+                Background="#F5F5F5"
+                Padding="15,10"
+                BorderBrush="#E0E0E0"
+                BorderThickness="0,1,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="20"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Кнопка "Назад" -->
+                <Button x:Name="btnBack"
+                        Grid.Column="1"
+                        Content="НАЗАД"
+                        Width="120"
+                        Height="40"
+                        Background="#E2542A"
+                        Foreground="White"
+                        FontWeight="Bold"
+                        FontSize="14"
+                        BorderThickness="0"
+                        Opacity="0.5"
+                        Click="btnBack_Click">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}"
+                                                CornerRadius="4">
+                                            <ContentPresenter HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
+
+                <!-- Кнопка "Далее" -->
+                <Button x:Name="btnNext"
+                        Grid.Column="3"
+                        Content="ДАЛЕЕ"
+                        Width="120"
+                        Height="40"
+                        Background="#E2542A"
+                        Foreground="White"
+                        FontWeight="Bold"
+                        FontSize="14"
+                        BorderThickness="0"
+                        Click="btnNext_Click">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}"
+                                                CornerRadius="4">
+                                            <ContentPresenter HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
             </Grid>
         </Border>
     </Grid>

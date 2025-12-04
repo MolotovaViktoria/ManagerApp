@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Configuration;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 
@@ -65,14 +66,28 @@ namespace ManagerApp.Pages
         {
             try
             {
-                // Создаем страницу ExcelFile и передаем файл
-                ExcelFile excelFilePage = new ExcelFile();
-                excelFilePage.LoadFile(filePath);
-                MainFrame.Navigate(excelFilePage);
+                // Проверяем расширение файла
+                string extension = System.IO.Path.GetExtension(filePath)?.ToLower();
+
+                // Список поддерживаемых расширений Excel
+                string[] excelExtensions = { ".xlsx", ".xls", ".xlsm", ".xlsb", ".csv" };
+
+                if (!string.IsNullOrEmpty(extension) && excelExtensions.Contains(extension))
+                {
+                    ExcelFile excelFilePage = new ExcelFile();
+                    excelFilePage.LoadFile(filePath);
+                    MainFrame.Navigate(excelFilePage);
+                }
+                else
+                {
+                    WorldPdfFile worldPdfFile = new WorldPdfFile();
+                    worldPdfFile.LoadFile(filePath);
+                    MainFrame.Navigate(worldPdfFile);
+                }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка открытия Excel файла: {ex.Message}");
+                MessageBox.Show($"Ошибка открытия файла: {ex.Message}");
             }
         }
         // Метод для навигации на любую страницу

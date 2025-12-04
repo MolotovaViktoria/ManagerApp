@@ -24,7 +24,7 @@ namespace ManagerApp.Pages
         public int Row { get; set; }
         public string ColumnName { get; set; }
         public string Value { get; set; }
-        public string UniqueId { get; set; } // Уникальный идентификатор ячейки
+        public string UniqueId { get; set; }
 
         public SelectedCellInfo(string sheetName, int row, string columnName, string value)
         {
@@ -42,13 +42,14 @@ namespace ManagerApp.Pages
         private DataTable _currentDataTable;
         private Dictionary<string, DataTable> _worksheets;
         private List<SelectedCellInfo> _selectedCells = new List<SelectedCellInfo>();
-        private Dictionary<string, SolidColorBrush> _highlightedRows = new Dictionary<string, SolidColorBrush>();
+        private Dictionary<int, SolidColorBrush> _originalRowColors = new Dictionary<int, SolidColorBrush>();
+        private bool _isMouseDragging = false;
+        private Point _mouseDragStartPoint;
 
         public ExcelFile(string filePath = null)
         {
             InitializeComponent();
 
-            // Если передан путь к файлу, загружаем его
             if (!string.IsNullOrEmpty(filePath))
             {
                 Dispatcher.BeginInvoke(new Action(() =>
@@ -58,10 +59,7 @@ namespace ManagerApp.Pages
             }
         }
 
-        private void Page_Loaded(object sender, RoutedEventArgs e)
-        {
-            // Инициализация при загрузке страницы
-        }
+        private void Page_Loaded(object sender, RoutedEventArgs e) { }
 
         private void btnLoadExcel_Click(object sender, RoutedEventArgs e)
         {
@@ -91,14 +89,9 @@ namespace ManagerApp.Pages
             {
                 _currentFilePath = filePath;
                 ClearAllSelections();
-
-                // Обновляем информацию о файле
                 UpdateFileInfo(filePath);
-
-                // Загружаем все листы из Excel
                 LoadWorksheets(filePath);
 
-                // Загружаем первый лист по умолчанию
                 if (cmbSheets.Items.Count > 0)
                 {
                     cmbSheets.SelectedIndex = 0;
@@ -114,8 +107,6 @@ namespace ManagerApp.Pages
         private void UpdateFileInfo(string filePath)
         {
             FileInfo fileInfo = new FileInfo(filePath);
-            //txtFileName.Text = fileInfo.Name;
-            //txtFileSize.Text = $"{fileInfo.Length / 1024} KB";
         }
 
         private void LoadWorksheets(string filePath)
@@ -129,12 +120,10 @@ namespace ManagerApp.Pages
 
                 if (extension == ".xls")
                 {
-                    // Для .xls файлов используем NPOI
                     LoadWorksheetsWithNpoi(filePath);
                 }
                 else if (extension == ".xlsx" || extension == ".xlsm" || extension == ".xlsb")
                 {
-                    // Для новых форматов используем ClosedXML
                     LoadWorksheetsWithClosedXml(filePath);
                 }
                 else
@@ -187,13 +176,11 @@ namespace ManagerApp.Pages
             IRow headerRow = sheet.GetRow(0);
             if (headerRow == null) return dataTable;
 
-            // Добавляем столбцы из первой строки
             for (int col = headerRow.FirstCellNum; col < headerRow.LastCellNum; col++)
             {
                 ICell cell = headerRow.GetCell(col);
                 string columnName = cell != null ? cell.ToString() : $"Column {col + 1}";
 
-                // Убеждаемся, что имена столбцов уникальны
                 string uniqueColumnName = columnName;
                 int counter = 1;
                 while (dataTable.Columns.Contains(uniqueColumnName))
@@ -205,7 +192,6 @@ namespace ManagerApp.Pages
                 dataTable.Columns.Add(uniqueColumnName, typeof(string));
             }
 
-            // Добавляем данные (начиная со второй строки)
             for (int row = 1; row <= sheet.LastRowNum; row++)
             {
                 IRow dataRow = sheet.GetRow(row);
@@ -247,7 +233,6 @@ namespace ManagerApp.Pages
             if (range == null)
                 return dataTable;
 
-            // Добавляем столбцы из первой строки
             var firstRow = range.FirstRow();
             for (int col = 1; col <= range.ColumnCount(); col++)
             {
@@ -257,7 +242,6 @@ namespace ManagerApp.Pages
                     columnName = $"Column {col}";
                 }
 
-                // Убеждаемся, что имена столбцов уникальны
                 string uniqueColumnName = columnName;
                 int counter = 1;
                 while (dataTable.Columns.Contains(uniqueColumnName))
@@ -269,7 +253,6 @@ namespace ManagerApp.Pages
                 dataTable.Columns.Add(uniqueColumnName, typeof(string));
             }
 
-            // Добавляем данные (начиная со второй строки)
             for (int row = 2; row <= range.RowCount(); row++)
             {
                 DataRow dataRow = dataTable.NewRow();
@@ -287,16 +270,9 @@ namespace ManagerApp.Pages
         {
             if (cmbSheets.SelectedItem is KeyValuePair<string, DataTable> selectedSheet)
             {
-                //txtFileName.Text = selectedSheet.Key;
                 _currentDataTable = selectedSheet.Value;
-
-                // Обновляем DataGrid
                 dgExcelData.ItemsSource = _currentDataTable.DefaultView;
-
-                // Обновляем информацию о таблице
                 UpdateTableInfo();
-
-                // Обновляем подсветку строк
                 UpdateRowHighlighting();
             }
         }
@@ -309,71 +285,208 @@ namespace ManagerApp.Pages
             }
         }
 
-        // Обработчик клика по таблице
-        private void dgExcelData_MouseUp(object sender, MouseButtonEventArgs e)
+        private void dgExcelData_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _mouseDragStartPoint = e.GetPosition(dgExcelData);
+            _isMouseDragging = false;
+        }
+
+        private void dgExcelData_PreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (e.LeftButton == MouseButtonState.Pressed)
+            {
+                var currentPosition = e.GetPosition(dgExcelData);
+                if (Math.Abs(currentPosition.X - _mouseDragStartPoint.X) > 5 ||
+                    Math.Abs(currentPosition.Y - _mouseDragStartPoint.Y) > 5)
+                {
+                    _isMouseDragging = true;
+                }
+            }
+        }
+
+        private void dgExcelData_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
             try
             {
-                // Исправление для C# 7.3: замена "is not" на старый синтаксис
-                if (!(cmbSheets.SelectedItem is KeyValuePair<string, DataTable>))
-                    return;
-
-                var selectedSheet = (KeyValuePair<string, DataTable>)cmbSheets.SelectedItem;
-
-                var hitTestResult = VisualTreeHelper.HitTest(dgExcelData, e.GetPosition(dgExcelData));
-                if (hitTestResult == null || hitTestResult.VisualHit == null) return;
-
-                DependencyObject cell = VisualTreeHelper.GetParent(hitTestResult.VisualHit);
-
-                // Ищем DataGridCell
-                while (cell != null && !(cell is DataGridCell))
+                if (_isMouseDragging)
                 {
-                    cell = VisualTreeHelper.GetParent(cell);
+                    ProcessAllSelectedCells();
+                    _isMouseDragging = false;
+                    dgExcelData.UnselectAllCells();
                 }
-
-                if (cell is DataGridCell dataGridCell)
+                else
                 {
-                    DataGridRow row = FindParent<DataGridRow>(dataGridCell);
-                    if (row != null)
-                    {
-                        int rowIndex = row.GetIndex();
-                        string columnName = dataGridCell.Column?.Header?.ToString() ?? "Unknown";
-                        string value = GetCellValue(dataGridCell);
-
-                        string currentSheet = selectedSheet.Key;
-                        string cellId = $"{currentSheet}|{rowIndex}|{columnName}";
-
-                        // Проверяем, есть ли уже эта ячейка в списке
-                        var existingCell = _selectedCells.FirstOrDefault(c => c.UniqueId == cellId);
-
-                        if (existingCell != null)
-                        {
-                            // Удаляем ячейку из списка
-                            _selectedCells.Remove(existingCell);
-                            lvSelectedCells.Items.Remove(existingCell);
-
-                            // Убираем подсветку строки
-                            RemoveRowHighlight(rowIndex);
-                        }
-                        else
-                        {
-                            // Добавляем новую ячейку
-                            var cellInfo = new SelectedCellInfo(currentSheet, rowIndex, columnName, value);
-                            _selectedCells.Add(cellInfo);
-                            lvSelectedCells.Items.Add(cellInfo);
-
-                            // Добавляем подсветку строки
-                            HighlightRow(rowIndex);
-                        }
-
-                        UpdateSelectionStats();
-                    }
+                    ProcessSingleCellClick(e);
+                    dgExcelData.UnselectAllCells();
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка при выборе ячейки: {ex.Message}", "Ошибка",
+                MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка",
                     MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void ProcessSingleCellClick(MouseButtonEventArgs e)
+        {
+            if (!(cmbSheets.SelectedItem is KeyValuePair<string, DataTable>))
+                return;
+
+            var selectedSheet = (KeyValuePair<string, DataTable>)cmbSheets.SelectedItem;
+
+            var hitTestResult = VisualTreeHelper.HitTest(dgExcelData, e.GetPosition(dgExcelData));
+            if (hitTestResult?.VisualHit == null) return;
+
+            DependencyObject cell = hitTestResult.VisualHit;
+            while (cell != null && !(cell is DataGridCell))
+            {
+                cell = VisualTreeHelper.GetParent(cell);
+            }
+
+            if (cell is DataGridCell dataGridCell)
+            {
+                var row = FindParent<DataGridRow>(dataGridCell);
+                if (row != null)
+                {
+                    int rowIndex = row.GetIndex();
+                    string columnName = dataGridCell.Column?.Header?.ToString() ?? "Unknown";
+                    string value = GetCellValue(dataGridCell);
+                    string currentSheet = selectedSheet.Key;
+                    string cellId = $"{currentSheet}|{rowIndex}|{columnName}";
+
+                    var existingCell = _selectedCells.FirstOrDefault(c => c.UniqueId == cellId);
+
+                    if (existingCell != null)
+                    {
+                        _selectedCells.Remove(existingCell);
+                        lvSelectedCells.Items.Remove(existingCell);
+                        CheckAndRemoveRowHighlight(rowIndex, currentSheet);
+                    }
+                    else
+                    {
+                        var cellInfo = new SelectedCellInfo(currentSheet, rowIndex, columnName, value);
+                        _selectedCells.Add(cellInfo);
+                        lvSelectedCells.Items.Add(cellInfo);
+                        HighlightRow(rowIndex);
+                    }
+
+                    UpdateListViewFromSelectedCells();
+                }
+            }
+        }
+
+        private void ProcessAllSelectedCells()
+        {
+            if (dgExcelData == null || lvSelectedCells == null) return;
+            if (!(cmbSheets.SelectedItem is KeyValuePair<string, DataTable>)) return;
+
+            var selectedSheet = (KeyValuePair<string, DataTable>)cmbSheets.SelectedItem;
+            string currentSheet = selectedSheet.Key;
+
+            foreach (DataGridCellInfo cellInfo in dgExcelData.SelectedCells)
+            {
+                if (cellInfo.Item != null && cellInfo.Column?.Header != null)
+                {
+                    int rowIndex = dgExcelData.Items.IndexOf(cellInfo.Item);
+                    string columnName = cellInfo.Column.Header.ToString();
+                    string cellValue = GetCellValueFromCellInfo(cellInfo);
+
+                    if (!string.IsNullOrWhiteSpace(cellValue))
+                    {
+                        string cellId = $"{currentSheet}|{rowIndex}|{columnName}";
+
+                        if (!_selectedCells.Any(c => c.UniqueId == cellId))
+                        {
+                            var newCell = new SelectedCellInfo(currentSheet, rowIndex, columnName, cellValue);
+                            _selectedCells.Add(newCell);
+                            HighlightRow(rowIndex);
+                        }
+                    }
+                }
+            }
+
+            UpdateListViewFromSelectedCells();
+        }
+
+        private void HighlightRow(int rowIndex)
+        {
+            if (!_originalRowColors.ContainsKey(rowIndex))
+            {
+                var row = GetDataGridRow(rowIndex);
+                if (row != null)
+                {
+                    _originalRowColors[rowIndex] = row.Background as SolidColorBrush ?? Brushes.White;
+                    row.Background = new SolidColorBrush(Color.FromArgb(255, 255, 235, 200)); // Светло-оранжевый
+                }
+            }
+        }
+
+        private void RemoveRowHighlight(int rowIndex)
+        {
+            if (_originalRowColors.ContainsKey(rowIndex))
+            {
+                var row = GetDataGridRow(rowIndex);
+                if (row != null)
+                {
+                    row.Background = _originalRowColors[rowIndex];
+                    _originalRowColors.Remove(rowIndex);
+                }
+            }
+        }
+
+        private void CheckAndRemoveRowHighlight(int rowIndex, string sheetName)
+        {
+            // Проверяем, есть ли еще ячейки в этой строке для текущего листа
+            bool hasOtherCellsInRow = _selectedCells.Any(c =>
+                c.SheetName == sheetName && (c.Row - 1) == rowIndex);
+
+            if (!hasOtherCellsInRow)
+            {
+                RemoveRowHighlight(rowIndex);
+            }
+        }
+
+        private void UpdateRowHighlighting()
+        {
+            // Очищаем старые цвета
+            _originalRowColors.Clear();
+
+            if (cmbSheets.SelectedItem is KeyValuePair<string, DataTable> selectedSheet)
+            {
+                string currentSheet = selectedSheet.Key;
+                var rowsToHighlight = _selectedCells
+                    .Where(c => c.SheetName == currentSheet)
+                    .Select(c => c.Row - 1)
+                    .Distinct();
+
+                foreach (int rowIndex in rowsToHighlight)
+                {
+                    HighlightRow(rowIndex);
+                }
+            }
+        }
+
+        private DataGridRow GetDataGridRow(int index)
+        {
+            return dgExcelData.ItemContainerGenerator.ContainerFromIndex(index) as DataGridRow;
+        }
+
+        private void UpdateListViewFromSelectedCells()
+        {
+            lvSelectedCells.Items.Clear();
+
+            if (cmbSheets.SelectedItem is KeyValuePair<string, DataTable> selectedSheet)
+            {
+                string currentSheet = selectedSheet.Key;
+                var cellsForCurrentSheet = _selectedCells
+                    .Where(c => c.SheetName == currentSheet)
+                    .OrderBy(c => c.Row)
+                    .ThenBy(c => c.ColumnName);
+
+                foreach (var cell in cellsForCurrentSheet)
+                {
+                    lvSelectedCells.Items.Add(cell);
+                }
             }
         }
 
@@ -381,11 +494,26 @@ namespace ManagerApp.Pages
         {
             if (cell.Content is TextBlock textBlock)
                 return textBlock.Text;
-
             if (cell.Content is string str)
                 return str;
-
             return cell.Content?.ToString() ?? "";
+        }
+
+        private string GetCellValueFromCellInfo(DataGridCellInfo cellInfo)
+        {
+            if (cellInfo.Column?.GetCellContent(cellInfo.Item) is TextBlock textBlock)
+                return textBlock.Text?.Trim();
+
+            if (cellInfo.Item is DataRowView rowView && cellInfo.Column != null)
+            {
+                string columnName = cellInfo.Column.Header?.ToString();
+                if (!string.IsNullOrEmpty(columnName) && rowView.Row.Table.Columns.Contains(columnName))
+                {
+                    return rowView[columnName]?.ToString()?.Trim();
+                }
+            }
+
+            return string.Empty;
         }
 
         private T FindParent<T>(DependencyObject child) where T : DependencyObject
@@ -401,206 +529,53 @@ namespace ManagerApp.Pages
             return FindParent<T>(parent);
         }
 
-        private void HighlightRow(int rowIndex)
-        {
-            string rowKey = rowIndex.ToString();
-
-            // Сохраняем исходный цвет строки
-            if (!_highlightedRows.ContainsKey(rowKey))
-            {
-                // Получаем строку из DataGrid
-                var row = GetDataGridRow(rowIndex);
-                if (row != null)
-                {
-                    // Сохраняем текущий цвет
-                    _highlightedRows[rowKey] = row.Background as SolidColorBrush ?? Brushes.White;
-
-                    // Устанавливаем новый цвет (светло-оранжевый)
-                    row.Background = new SolidColorBrush(Color.FromArgb(255, 255, 235, 200));
-                }
-            }
-        }
-
-        private void RemoveRowHighlight(int rowIndex)
-        {
-            string rowKey = rowIndex.ToString();
-
-            if (_highlightedRows.ContainsKey(rowKey))
-            {
-                // Восстанавливаем исходный цвет
-                var row = GetDataGridRow(rowIndex);
-                if (row != null)
-                {
-                    row.Background = _highlightedRows[rowKey];
-                    _highlightedRows.Remove(rowKey);
-                }
-            }
-        }
-
-        private void UpdateRowHighlighting()
-        {
-            // Очищаем подсветку при смене листа
-            _highlightedRows.Clear();
-
-            // Подсвечиваем строки с выбранными ячейками для текущего листа
-            if (cmbSheets.SelectedItem is KeyValuePair<string, DataTable> selectedSheet)
-            {
-                string currentSheet = selectedSheet.Key;
-                var cellsForCurrentSheet = _selectedCells.Where(c => c.SheetName == currentSheet).ToList();
-
-                foreach (var cell in cellsForCurrentSheet)
-                {
-                    HighlightRow(cell.Row - 1); // Excel row -> 0-based index
-                }
-            }
-        }
-
-        private DataGridRow GetDataGridRow(int index)
-        {
-            return dgExcelData.ItemContainerGenerator.ContainerFromIndex(index) as DataGridRow;
-        }
-
-        private void UpdateSelectionStats()
-        {
-            txtSelectionStats.Text = $"Выбрано: {_selectedCells.Count} ячеек";
-        }
-
-        // Кнопка "Очистить всё"
-        private void btnClearAllSelections_Click(object sender, RoutedEventArgs e)
-        {
-            ClearAllSelections();
-        }
-
         private void ClearAllSelections()
         {
+            // Восстанавливаем цвета всех строк
+            foreach (var kvp in _originalRowColors)
+            {
+                var row = GetDataGridRow(kvp.Key);
+                if (row != null)
+                {
+                    row.Background = kvp.Value;
+                }
+            }
+
             _selectedCells.Clear();
             lvSelectedCells.Items.Clear();
-            _highlightedRows.Clear();
-            UpdateSelectionStats();
-            UpdateRowHighlighting();
+            _originalRowColors.Clear();
         }
 
-        // Кнопка "Удалить выбранное" (из списка справа)
-        private void btnRemoveSelected_Click(object sender, RoutedEventArgs e)
-        {
-            if (lvSelectedCells.SelectedItem is SelectedCellInfo selectedCell)
-            {
-                _selectedCells.Remove(selectedCell);
-                lvSelectedCells.Items.Remove(selectedCell);
+        private void btnBack_Click(object sender, RoutedEventArgs e) { }
 
-                // Убираем подсветку строки
-                if (cmbSheets.SelectedItem is KeyValuePair<string, DataTable> selectedSheet &&
-                    selectedCell.SheetName == selectedSheet.Key)
-                {
-                    RemoveRowHighlight(selectedCell.Row - 1);
-                }
-
-                UpdateSelectionStats();
-            }
-        }
-
-        // Кнопка "Экспорт" выбранных ячеек
-        private void btnExportSelections_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (_selectedCells.Count == 0)
-                {
-                    MessageBox.Show("Нет выбранных ячеек для экспорта", "Информация",
-                        MessageBoxButton.OK, MessageBoxImage.Information);
-                    return;
-                }
-
-                SaveFileDialog saveFileDialog = new SaveFileDialog
-                {
-                    Filter = "CSV файл|*.csv|Текстовый файл|*.txt",
-                    DefaultExt = ".csv",
-                    FileName = $"Выбранные_ячейки_{DateTime.Now:yyyyMMdd_HHmmss}"
-                };
-
-                if (saveFileDialog.ShowDialog() == true)
-                {
-                    ExportSelectedCells(saveFileDialog.FileName);
-                    MessageBox.Show("Выбранные ячейки успешно экспортированы!", "Успех",
-                        MessageBoxButton.OK, MessageBoxImage.Information);
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка экспорта: {ex.Message}", "Ошибка",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void ExportSelectedCells(string filePath)
-        {
-            string extension = Path.GetExtension(filePath).ToLower();
-
-            if (extension == ".csv")
-            {
-                using (var writer = new StreamWriter(filePath, false, System.Text.Encoding.UTF8))
-                {
-                    // Заголовки
-                    writer.WriteLine("Лист;Строка;Столбец;Значение");
-
-                    // Данные
-                    foreach (var cell in _selectedCells)
-                    {
-                        writer.WriteLine($"{cell.SheetName};{cell.Row};{cell.ColumnName};{cell.Value}");
-                    }
-                }
-            }
-            else if (extension == ".txt")
-            {
-                using (var writer = new StreamWriter(filePath, false, System.Text.Encoding.UTF8))
-                {
-                    writer.WriteLine("=== ВЫБРАННЫЕ ЯЧЕЙКИ ===");
-                    writer.WriteLine($"Всего ячеек: {_selectedCells.Count}");
-                    writer.WriteLine("=".PadRight(50, '='));
-
-                    foreach (var cell in _selectedCells)
-                    {
-                        writer.WriteLine($"Лист: {cell.SheetName}");
-                        writer.WriteLine($"Строка: {cell.Row}, Столбец: {cell.ColumnName}");
-                        writer.WriteLine($"Значение: {cell.Value}");
-                        writer.WriteLine("-".PadRight(50, '-'));
-                    }
-                }
-            }
-        }
-
-        // Методы, которые больше не используются (оставлены для совместимости)
-        private void dgExcelData_SelectionChanged(object sender, SelectionChangedEventArgs e) { }
-        private void UpdateSelectionInfo() { }
-        private void btnSelectAll_Click(object sender, RoutedEventArgs e) { }
-        private void btnClearSelection_Click(object sender, RoutedEventArgs e) { }
-        private void btnExportSelection_Click(object sender, RoutedEventArgs e) { }
+        private void btnNext_Click(object sender, RoutedEventArgs e) { }
 
         private void dgExcelData_LoadingRow(object sender, DataGridRowEventArgs e)
         {
             int rowIndex = e.Row.GetIndex();
-            string rowKey = rowIndex.ToString();
+            e.Row.Tag = rowIndex;
 
-            // Устанавливаем фон в зависимости от четности строки
-            if (!_highlightedRows.ContainsKey(rowKey))
+            // Если строка не подсвечена, устанавливаем стандартный цвет
+            if (!_originalRowColors.ContainsKey(rowIndex))
             {
                 e.Row.Background = rowIndex % 2 == 0
                     ? Brushes.White
                     : new SolidColorBrush(Color.FromArgb(255, 249, 249, 249));
             }
-
-            // Сохраняем ссылку на строку для быстрого доступа
-            e.Row.Tag = rowIndex;
         }
 
-        // Метод для загрузки файла из другого места программы
         public void LoadFile(string filePath)
         {
             if (File.Exists(filePath) &&
-                (filePath.EndsWith(".xls") || filePath.EndsWith(".xlsx") ||
-                 filePath.EndsWith(".xlsm") || filePath.EndsWith(".xlsb")))
+                (filePath.EndsWith(".xls", StringComparison.OrdinalIgnoreCase) ||
+                 filePath.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase) ||
+                 filePath.EndsWith(".xlsm", StringComparison.OrdinalIgnoreCase) ||
+                 filePath.EndsWith(".xlsb", StringComparison.OrdinalIgnoreCase)))
             {
-                LoadExcelFile(filePath);
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    LoadExcelFile(filePath);
+                }), System.Windows.Threading.DispatcherPriority.Normal);
             }
             else
             {
@@ -608,5 +583,13 @@ namespace ManagerApp.Pages
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
+
+        private void btnClearList_Click(object sender, RoutedEventArgs e)
+        {
+            ClearAllSelections();
+        }
+
+      
     }
 }

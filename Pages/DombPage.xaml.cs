@@ -141,17 +141,32 @@ namespace ManagerApp.Pages
         }
         private void ProcessFile(string filePath)
         {
-            // Создаем страницу ExcelFile
-            ExcelFile excelFilePage = new ExcelFile();
+            // Получаем расширение файла
+            string extension = System.IO.Path.GetExtension(filePath)?.ToLower();
 
-            // Загружаем файл на страницу
-            excelFilePage.LoadFile(filePath);
-
-            // Переходим на страницу
-            this.NavigationService.Navigate(excelFilePage);
+            // Определяем, какой тип файла и открываем соответствующую страницу
+            if (FormatLists.ExcelFormatList.Contains(extension))
+            {
+                // Excel файлы
+                ExcelFile excelFilePage = new ExcelFile(filePath);
+                this.NavigationService.Navigate(excelFilePage);
+            }
+            else if (FormatLists.PdfFormatList.Contains(extension) ||
+                     FormatLists.WordFormatList.Contains(extension))
+            {
+                // PDF или Word файлы
+                WorldPdfFile worldPdfFilePage = new WorldPdfFile();
+                worldPdfFilePage.LoadFile(filePath);
+                this.NavigationService.Navigate(worldPdfFilePage);
+            }
+            else
+            {
+                MessageBox.Show($"Неподдерживаемый формат файла: {extension}",
+                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
         // Обработка загруженного файла
-       
+
 
         // Проверка поддерживаемого формата
         private bool IsSupportedFormat(string extension)
