@@ -1,6 +1,7 @@
 ﻿using ManagerApp.Classes.Read;
 using ManagerApp.Classes.Search;
 using ManagerApp.Data.GetInfo;
+using ManagerApp.Data.StructureList;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Concurrent;
@@ -557,6 +558,78 @@ namespace ManagerApp.Pages
         {
             _analysisCancellationTokenSource?.Cancel();
             UpdateOutput4Fast("\n❌ Анализ прерван\n");
+        }
+
+        private async void btnTestBitrixCache_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                btnTestBitrixCache.IsEnabled = false;
+                btnTestBitrixCache.Content = "Загрузка...";
+
+                // Получаем товары с категориями
+                var productsWithCategories = await BitrixCache.GetAllProductsWithCategories();
+
+                // Создаем строку для вывода
+                StringBuilder output = new StringBuilder();
+                output.AppendLine($"✅ Загружено товаров: {productsWithCategories.Count}");
+                output.AppendLine("Первые 20 товаров из Bitrix:");
+                output.AppendLine("=".PadRight(80, '='));
+
+                // Берем первые 20 товаров
+                int count = Math.Min(20, productsWithCategories.Count);
+                for (int i = 0; i < count; i++)
+                {
+                    var product = productsWithCategories[i];
+                    output.AppendLine($"📦 {i + 1}. {product.ProductName}");
+                    output.AppendLine($"   Категория: {product.CategoryName}");
+                    output.AppendLine($"   Цена: {(product.HasPrice ? product.Price.ToString() + " руб." : "Нет цены")}");
+                    output.AppendLine($"   Код: {product.ProductCode}");
+                    output.AppendLine($"   ID товара: {product.ProductId}");
+                    output.AppendLine($"   ID категории: {product.SectionId}");
+                    output.AppendLine("-".PadRight(80, '-'));
+                }
+
+                // Выводим в txtOutput3 (или любой другой TextBox)
+                txtOutput3.Text = output.ToString();
+
+                // Также показываем статистику по категориям
+                ShowCategoriesStatistics(productsWithCategories);
+            }
+            catch (Exception ex)
+            {
+                txtOutput3.Text = $"❌ Ошибка загрузки: {ex.Message}\n{ex.StackTrace}";
+            }
+            finally
+            {
+                btnTestBitrixCache.IsEnabled = true;
+                btnTestBitrixCache.Content = "🧪 Тест Bitrix";
+            }
+        }
+
+        private void ShowCategoriesStatistics(List<ProductWithCategoryInfo> products)
+        {
+            // Группируем товары по категориям
+            var categories = products.GroupBy(p => p.CategoryName)
+                                    .Select(g => new
+                                    {
+                                        Category = g.Key,
+                                        Count = g.Count(),
+                                        HasPriceCount = g.Count(p => p.HasPrice)
+                                    })
+                                    .OrderByDescending(g => g.Count)
+                                    .ToList();
+
+            StringBuilder stats = new StringBuilder();
+            stats.AppendLine("\n📊 Статистика по категориям:");
+            stats.AppendLine("=".PadRight(80, '='));
+
+            foreach (var category in categories.Take(10)) // Берем топ-10 категорий
+            {
+                stats.AppendLine($"{category.Category}: {category.Count} товаров (с ценой: {category.HasPriceCount})");
+            }
+
+            txtOutput4.Text = stats.ToString();
         }
     }
 }

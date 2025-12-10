@@ -215,10 +215,18 @@
     <Compile Include="Classes\Search\SmartProductSearch.cs" />
     <Compile Include="Data\GetInfo\BitrixCache.cs" />
     <Compile Include="Data\GetInfo\BitrixService.cs" />
+    <Compile Include="Data\ScharedData\ProductSelectionManager.cs" />
+    <Compile Include="Data\Search\AIProductSearch.cs" />
+    <Compile Include="Data\Search\AlgorithmicProductSearch.cs" />
+    <Compile Include="Data\Search\BitrixProductMatcher.cs" />
     <Compile Include="Data\Search\SearchResult.cs" />
     <Compile Include="Data\StructureList\BitrixCategoryResponse.cs" />
     <Compile Include="Data\StructureList\BitrixProductResponse.cs" />
     <Compile Include="Data\StructureList\ProductRequst.cs" />
+    <Compile Include="Data\StructureList\ProductWithCategoryInfo.cs" />
+    <Compile Include="Pages\ComparisonProduct.xaml.cs">
+      <DependentUpon>ComparisonProduct.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Pages\DombPage.xaml.cs">
       <DependentUpon>DombPage.xaml</DependentUpon>
     </Compile>
@@ -230,6 +238,9 @@
     </Compile>
     <Compile Include="Pages\MainWindow.xaml.cs">
       <DependentUpon>MainWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Pages\SearchBitrixProduct.xaml.cs">
+      <DependentUpon>SearchBitrixProduct.xaml</DependentUpon>
     </Compile>
     <Compile Include="Pages\SplashScreen.xaml.cs">
       <DependentUpon>SplashScreen.xaml</DependentUpon>
@@ -269,6 +280,10 @@
     <Resource Include="Image\setting_button.png" />
   </ItemGroup>
   <ItemGroup>
+    <Page Include="Pages\ComparisonProduct.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Pages\DombPage.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
@@ -285,6 +300,10 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
+    <Page Include="Pages\SearchBitrixProduct.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Pages\SplashScreen.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
@@ -296,6 +315,9 @@
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Image\menu_icon.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Image\changeButton.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

@@ -127,5 +127,11 @@ namespace ManagerApp.Pages
             //SettingsPage settingsPage = new SettingsPage();
             //MainFrame.Navigate(settingsPage);
         }
+
+
+
+
+
+       
     }
 }

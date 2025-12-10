@@ -24,9 +24,11 @@ namespace ManagerApp.Data.StructureList
         [JsonProperty("CODE")]
         public string Code { get; set; }
 
+        [JsonProperty("SECTION_ID")]
+        public string SectionId { get; set; }
 
         [JsonProperty("PRICE")]
-        public double? Price { get; set; }
+        public decimal? Price { get; set; }
 
     }
 }

@@ -10,12 +10,14 @@ namespace ManagerApp.Data.GetInfo
     public static class BitrixCache
     {
         private static BitrixService _bitrixService = new BitrixService();
-        private static Dictionary<int, List<Product>> _productsByCategory = new Dictionary<int, List<Product>>();
+        private static Dictionary<int, List<ProductWithCategoryInfo>> _productsByCategory = new Dictionary<int, List<ProductWithCategoryInfo>>();
+        private static List<ProductWithCategoryInfo> _allProductsWithCategories = null;
         private static bool _isInitialized = false;
         private static object _lockObject = new object();
         private static List<Product> _allProductsCache = null;
         private static DateTime _allProductsCacheTimestamp = DateTime.MinValue;
         private static readonly TimeSpan _cacheDuration = TimeSpan.FromMinutes(30);
+
         public static async Task InitializeAsync()
         {
             if (!_isInitialized)
@@ -24,14 +26,45 @@ namespace ManagerApp.Data.GetInfo
                 {
                     if (!_isInitialized)
                     {
-                        // Можно предзагрузить основные категории здесь
                         _isInitialized = true;
                     }
+                }
+
+                // ЗАГРУЖАЕМ ДАННЫЕ ПРИ ИНИЦИАЛИЗАЦИИ
+                try
+                {
+                    // Загружаем все данные
+                    await GetAllProductsWithCategories();
+                    await GetAllProductsSimple();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Ошибка загрузки данных в кеш: {ex.Message}");
+                    // Можно сбросить флаг, если загрузка не удалась
+                    _isInitialized = false;
+                    throw;
                 }
             }
         }
 
-        public static async Task<List<Product>> GetProductsByCategory(int categoryId)
+        // Новый метод для получения всех товаров с категориями
+        public static async Task<List<ProductWithCategoryInfo>> GetAllProductsWithCategories()
+        {
+            // Если данные уже в кеше - возвращаем их
+            if (_allProductsWithCategories != null &&
+                (DateTime.Now - _allProductsCacheTimestamp) < _cacheDuration)
+            {
+                return _allProductsWithCategories;
+            }
+
+            // Загружаем данные из Bitrix
+            _allProductsWithCategories = await _bitrixService.GetProductsWithCategoryInfo();
+            _allProductsCacheTimestamp = DateTime.Now;
+
+            return _allProductsWithCategories;
+        }
+
+        public static async Task<List<ProductWithCategoryInfo>> GetProductsByCategory(int categoryId)
         {
             // Если данные уже в кеше - возвращаем их
             if (_productsByCategory.ContainsKey(categoryId))
@@ -40,14 +73,13 @@ namespace ManagerApp.Data.GetInfo
             }
 
             // Загружаем данные из Bitrix
-            var products = await _bitrixService.GetProductsByCategory(categoryId);
+            var products = await _bitrixService.GetProductsWithCategoryInfo();
 
             // Сохраняем в кеш
             _productsByCategory[categoryId] = products;
 
             return products;
         }
-
 
         public static async Task<List<Product>> GetAllProductsSimple()
         {
@@ -69,6 +101,8 @@ namespace ManagerApp.Data.GetInfo
         public static void ClearCache()
         {
             _productsByCategory.Clear();
+            _allProductsWithCategories = null;
+            _allProductsCache = null;
             _isInitialized = false;
         }
 

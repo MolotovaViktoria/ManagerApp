@@ -1,5 +1,4 @@
 ﻿using ManagerApp.Data.StructureList;
-
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -32,14 +31,12 @@ namespace ManagerApp.Data.GetInfo
             // Парсим JSON и берем только нужные поля
             BitrixCategoryResponse data = JsonConvert.DeserializeObject<BitrixCategoryResponse>(jsonResponse);
 
-
             List<StructureList.Category> anwer = new List<StructureList.Category>();
 
-            foreach(var  item in data.Categories)
+            foreach (var item in data.Categories)
             {
                 try
                 {
-                    
                     StructureList.Category category = new StructureList.Category();
                     category.Name = item.Name;
                     category.SelectionId = item.SelectionId + 1;
@@ -47,7 +44,7 @@ namespace ManagerApp.Data.GetInfo
                 }
                 catch
                 {
-
+                    // Логирование ошибки
                 }
             }
 
@@ -118,9 +115,119 @@ namespace ManagerApp.Data.GetInfo
             return allProducts;
         }
 
-         
+        /// <summary>
+        /// Получает все товары с информацией о категории, цене, количестве и единице измерения
+        /// </summary>
+        /// <returns>Список товаров с расширенной информацией</returns>
+        public async Task<List<ProductWithCategoryInfo>> GetProductsWithCategoryInfo()
+        {
+            // Получаем все категории и создаем словарь для быстрого поиска по ID
+            var categories = await GetСategories();
 
+            // Создаем словарь категорий с проверкой на null
+            var categoryDict = new Dictionary<string, string>();
 
+            foreach (var category in categories)
+            {
+                // Проверяем, что SelectionId не null и не пустой
+                if (category.SelectionId != null)
+                {
+                    string key = category.SelectionId.ToString(); // Преобразуем в строку
+                    if (!string.IsNullOrEmpty(key) && !categoryDict.ContainsKey(key))
+                    {
+                        categoryDict[key] = category.Name ?? "Без названия";
+                    }
+                }
+            }
+
+            // Получаем все товары
+            var allProducts = await GetProducts();
+
+            var result = new List<ProductWithCategoryInfo>();
+
+            foreach (var product in allProducts)
+            {
+                try
+                {
+                    var productInfo = new ProductWithCategoryInfo
+                    {
+                        // Название категории (ищем по SECTION_ID)
+                        CategoryName = !string.IsNullOrEmpty(product.SectionId) &&
+                                       categoryDict.ContainsKey(product.SectionId)
+                                     ? categoryDict[product.SectionId]
+                                     : "Без категории",
+
+                        // Информация о товаре
+                        ProductName = product.Name ?? "Без названия",
+
+                        // Цена (проверяем наличие)
+                        Price = product.Price.HasValue ? product.Price.Value : 0m,
+                        HasPrice = product.Price.HasValue,
+
+                        // SECTION_ID для возможной дальнейшей обработки
+                        SectionId = product.SectionId,
+
+                        // Дополнительная информация из продукта (если есть)
+                        ProductCode = product.Code,
+                        ProductId = product.Id
+                    };
+
+                    result.Add(productInfo);
+                }
+                catch (Exception ex)
+                {
+                    // Логирование ошибки обработки товара
+                    Console.WriteLine($"Ошибка обработки товара {product?.Id}: {ex.Message}");
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Получает товары с информацией о категории для определенной категории
+        /// </summary>
+        /// <param name="categoryId">ID категории</param>
+        /// <returns>Список товаров с информацией о категории</returns>
+        public async Task<List<ProductWithCategoryInfo>> GetProductsWithCategoryInfoByCategory(int categoryId)
+        {
+            // Получаем название категории
+            var categories = await GetСategories();
+            var categoryName = categories.FirstOrDefault(c => c.SelectionId.ToString() == categoryId.ToString())?.Name
+                               ?? "Неизвестная категория";
+
+            // Получаем товары для категории
+            var products = await GetProductsByCategory(categoryId);
+
+            var result = new List<ProductWithCategoryInfo>();
+
+            foreach (var product in products)
+            {
+                try
+                {
+                    var productInfo = new ProductWithCategoryInfo
+                    {
+                        CategoryName = categoryName,
+                        ProductName = product.Name ?? "Без названия",
+                        Price = product.Price.HasValue ? product.Price.Value : 0m,
+                        HasPrice = product.Price.HasValue,
+                        SectionId = product.SectionId,
+                        ProductCode = product.Code,
+                        ProductId = product.Id
+                    };
+
+                    result.Add(productInfo);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Ошибка обработки товара {product?.Id}: {ex.Message}");
+                }
+            }
+
+            return result;
+        }
     }
-    
+
+
+  
 }

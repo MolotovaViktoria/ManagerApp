@@ -50,7 +50,7 @@ namespace ManagerApp.Pages
                 }
             }
 
-            var mainWindow = new MainWindows();
+            var mainWindow = new HomeWindows();
             mainWindow.Show();
             this.Close();
         }

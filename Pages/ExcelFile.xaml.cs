@@ -1,4 +1,5 @@
 ﻿using ClosedXML.Excel;
+using ManagerApp.Data.ScharedData;
 using Microsoft.Win32;
 using NPOI.HSSF.UserModel;
 using NPOI.SS.UserModel;
@@ -25,6 +26,9 @@ namespace ManagerApp.Pages
         public string ColumnName { get; set; }
         public string Value { get; set; }
         public string UniqueId { get; set; }
+
+        // Для отображения в ListView
+        public string DisplayText => $"{SheetName} - Строка {Row}, Столбец {ColumnName}: {Value}";
 
         public SelectedCellInfo(string sheetName, int row, string columnName, string value)
         {
@@ -516,18 +520,7 @@ namespace ManagerApp.Pages
             return string.Empty;
         }
 
-        private T FindParent<T>(DependencyObject child) where T : DependencyObject
-        {
-            if (child == null) return null;
 
-            DependencyObject parent = VisualTreeHelper.GetParent(child);
-            if (parent == null) return null;
-
-            if (parent is T tParent)
-                return tParent;
-
-            return FindParent<T>(parent);
-        }
 
         private void ClearAllSelections()
         {
@@ -548,7 +541,72 @@ namespace ManagerApp.Pages
 
         private void btnBack_Click(object sender, RoutedEventArgs e) { }
 
-        private void btnNext_Click(object sender, RoutedEventArgs e) { }
+        private void btnNext_Click(object sender, RoutedEventArgs e) {
+
+
+
+            try
+            {
+                // Получаем список значений из выбранных ячеек
+                var selectedProducts = new List<string>();
+
+                foreach (SelectedCellInfo cell in lvSelectedCells.Items)
+                {
+                    if (!string.IsNullOrWhiteSpace(cell.Value))
+                    {
+                        selectedProducts.Add(cell.Value);
+                    }
+                }
+
+                if (selectedProducts.Count == 0)
+                {
+                    MessageBox.Show("Нет выбранных товаров для сопоставления",
+                        "Внимание", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                // Сохраняем выбранные товары
+                ProductSelectionManager.SetProducts(selectedProducts);
+
+                // Открываем страницу сопоставления
+                var comparisonPage = new ComparisonProduct(selectedProducts);
+
+                // Получаем родительское окно для навигации
+                var window = Window.GetWindow(this);
+                if (window is HomeWindows homeWindow)
+                {
+                    homeWindow.NavigateToPage(comparisonPage);
+                }
+                else if (window != null)
+                {
+                    // Если это другое окно, используем Frame
+                    var frame = FindParent<Frame>(this);
+                    if (frame != null)
+                    {
+                        frame.Navigate(comparisonPage);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка перехода к сопоставлению: {ex.Message}",
+                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+
+        }
+
+        private T FindParent<T>(DependencyObject child) where T : DependencyObject
+        {
+            if (child == null) return null;
+
+            DependencyObject parent = VisualTreeHelper.GetParent(child);
+            if (parent == null) return null;
+
+            if (parent is T tParent)
+                return tParent;
+
+            return FindParent<T>(parent);
+        }
 
         private void dgExcelData_LoadingRow(object sender, DataGridRowEventArgs e)
         {
@@ -589,6 +647,10 @@ namespace ManagerApp.Pages
         {
             ClearAllSelections();
         }
+
+
+
+
 
       
     }

@@ -48,6 +48,15 @@
                            Margin="5,5,5,0">
 
                     <!-- Удалены кнопки Debug, TestApi, CheckServer -->
+                    <Button x:Name="btnTestBitrixCache" 
+        Content="🧪 Тест Bitrix" 
+        Click="btnTestBitrixCache_Click"
+        Background="White"
+        Foreground="Blue"
+        BorderThickness="0"
+        Margin="0,2" 
+        Padding="5,2"
+        HorizontalAlignment="Stretch"/>
 
                     <Button x:Name="btnLoadRequest" 
                             Content="📁 Загрузить файл" 
