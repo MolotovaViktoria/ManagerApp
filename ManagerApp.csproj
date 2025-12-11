@@ -213,8 +213,15 @@
     <Compile Include="Classes\Read\ReadRequst.cs" />
     <Compile Include="Classes\Search\ProductListIdentifier.cs" />
     <Compile Include="Classes\Search\SmartProductSearch.cs" />
+    <Compile Include="Classes\Setting\SettingsHelper.cs" />
     <Compile Include="Data\GetInfo\BitrixCache.cs" />
     <Compile Include="Data\GetInfo\BitrixService.cs" />
+    <Compile Include="Data\ScharedData\BitrixProductViewModel.cs" />
+    <Compile Include="Data\ScharedData\MatchedProduct.cs" />
+    <Compile Include="Data\ScharedData\PriceDataManager.cs" />
+    <Compile Include="Data\ScharedData\ProductDataManager.cs" />
+    <Compile Include="Data\ScharedData\ProductItemViewModel.cs" />
+    <Compile Include="Data\ScharedData\ProductPriceViewModel.cs" />
     <Compile Include="Data\ScharedData\ProductSelectionManager.cs" />
     <Compile Include="Data\Search\AIProductSearch.cs" />
     <Compile Include="Data\Search\AlgorithmicProductSearch.cs" />
@@ -230,6 +237,9 @@
     <Compile Include="Pages\DombPage.xaml.cs">
       <DependentUpon>DombPage.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Pages\EditPricePage.xaml.cs">
+      <DependentUpon>EditPricePage.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Pages\ExcelFile.xaml.cs">
       <DependentUpon>ExcelFile.xaml</DependentUpon>
     </Compile>
@@ -241,6 +251,9 @@
     </Compile>
     <Compile Include="Pages\SearchBitrixProduct.xaml.cs">
       <DependentUpon>SearchBitrixProduct.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Pages\Setting.xaml.cs">
+      <DependentUpon>Setting.xaml</DependentUpon>
     </Compile>
     <Compile Include="Pages\SplashScreen.xaml.cs">
       <DependentUpon>SplashScreen.xaml</DependentUpon>
@@ -288,6 +301,10 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
+    <Page Include="Pages\EditPricePage.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
     <Page Include="Pages\ExcelFile.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
@@ -301,6 +318,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Pages\SearchBitrixProduct.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Pages\Setting.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

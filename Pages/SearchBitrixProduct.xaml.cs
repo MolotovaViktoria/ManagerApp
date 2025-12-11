@@ -1,4 +1,5 @@
 ﻿using ManagerApp.Data.GetInfo;
+using ManagerApp.Data.ScharedData;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -11,6 +12,8 @@ using static ManagerApp.Pages.ComparisonProduct;
 
 namespace ManagerApp.Pages
 {
+
+
     public partial class SearchBitrixProduct : Window
     {
         public BitrixProductViewModel SelectedProduct { get; private set; }
@@ -24,8 +27,6 @@ namespace ManagerApp.Pages
         private string _currentSearchText = "";
         private List<string> _selectedCategories = new List<string>();
         private DispatcherTimer _searchTimer;
-
-        public event Action<BitrixProductViewModel> ProductSelected;
 
         public SearchBitrixProduct()
         {
@@ -114,7 +115,39 @@ namespace ManagerApp.Pages
             }
         }
 
-      
+        private void SelectProduct()
+        {
+            if (dgSearchResults.SelectedItem is BitrixProductViewModel selectedProduct)
+            {
+                SelectedProduct = selectedProduct;
+
+                // Сохраняем в менеджере
+                ProductDataManager.SetSelectedProduct(selectedProduct);
+
+                DialogResult = true;
+                Close();
+            }
+            else
+            {
+                MessageBox.Show("Выберите товар из списка",
+                    "Внимание", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void btnSelectFromGrid_Click(object sender, RoutedEventArgs e)
+        {
+            var button = sender as Button;
+            if (button?.DataContext is BitrixProductViewModel product)
+            {
+                SelectedProduct = product;
+
+                // Сохраняем в менеджере
+                ProductDataManager.SetSelectedProduct(product);
+
+                DialogResult = true;
+                Close();
+            }
+        }
 
         private void CategoryCheckBox_CheckedChanged(object sender, RoutedEventArgs e)
         {
@@ -331,21 +364,8 @@ namespace ManagerApp.Pages
             SelectProduct();
         }
 
-        private void SelectProduct()
-        {
-            if (dgSearchResults.SelectedItem is BitrixProductViewModel selectedProduct)
-            {
-                SelectedProduct = selectedProduct;
-                ProductSelected?.Invoke(selectedProduct);
-                DialogResult = true;
-                Close();
-            }
-            else
-            {
-                MessageBox.Show("Выберите товар из списка",
-                    "Внимание", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        }
+
+
 
         private void btnCancel_Click(object sender, RoutedEventArgs e)
         {
@@ -364,17 +384,7 @@ namespace ManagerApp.Pages
             btnSelect.IsEnabled = dgSearchResults.SelectedItem != null;
         }
 
-        private void btnSelectFromGrid_Click(object sender, RoutedEventArgs e)
-        {
-            var button = sender as Button;
-            if (button?.DataContext is BitrixProductViewModel product)
-            {
-                SelectedProduct = product;
-                ProductSelected?.Invoke(product);
-                DialogResult = true;
-                Close();
-            }
-        }
+
 
         // Пагинация
         private void btnPrevPage_Click(object sender, RoutedEventArgs e)

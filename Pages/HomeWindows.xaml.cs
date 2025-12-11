@@ -123,9 +123,9 @@ namespace ManagerApp.Pages
 
         private void btnSettings_Click(object sender, RoutedEventArgs e)
         {
-            // Загружаем страницу настроек
-            //SettingsPage settingsPage = new SettingsPage();
-            //MainFrame.Navigate(settingsPage);
+
+            Setting settingsPage = new Setting();
+            MainFrame.Navigate(settingsPage);
         }
 
 

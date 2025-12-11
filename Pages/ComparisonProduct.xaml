@@ -229,32 +229,60 @@
 
                                         <!-- Колонка 2: Выбор товара из Bitrix -->
                                         <ComboBox Grid.Column="1"
-                                                  Margin="10,0"
-                                                  ItemsSource="{Binding BitrixProducts}"
-                                                  DisplayMemberPath="ProductName"
-                                                  SelectedItem="{Binding SelectedBitrixProduct, Mode=TwoWay}"
-                                                  IsEditable="True"
-                                                  HorizontalAlignment="Stretch"
-                                                  VerticalAlignment="Center"
-                                                  FontSize="14"
-                                                  Height="40"
-                                                  Padding="10,0">
+          Margin="10,0"
+          ItemsSource="{Binding BitrixProducts}"
+          DisplayMemberPath="ProductName"
+          SelectedItem="{Binding SelectedBitrixProduct, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+          IsEditable="True"
+          HorizontalAlignment="Stretch"
+          VerticalAlignment="Center"
+          FontSize="14"
+          Height="40"
+          Padding="10,0"
+          DropDownOpened="ComboBox_DropDownOpened"
+          KeyUp="ComboBox_KeyUp">
+
                                             <ComboBox.ItemTemplate>
                                                 <DataTemplate>
                                                     <StackPanel Orientation="Vertical" 
-                                                                Margin="2"
-                                                                HorizontalAlignment="Center">
+                        Margin="2"
+                        HorizontalAlignment="Center">
                                                         <TextBlock Text="{Binding ProductName}"
-                                                                   FontWeight="SemiBold"
-                                                                   TextWrapping="Wrap"
-                                                                   HorizontalAlignment="Center"/>
-                                                        <TextBlock Text="{Binding CategoryName}"
-                                                                   FontSize="11"
-                                                                   Foreground="Gray"
-                                                                   HorizontalAlignment="Center"/>
+                           FontWeight="SemiBold"
+                           TextWrapping="Wrap"
+                           HorizontalAlignment="Center"/>
+                                                        <StackPanel Orientation="Horizontal" 
+                            HorizontalAlignment="Center">
+                                                            <TextBlock Text="{Binding CategoryName}"
+                               FontSize="11"
+                               Foreground="Gray"/>
+                                                            <TextBlock Text=" • "
+                               FontSize="11"
+                               Foreground="Gray"/>
+                                                            <TextBlock Text="{Binding Price, StringFormat='Цена: {0:#,##0.00} ₽'}"
+                               FontSize="11"
+                             />
+                                                        </StackPanel>
                                                     </StackPanel>
                                                 </DataTemplate>
                                             </ComboBox.ItemTemplate>
+
+                                            <!-- Подсказка при наведении на выбранный товар -->
+                                            <ComboBox.ToolTip>
+                                                <ToolTip>
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding SelectedBitrixProduct.ProductName}" 
+                           FontWeight="Bold"/>
+                                                        <TextBlock Text="{Binding SelectedBitrixProduct.CategoryName}" 
+                           Foreground="Gray"/>                                                                                                                      
+                                                        <TextBlock>
+                    <Run Text="Цена: "/>
+                    <Run Text="{Binding SelectedBitrixProduct.Price, StringFormat='Цена: {0:#,##0.00} ₽'}"
+                       />
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                </ToolTip>
+                                            </ComboBox.ToolTip>
                                         </ComboBox>
 
                                         <!-- Колонка 3: Кнопка добавления -->
