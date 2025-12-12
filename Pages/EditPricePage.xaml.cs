@@ -1,6 +1,5 @@
 ﻿using ManagerApp.Classes.Setting;
 using ManagerApp.Data.ScharedData;
-
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -212,12 +211,29 @@ namespace ManagerApp.Pages
             // Сохраняем данные
             SaveProductsToManager();
 
-            MessageBox.Show("Переход к формированию счета",
-                "Далее", MessageBoxButton.OK, MessageBoxImage.Information);
+            // Создаем список товаров для передачи на страницу формирования счета
+            var invoiceItems = Products.Select(p => new InvoiceItem
+            {
+                ProductName = p.BitrixProductName,
+                OriginalProductName = p.OriginalProductName,
+                Price = p.PriceWithVAT, // Передаем цену с НДС
+                Quantity = p.Quantity,
+                Unit = p.Unit,
+                VAT = p.VAT,
+                Total = p.TotalWithVAT
+            }).ToList();
 
-            // Здесь будет переход на следующую страницу
-            // var invoicePage = new InvoicePage(Products.ToList());
-            // NavigationService.Navigate(invoicePage);
+            // Переходим на страницу формирования счета
+            try
+            {
+                var invoicePage = new InvoicionCreatePage(invoiceItems);
+                NavigationService.Navigate(invoicePage);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка перехода к формированию счета: {ex.Message}",
+                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void SaveProductsToManager()
@@ -324,7 +340,17 @@ namespace ManagerApp.Pages
                 CalculateTotal();
             }
         }
+    }
 
-
+    // Класс для передачи данных о товарах в счет
+    public class InvoiceItem
+    {
+        public string ProductName { get; set; }
+        public string OriginalProductName { get; set; }
+        public decimal Price { get; set; }
+        public decimal Quantity { get; set; }
+        public string Unit { get; set; }
+        public string VAT { get; set; }
+        public decimal Total { get; set; }
     }
 }

@@ -68,6 +68,35 @@ namespace ManagerApp.Classes.Setting
             return DefaultVAT;
         }
 
+        // Добавленный метод для получения НДС как десятичного числа
+        public static decimal GetVATAsDecimal()
+        {
+            try
+            {
+                if (File.Exists(SettingsFileName))
+                {
+                    var lines = File.ReadAllLines(SettingsFileName);
+                    foreach (var line in lines)
+                    {
+                        if (line.StartsWith("VAT="))
+                        {
+                            var value = line.Substring(4);
+                            if (decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var vat))
+                            {
+                                return vat;
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // В случае ошибки возвращаем значение по умолчанию
+            }
+
+            return decimal.Parse(DefaultVAT);
+        }
+
         public static decimal CalculatePriceWithVAT(decimal priceWithoutVAT)
         {
             return priceWithoutVAT * (1 + VAT);

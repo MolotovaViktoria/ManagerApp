@@ -1,0 +1,712 @@
+﻿<Page x:Class="ManagerApp.Pages.InvoicionCreatePage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+      xmlns:local="clr-namespace:ManagerApp.Pages"
+      mc:Ignorable="d" 
+      d:DesignHeight="800" d:DesignWidth="1200"
+      Title="Формирование счета">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Панель шагов -->
+        <Grid Grid.Row="0" 
+              Background="#F5F5F5"
+              Height="70"
+              VerticalAlignment="Center"
+              Margin="15,5">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="0.8*" MinWidth="160" MaxWidth="250"/>
+                    <ColumnDefinition Width="0.2*" MaxWidth="20"/>
+                    <ColumnDefinition Width="0.8*" MinWidth="160" MaxWidth="250"/>
+                    <ColumnDefinition Width="0.2*" MaxWidth="20"/>
+                    <ColumnDefinition Width="0.8*" MinWidth="160" MaxWidth="250"/>
+                    <ColumnDefinition Width="0.2*" MaxWidth="20"/>
+                    <ColumnDefinition Width="0.8*" MinWidth="160" MaxWidth="250"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Пустое пространство слева -->
+                <Grid Grid.Column="0"/>
+
+                <!-- Шаг 1: Загрузка заявки -->
+                <Border Grid.Column="1"
+                        Opacity="0.5"
+                        Background="#E2542A"
+                        CornerRadius="8"
+                        Margin="2">
+                    <Viewbox MaxWidth="250" MaxHeight="45">
+                        <Border Width="180" Height="45"
+                                Background="Transparent">
+                            <TextBlock Text="Загрузка заявки"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="16"
+                                       FontWeight="Bold"
+                                       Foreground="White"/>
+                        </Border>
+                    </Viewbox>
+                </Border>
+
+                <!-- Промежуток -->
+                <Grid Grid.Column="2"/>
+
+                <!-- Шаг 2: Сопоставление товаров -->
+                <Border Grid.Column="3"
+                        Background="#E2542A"
+                        CornerRadius="8"
+                        Opacity="0.5"
+                        Margin="2">
+                    <Viewbox MaxWidth="250" MaxHeight="45">
+                        <Border Width="180" Height="45"
+                                Background="Transparent">
+                            <TextBlock Text="Сопоставление товаров"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="16"
+                                       FontWeight="Medium"
+                                       Foreground="White"/>
+                        </Border>
+                    </Viewbox>
+                </Border>
+
+                <!-- Промежуток -->
+                <Grid Grid.Column="4"/>
+
+                <!-- Шаг 3: Редактирование цены -->
+                <Border Grid.Column="5"
+                        Background="#E2542A"
+                        CornerRadius="8"
+                        Opacity="0.5"
+                        Margin="2">
+                    <Viewbox MaxWidth="250" MaxHeight="45">
+                        <Border Width="180" Height="45"
+                                Background="Transparent">
+                            <TextBlock Text="Редактирование цены"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="16"
+                                       FontWeight="Medium"
+                                       Foreground="White"/>
+                        </Border>
+                    </Viewbox>
+                </Border>
+
+                <!-- Промежуток -->
+                <Grid Grid.Column="6"/>
+
+                <!-- Шаг 4: Формирование счета (активный) -->
+                <Border Grid.Column="7"
+                        Background="#E2542A"
+                        CornerRadius="8"
+                        Margin="2">
+                    <Viewbox MaxWidth="250" MaxHeight="45">
+                        <Border Width="180" Height="45"
+                                Background="Transparent">
+                            <TextBlock Text="Формирование счета"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="16"
+                                       FontWeight="Bold"
+                                       Foreground="White"/>
+                        </Border>
+                    </Viewbox>
+                </Border>
+
+                <!-- Пустое пространство справа -->
+                <Grid Grid.Column="8"/>
+            </Grid>
+        </Grid>
+
+        <!-- Основная область -->
+        <Grid Grid.Row="1" Margin="20,10,20,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="400"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Левая панель: Информация о счете -->
+            <Border Grid.Column="0"
+                    Background="White"
+                    BorderBrush="#E0E0E0"
+                    BorderThickness="1"
+                    Margin="0,0,10,0"
+                    CornerRadius="4">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Заголовок -->
+                    <Border Grid.Row="0"
+                            Background="#F8F8F8"
+                            BorderBrush="#E0E0E0"
+                            BorderThickness="0,0,0,1"
+                            CornerRadius="4,4,0,0"
+                            Padding="20,15">
+                        <TextBlock Text="ИНФОРМАЦИЯ О СЧЕТЕ"
+                                   FontSize="18"
+                                   FontWeight="Bold"
+                                   Foreground="#333333"/>
+                    </Border>
+
+                    <!-- Форма ввода данных -->
+                    <ScrollViewer Grid.Row="1"
+                                  VerticalScrollBarVisibility="Auto"
+                                  Padding="20">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <!-- Клиент -->
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="10"/>
+
+                                <!-- Сделка/Предложение -->
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="10"/>
+
+                                <!-- Реквизиты компании -->
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="10"/>
+
+                                <!-- Дата и номер -->
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="10"/>
+
+                                <!-- Платежные условия -->
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="10"/>
+
+                                <!-- Комментарий -->
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- Клиент -->
+                            <GroupBox Grid.Row="0"
+          Header="Клиент"
+          FontWeight="Bold"
+          Foreground="#333333">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="10"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="10"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Компания с кнопкой создания и обновления -->
+                                    <Grid Grid.Row="0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0"
+                       Text="Компания:"
+                       VerticalAlignment="Center"
+                       Margin="0,0,10,0"
+                       Width="100"/>
+
+                                        <ComboBox x:Name="cmbCompanies"
+                      Grid.Column="1"
+                      ItemsSource="{Binding Companies}"
+                      DisplayMemberPath="Title"
+                      SelectedItem="{Binding SelectedCompany}"
+                      Height="35"
+                      FontSize="14"
+                      Padding="10,0"
+                      IsEditable="True"/>
+
+                                        <!-- Кнопка обновления списка -->
+                                        <Button x:Name="btnRefreshCompanies"
+                    Grid.Column="2"
+                    Content="↻"
+                    Width="35"
+                    Height="35"
+                    Margin="10,0,0,0"
+                    Background="#CCCCCC"
+                    Foreground="#333333"
+                    FontWeight="Bold"
+                    FontSize="16"
+                    BorderThickness="0"
+                    ToolTip="Обновить список компаний"
+                    Click="btnRefreshCompanies_Click"/>
+
+                                        <!-- Кнопка создания новой компании -->
+                                        <Button x:Name="btnCreateNewCompany"
+                    Grid.Column="3"
+                    Content="+"
+                    Width="35"
+                    Height="35"
+                    Margin="10,0,0,0"
+                    Background="#E2542A"
+                    Foreground="White"
+                    FontWeight="Bold"
+                    FontSize="16"
+                    BorderThickness="0"
+                    ToolTip="Создать новую компанию"
+                    Click="btnCreateNewCompany_Click"/>
+                                    </Grid>
+
+                                    <!-- Быстрый поиск компании -->
+                                    <Grid Grid.Row="2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0"
+                       Text="Поиск:"
+                       VerticalAlignment="Center"
+                       Margin="0,0,10,0"
+                       Width="100"/>
+
+                                        <TextBox x:Name="txtSearchCompany"
+                     Grid.Column="1"
+                     Height="35"
+                     Padding="10"
+                     FontSize="14"
+                     VerticalContentAlignment="Center"
+                     BorderBrush="#DFE1E5"
+                     BorderThickness="1"
+                     TextChanged="txtSearchCompany_TextChanged"/>
+                                    </Grid>
+
+                                    <!-- Статус загрузки -->
+                                    <TextBlock x:Name="txtCompanyStatus"
+                   Grid.Row="4"
+                   FontSize="12"
+                   Foreground="#666666"
+                   Margin="0,5,0,0"/>
+                                </Grid>
+                            </GroupBox>
+
+
+                            <!-- Реквизиты компании -->
+                            <GroupBox Grid.Row="4"
+                                      Header="Реквизиты вашей компании"
+                                      FontWeight="Bold"
+                                      Foreground="#333333">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0"
+                                               Text="Компания:"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,10,0"
+                                               Width="100"/>
+
+                                    <ComboBox Grid.Column="1"
+                                      ItemsSource="{Binding MyCompanies}"
+                                      DisplayMemberPath="Title"
+                                      SelectedItem="{Binding SelectedMyCompany}"
+                                      Height="35"
+                                      FontSize="14"
+                                      Padding="10,0"/>
+                                </Grid>
+                            </GroupBox>
+
+                            <!-- Дата и номер -->
+                            <GroupBox Grid.Row="6"
+                                      Header="Детали счета"
+                                      FontWeight="Bold"
+                                      Foreground="#333333">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="10"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Дата -->
+                                    <Grid Grid.Row="0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0"
+                                                   Text="Дата:"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,10,0"
+                                                   Width="100"/>
+
+                                        <DatePicker Grid.Column="1"
+                                                    SelectedDate="{Binding InvoiceDate}"
+                                                    Height="35"
+                                                    FontSize="14"
+                                                    Padding="5"/>
+                                    </Grid>
+
+                                    <!-- Номер -->
+                                    <Grid Grid.Row="2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0"
+                                                   Text="Номер:"
+                                                   VerticalAlignment="Center"
+                                                   Margin="0,0,10,0"
+                                                   Width="100"/>
+
+                                        <TextBox Grid.Column="1"
+                                                 Text="{Binding InvoiceNumber}"
+                                                 Height="35"
+                                                 FontSize="14"
+                                                 Padding="10,0"/>
+                                    </Grid>
+                                </Grid>
+                            </GroupBox>
+
+                            <!-- Платежные условия -->
+                            <GroupBox Grid.Row="8"
+                                      Header="Платежные условия"
+                                      FontWeight="Bold"
+                                      Foreground="#333333">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0"
+                                               Text="Статус оплаты:"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,10,0"
+                                               Width="100"/>
+
+                                    <ComboBox Grid.Column="1"
+                                              ItemsSource="{Binding PaymentStatuses}"
+                                              SelectedItem="{Binding SelectedPaymentStatus}"
+                                              Height="35"
+                                              FontSize="14"
+                                              Padding="10,0">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Name}"/>
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                </Grid>
+                            </GroupBox>
+
+                            <!-- Комментарий -->
+                            <GroupBox Grid.Row="10"
+                                      Header="Комментарий"
+                                      FontWeight="Bold"
+                                      Foreground="#333333">
+                                <TextBox Text="{Binding Comment}"
+                                         Height="80"
+                                         FontSize="14"
+                                         Padding="10"
+                                         TextWrapping="Wrap"
+                                         AcceptsReturn="True"
+                                         VerticalScrollBarVisibility="Auto"/>
+                            </GroupBox>
+                        </Grid>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <!-- Правая панель: Товары и итоги -->
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Список товаров -->
+                <Border Grid.Row="0"
+                        Background="White"
+                        BorderBrush="#E0E0E0"
+                        BorderThickness="1"
+                        Margin="0,0,0,10"
+                        CornerRadius="4">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Заголовок товаров -->
+                        <Border Grid.Row="0"
+                                Background="#F8F8F8"
+                                BorderBrush="#E0E0E0"
+                                BorderThickness="0,0,0,1"
+                                CornerRadius="4,4,0,0"
+                                Padding="15,12">
+                            <TextBlock Text="ТОВАРЫ В СЧЕТЕ"
+                                       FontSize="16"
+                                       FontWeight="Bold"
+                                       Foreground="#333333"/>
+                        </Border>
+
+                        <!-- Таблица товаров -->
+                        <ScrollViewer Grid.Row="1"
+                                      VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding InvoiceItems}"
+                                          Margin="0">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border BorderBrush="#E0E0E0"
+                                                BorderThickness="0,0,0,1"
+                                                Padding="15,10">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="80"/>
+                                                    <ColumnDefinition Width="100"/>
+                                                    <ColumnDefinition Width="30"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <!-- Название товара -->
+                                                <TextBlock Grid.Column="0"
+                                                           Text="{Binding ProductName}"
+                                                           TextWrapping="Wrap"
+                                                           VerticalAlignment="Center"
+                                                           FontSize="14"/>
+
+                                                <!-- Количество -->
+                                                <TextBox Grid.Column="1"
+                                                         Text="{Binding Quantity, StringFormat='{}{0}'}"
+                                                         Margin="5,0"
+                                                         VerticalAlignment="Center"
+                                                         FontSize="14"
+                                                         TextAlignment="Center"
+                                                         Width="60"
+                                                         Height="30"
+                                                         Padding="5,0"/>
+
+                                                <!-- Цена -->
+                                                <TextBlock Grid.Column="2"
+                                                           Text="{Binding Price,  StringFormat='{}{0:#,##0.00} ₽'}"
+                                                           VerticalAlignment="Center"
+                                                           FontSize="14"
+                                                           TextAlignment="Right"
+                                                           Margin="5,0"/>
+
+                                                <!-- Удалить -->
+                                                <Button Grid.Column="3"
+                                                        Command="{Binding DataContext.RemoveItemCommand, RelativeSource={RelativeSource AncestorType=Page}}"
+                                                        CommandParameter="{Binding}"
+                                                        Background="Transparent"
+                                                        BorderThickness="0"
+                                                        Width="24"
+                                                        Height="24"
+                                                        ToolTip="Удалить товар">
+                                                    <TextBlock Text="✕"
+                                                               FontSize="14"
+                                                               Foreground="#999999"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"/>
+                                                </Button>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+
+                <!-- Итоговая информация -->
+                <Border Grid.Row="1"
+                        Background="White"
+                        BorderBrush="#E0E0E0"
+                        BorderThickness="1"
+                        CornerRadius="4">
+                    <Grid Margin="15">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="20"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Итого -->
+                        <Grid Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Text="Итого:"
+                                       FontSize="16"
+                                       FontWeight="Bold"/>
+
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding TotalAmount,  StringFormat='{}{0:#,##0.00} ₽'}"
+                                       FontSize="16"
+                                       FontWeight="Bold"
+                                       Foreground="#E2542A"/>
+                        </Grid>
+
+                        <!-- НДС -->
+                        <Grid Grid.Row="1" Margin="0,5,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Text="НДС:"
+                                       FontSize="14"/>
+
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding TaxAmount,  StringFormat='{}{0:#,##0.00} ₽'}"
+                                       FontSize="14"/>
+                        </Grid>
+
+                        <!-- Всего к оплате -->
+                        <Grid Grid.Row="2" Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Text="Всего к оплате:"
+                                       FontSize="18"
+                                       FontWeight="Bold"/>
+
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding GrandTotal,  StringFormat='{}{0:#,##0.00} ₽'}"
+                                       FontSize="18"
+                                       FontWeight="Bold"
+                                       Foreground="#E2542A"/>
+                        </Grid>
+
+                        <!-- Кнопки действий -->
+                        <StackPanel Grid.Row="5"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Center"
+                                    Margin="0,10,0,0">
+
+                            <!-- Предварительный просмотр (серая - неактивная) -->
+                            <Button Content="ПРЕДПРОСМОТР"
+                                    Command="{Binding PreviewCommand}"
+                                    Width="180"
+                                    Height="40"
+                                    Background="#BDBDBD"
+                                    Foreground="White"
+                                    FontWeight="Bold"
+                                    FontSize="14"
+                                    Margin="0,0,10,0"
+                                    BorderThickness="0"
+                                    />
+
+                            <!-- Создать счет (оранжевая - основное действие) -->
+                            <Button Content="СОЗДАТЬ СЧЕТ"
+                                    Command="{Binding CreateInvoiceCommand}"
+                                    Width="180"
+                                    Height="40"
+                                    Background="#E2542A"
+                                    Foreground="White"
+                                    FontWeight="Bold"
+                                    FontSize="14"
+                                    BorderThickness="0"
+                                    />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <!-- Панель кнопок навигации -->
+        <Border Grid.Row="2"
+                Background="#F5F5F5"
+                Padding="20,15"
+                BorderBrush="#E0E0E0"
+                BorderThickness="0,1,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="20"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Кнопка "Назад" (оранжевая - нажимаемая) -->
+                <Button x:Name="btnBack"
+                        Grid.Column="1"
+                        Content="НАЗАД"
+                        Width="140"
+                        Height="45"
+                        Background="#E2542A"
+                        Foreground="White"
+                        FontWeight="Bold"
+                        FontSize="14"
+                        BorderThickness="0"
+                        Click="btnBack_Click"
+                        >
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}"
+                                                CornerRadius="4">
+                                            <ContentPresenter HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
+
+                <!-- Кнопка "Завершить" (серая - неактивная/второстепенная) -->
+                <Button x:Name="btnFinish"
+                        Grid.Column="3"
+                        Content="ЗАВЕРШИТЬ"
+                        Width="140"
+                        Height="45"
+                        Background="#BDBDBD"
+                        Foreground="White"
+                        FontWeight="Bold"
+                        FontSize="14"
+                        BorderThickness="0"
+                        Click="btnFinish_Click"
+                        >
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border Background="{TemplateBinding Background}"
+                                                CornerRadius="4">
+                                            <ContentPresenter HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </Grid>
+        </Border>
+    </Grid>
+</Page>

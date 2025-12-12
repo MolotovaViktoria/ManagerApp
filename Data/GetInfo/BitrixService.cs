@@ -226,8 +226,374 @@ namespace ManagerApp.Data.GetInfo
 
             return result;
         }
+        public async Task<List<Company>> GetAllCompanies()
+        {
+            var allCompanies = new List<Company>();
+            int start = 0;
+            const int pageSize = 50; // Bitrix24 использует по 50 записей на страницу
+
+            while (true)
+            {
+                // entityTypeId = 4 для компаний
+                string webhookUrl = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.item.list";
+                
+                // Подготавливаем POST-запрос с параметрами
+                var requestData = new
+                {
+                    entityTypeId = 4, // 4 - компании
+                    select = new[] { "id", "title", "assignedById", "createdTime" }, // Основные поля
+                    start = start
+                };
+
+                string jsonRequest = JsonConvert.SerializeObject(requestData);
+                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+
+                // Делаем POST-запрос
+                var response = await _httpClient.PostAsync(webhookUrl, content);
+
+                // Получаем ответ как текст
+                string jsonResponse = await response.Content.ReadAsStringAsync();
+
+                // Парсим JSON
+                var result = JsonConvert.DeserializeObject<BitrixListResponse>(jsonResponse);
+
+                if (result?.Result?.Items == null || result.Result.Items.Count == 0)
+                    break;
+
+                // Преобразуем в список компаний
+                foreach (var item in result.Result.Items)
+                {
+                    var company = new Company
+                    {
+                        Id = item.Id,
+                        Title = item.Title,
+                        AssignedById = item.AssignedById,
+                        CreatedTime = item.CreatedTime
+                    };
+                    allCompanies.Add(company);
+                }
+
+                // Если получено меньше записей, чем размер страницы - значит это последняя страница
+                if (result.Result.Items.Count < pageSize)
+                    break;
+
+                // Проверяем, есть ли еще данные
+                if (result.Next.HasValue && result.Next.Value > start)
+                {
+                    start = result.Next.Value;
+                }
+                else
+                {
+                    start += pageSize;
+                }
+            }
+
+            return allCompanies;
+        }
+
+        /// <summary>
+        /// Получает список только моих компаний (компании где isMyCompany = "Y")
+        /// </summary>
+        /// <returns>Список моих компаний</returns>
+        public async Task<List<Company>> GetMyCompanies()
+        {
+            var myCompanies = new List<Company>();
+            int start = 0;
+            const int pageSize = 50;
+
+            while (true)
+            {
+                string webhookUrl = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.item.list";
+                
+                // Используем фильтр isMyCompany = "Y" как показано в документации
+                var requestData = new
+                {
+                    entityTypeId = 4, // 4 - компании
+                    select = new[] { "id", "title", "assignedById", "createdTime", "isMyCompany" },
+                    filter = new
+                    {
+                        isMyCompany = "Y"
+                    },
+                    start = start
+                };
+
+                string jsonRequest = JsonConvert.SerializeObject(requestData);
+                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync(webhookUrl, content);
+                string jsonResponse = await response.Content.ReadAsStringAsync();
+
+                var result = JsonConvert.DeserializeObject<BitrixListResponse>(jsonResponse);
+
+                if (result?.Result?.Items == null || result.Result.Items.Count == 0)
+                    break;
+
+                foreach (var item in result.Result.Items)
+                {
+                    var company = new Company
+                    {
+                        Id = item.Id,
+                        Title = item.Title,
+                        AssignedById = item.AssignedById,
+                        CreatedTime = item.CreatedTime,
+                        IsMyCompany = item.IsMyCompany
+                    };
+                    myCompanies.Add(company);
+                }
+
+                if (result.Result.Items.Count < pageSize)
+                    break;
+
+                if (result.Next.HasValue && result.Next.Value > start)
+                {
+                    start = result.Next.Value;
+                }
+                else
+                {
+                    start += pageSize;
+                }
+            }
+
+            return myCompanies;
+        }
+
+        public async Task<int> CreateCompany(string title, string phone = null, string address = null, bool registerEvent = true)
+        {
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                throw new ArgumentException("Название компании обязательно");
+            }
+
+            string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.company.add";
+
+            // Подготавливаем данные для создания компании
+            var requestData = new
+            {
+                fields = new
+                {
+                    TITLE = title.Trim(),
+                    PHONE = !string.IsNullOrWhiteSpace(phone) ?
+                           new[] { new { VALUE = phone.Trim(), VALUE_TYPE = "WORK" } } :
+                           null,
+                    ADDRESS = !string.IsNullOrWhiteSpace(address) ? address.Trim() : null
+                },
+                @params = new
+                {
+                    REGISTER_SONET_EVENT = registerEvent ? "Y" : "N"
+                }
+            };
+
+            try
+            {
+                string jsonRequest = JsonConvert.SerializeObject(requestData);
+                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+
+                // Делаем POST-запрос
+                var response = await _httpClient.PostAsync(webhookUrl, content);
+                string jsonResponse = await response.Content.ReadAsStringAsync();
+
+                // Парсим ответ
+                var result = JsonConvert.DeserializeObject<BitrixAddResponse>(jsonResponse);
+
+                // Проверяем на ошибки
+                if (!string.IsNullOrEmpty(result?.Error))
+                {
+                    Console.WriteLine($"Ошибка создания компании: {result.Error}");
+                    return 0;
+                }
+
+                // Возвращаем ID созданной компании
+                return result?.Result ?? 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Исключение при создании компании: {ex.Message}");
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// Создает компанию с расширенными полями (все поля необязательные, кроме названия)
+        /// </summary>
+        public async Task<int> CreateCompanyExtended(
+            string title,
+            string phone = null,
+            string address = null,
+            string companyType = null,
+            string industry = null,
+            string employees = null,
+            string currencyId = null,
+            decimal? revenue = null,
+            bool isOpened = true,
+            int? assignedById = null,
+            bool registerEvent = true)
+        {
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                throw new ArgumentException("Название компании обязательно");
+            }
+
+            string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.company.add";
+
+            // Основные поля
+            var fields = new Dictionary<string, object>
+            {
+                ["TITLE"] = title.Trim()
+            };
+
+            // Телефон
+            if (!string.IsNullOrWhiteSpace(phone))
+            {
+                fields["PHONE"] = new[]
+                {
+                    new { VALUE = phone.Trim(), VALUE_TYPE = "WORK" }
+                };
+            }
+
+            // Адрес
+            if (!string.IsNullOrWhiteSpace(address))
+            {
+                fields["ADDRESS"] = address.Trim();
+            }
+
+            // Дополнительные поля (если указаны)
+            if (!string.IsNullOrWhiteSpace(companyType))
+                fields["COMPANY_TYPE"] = companyType;
+
+            if (!string.IsNullOrWhiteSpace(industry))
+                fields["INDUSTRY"] = industry;
+
+            if (!string.IsNullOrWhiteSpace(employees))
+                fields["EMPLOYEES"] = employees;
+
+            if (!string.IsNullOrWhiteSpace(currencyId))
+                fields["CURRENCY_ID"] = currencyId;
+
+            if (revenue.HasValue)
+                fields["REVENUE"] = revenue.Value;
+
+            fields["OPENED"] = isOpened ? "Y" : "N";
+
+            if (assignedById.HasValue)
+                fields["ASSIGNED_BY_ID"] = assignedById.Value;
+
+            var requestData = new
+            {
+                fields = fields,
+                @params = new
+                {
+                    REGISTER_SONET_EVENT = registerEvent ? "Y" : "N"
+                }
+            };
+
+            try
+            {
+                string jsonRequest = JsonConvert.SerializeObject(requestData);
+                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync(webhookUrl, content);
+                string jsonResponse = await response.Content.ReadAsStringAsync();
+
+                var result = JsonConvert.DeserializeObject<BitrixAddResponse>(jsonResponse);
+
+                if (!string.IsNullOrEmpty(result?.Error))
+                {
+                    Console.WriteLine($"Ошибка создания компании: {result.Error}");
+                    return 0;
+                }
+
+                return result?.Result ?? 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Исключение при создании компании: {ex.Message}");
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// Пытается создать компанию, если не существует компаний с таким названием
+        /// </summary>
+        public async Task<int> CreateCompanyIfNotExists(string title, string phone = null, string address = null)
+        {
+            // Получаем все компании для проверки дубликатов
+            var companies = await GetAllCompanies();
+
+            // Проверяем, существует ли компания с таким названием
+            var exists = companies.Any(c =>
+                c.Title?.Equals(title, StringComparison.OrdinalIgnoreCase) ?? false);
+
+            if (exists)
+            {
+                Console.WriteLine($"Компания '{title}' уже существует");
+                return -1; // Специальный код для существующей компании
+            }
+
+            // Создаем новую компанию
+            return await CreateCompany(title, phone, address);
+        }
+
+        // Вспомогательный класс для десериализации ответа от метода add
+        public class BitrixAddResponse
+        {
+            [JsonProperty("result")]
+            public int Result { get; set; }
+
+            [JsonProperty("error")]
+            public string Error { get; set; }
+
+            [JsonProperty("error_description")]
+            public string ErrorDescription { get; set; }
+        }
     }
 
 
-  
+    // Вспомогательные классы для десериализации ответа от Bitrix24
+    public class BitrixListResponse
+    {
+        [JsonProperty("result")]
+        public BitrixResult Result { get; set; }
+
+        [JsonProperty("total")]
+        public int Total { get; set; }
+
+        [JsonProperty("next")]
+        public int? Next { get; set; }
+    }
+
+    public class BitrixResult
+    {
+        [JsonProperty("items")]
+        public List<BitrixItem> Items { get; set; }
+    }
+
+    public class BitrixItem
+    {
+        [JsonProperty("id")]
+        public int Id { get; set; }
+
+        [JsonProperty("title")]
+        public string Title { get; set; }
+
+        [JsonProperty("assignedById")]
+        public int AssignedById { get; set; }
+
+        [JsonProperty("createdTime")]
+        public DateTime CreatedTime { get; set; }
+
+        [JsonProperty("isMyCompany")]
+        public string IsMyCompany { get; set; }
+    }
+
+    public class Company
+    {
+        public int Id { get; set; }
+        public string Title { get; set; }
+        public int AssignedById { get; set; }
+        public DateTime CreatedTime { get; set; }
+        public string IsMyCompany { get; set; }
+    }
 }
+
+
+

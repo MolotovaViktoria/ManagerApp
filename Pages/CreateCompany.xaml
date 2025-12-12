@@ -1,0 +1,193 @@
+﻿<Window x:Class="ManagerApp.Pages.CreateCompany"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:ManagerApp.Pages"
+        mc:Ignorable="d"
+        Title="Создание компании в Bitrix"
+        Height="450"
+        Width="600"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+
+    <Border Background="White"
+            BorderBrush="#E2542A"
+            BorderThickness="2"
+            CornerRadius="10"
+            Margin="30">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Заголовок окна -->
+            <Border Grid.Row="0"
+                    Background="#E2542A"
+                    CornerRadius="8,8,0,0"
+                    Padding="20,15">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0"
+                               Text="СОЗДАНИЕ КОМПАНИИ В BITRIX"
+                               FontSize="18"
+                               FontWeight="Bold"
+                               Foreground="White"/>
+
+                    <!-- Кнопка закрытия -->
+                    <Button Grid.Column="1"
+                            Width="30"
+                            Height="30"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="btnClose_Click"
+                            Cursor="Hand">
+                        <TextBlock Text="✕"
+                                   FontSize="16"
+                                   FontWeight="Bold"
+                                   Foreground="White"/>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- Основной контент -->
+            <Grid Grid.Row="1" Margin="20">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Название компании -->
+                <Grid Grid.Row="0" Margin="0,0,0,15">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0"
+                               Text="Название компании *"
+                               FontWeight="Bold"
+                               Foreground="#333333"
+                               Margin="0,0,0,5"/>
+                    <TextBox x:Name="txtTitle"
+                             Grid.Row="1"
+                             Height="40"
+                             Padding="10"
+                             FontSize="14"
+                             VerticalContentAlignment="Center"
+                             BorderBrush="#DFE1E5"
+                             BorderThickness="1"
+                             TextChanged="txtTitle_TextChanged"/>
+                </Grid>
+
+                <!-- Телефон -->
+                <Grid Grid.Row="1" Margin="0,0,0,15">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0"
+                               Text="Телефон"
+                               FontWeight="Bold"
+                               Foreground="#333333"
+                               Margin="0,0,0,5"/>
+                    <TextBox x:Name="txtPhone"
+                             Grid.Row="1"
+                             Height="40"
+                             Padding="10"
+                             FontSize="14"
+                             VerticalContentAlignment="Center"
+                             BorderBrush="#DFE1E5"
+                             BorderThickness="1"/>
+                </Grid>
+
+                <!-- Адрес -->
+                <Grid Grid.Row="2" Margin="0,0,0,15">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0"
+                               Text="Адрес"
+                               FontWeight="Bold"
+                               Foreground="#333333"
+                               Margin="0,0,0,5"/>
+                    <TextBox x:Name="txtAddress"
+                             Grid.Row="1"
+                             Height="40"
+                             Padding="10"
+                             FontSize="14"
+                             VerticalContentAlignment="Center"
+                             BorderBrush="#DFE1E5"
+                             BorderThickness="1"/>
+                </Grid>
+
+                <!-- Примечание -->
+                <Grid Grid.Row="3">
+                    <TextBlock Text="* - обязательное поле. Телефон и адрес - необязательные."
+                               FontSize="12"
+                               Foreground="#666666"
+                               FontStyle="Italic"/>
+                </Grid>
+            </Grid>
+
+            <!-- Кнопки действий -->
+            <Border Grid.Row="2"
+                    Background="#F5F5F5"
+                    CornerRadius="0,0,8,8"
+                    Padding="20,15">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Сообщение об ошибке/успехе -->
+                    <TextBlock x:Name="txtMessage"
+                               Grid.Column="0"
+                               FontSize="12"
+                               Foreground="#E2542A"
+                               VerticalAlignment="Center"/>
+
+                    <!-- Кнопки -->
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal">
+                        <Button x:Name="btnCancel"
+                                Content="Отмена"
+                                Width="100"
+                                Height="40"
+                                Background="#CCCCCC"
+                                Foreground="#333333"
+                                FontWeight="Bold"
+                                BorderThickness="0"
+                                Margin="0,0,10,0"
+                                Cursor="Hand"
+                                Click="btnCancel_Click"/>
+
+                        <Button x:Name="btnCreate"
+                                Content="Создать"
+                                Width="100"
+                                Height="40"
+                                Background="#E2542A"
+                                Foreground="White"
+                                FontWeight="Bold"
+                                BorderThickness="0"
+                                Cursor="Hand"
+                                IsEnabled="False"
+                                Click="btnCreate_Click"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>
