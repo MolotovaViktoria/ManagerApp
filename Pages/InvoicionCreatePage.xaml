@@ -260,29 +260,7 @@
                     Click="btnCreateNewCompany_Click"/>
                                     </Grid>
 
-                                    <!-- Быстрый поиск компании -->
-                                    <Grid Grid.Row="2">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <TextBlock Grid.Column="0"
-                       Text="Поиск:"
-                       VerticalAlignment="Center"
-                       Margin="0,0,10,0"
-                       Width="100"/>
-
-                                        <TextBox x:Name="txtSearchCompany"
-                     Grid.Column="1"
-                     Height="35"
-                     Padding="10"
-                     FontSize="14"
-                     VerticalContentAlignment="Center"
-                     BorderBrush="#DFE1E5"
-                     BorderThickness="1"
-                     TextChanged="txtSearchCompany_TextChanged"/>
-                                    </Grid>
+                                 
 
                                     <!-- Статус загрузки -->
                                     <TextBlock x:Name="txtCompanyStatus"
@@ -391,13 +369,12 @@
                                                VerticalAlignment="Center"
                                                Margin="0,0,10,0"
                                                Width="100"/>
-
                                     <ComboBox Grid.Column="1"
-                                              ItemsSource="{Binding PaymentStatuses}"
-                                              SelectedItem="{Binding SelectedPaymentStatus}"
-                                              Height="35"
-                                              FontSize="14"
-                                              Padding="10,0">
+          ItemsSource="{Binding PaymentStatuses}" 
+                                        SelectedItem="{Binding SelectedPaymentStatus}"
+          Height="35"
+          FontSize="14"
+          Padding="10,0">
                                         <ComboBox.ItemTemplate>
                                             <DataTemplate>
                                                 <TextBlock Text="{Binding Name}"/>
@@ -603,29 +580,32 @@
                                     Margin="0,10,0,0">
 
                             <!-- Предварительный просмотр (серая - неактивная) -->
-                            <Button Content="ПРЕДПРОСМОТР"
-                                    Command="{Binding PreviewCommand}"
-                                    Width="180"
-                                    Height="40"
-                                    Background="#BDBDBD"
-                                    Foreground="White"
-                                    FontWeight="Bold"
-                                    FontSize="14"
-                                    Margin="0,0,10,0"
-                                    BorderThickness="0"
-                                    />
+                            <!-- Предварительный просмотр (серая - неактивная) -->
+                            <Button x:Name="btnPreview"
+                                Content="ПРЕДПРОСМОТР"
+                                Width="180"
+                                Height="40"
+                                Background="#BDBDBD"
+                                Foreground="White"
+                                FontWeight="Bold"
+                                FontSize="14"
+                                Margin="0,0,10,0"
+                                BorderThickness="0"
+                                Click="btnPreview_Click"
+                                Cursor="Hand"/>
 
                             <!-- Создать счет (оранжевая - основное действие) -->
-                            <Button Content="СОЗДАТЬ СЧЕТ"
-                                    Command="{Binding CreateInvoiceCommand}"
-                                    Width="180"
-                                    Height="40"
-                                    Background="#E2542A"
-                                    Foreground="White"
-                                    FontWeight="Bold"
-                                    FontSize="14"
-                                    BorderThickness="0"
-                                    />
+                            <Button x:Name="btnCreateInvoice"
+                                Content="СОЗДАТЬ СЧЕТ"
+                                Width="180"
+                                Height="40"
+                                Background="#E2542A"
+                                Foreground="White"
+                                FontWeight="Bold"
+                                FontSize="14"
+                                BorderThickness="0"
+                                Click="btnCreateInvoice_Click"
+                                Cursor="Hand"/>
                         </StackPanel>
                     </Grid>
                 </Border>

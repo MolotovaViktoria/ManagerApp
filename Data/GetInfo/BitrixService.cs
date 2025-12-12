@@ -411,7 +411,337 @@ namespace ManagerApp.Data.GetInfo
                 return 0;
             }
         }
+        public async Task<int> CreateInvoiceUniversal(
+    int clientCompanyId,
+    int myCompanyId,
+    string orderTopic,
+    List<InvoiceProduct> products)
+        {
+            try
+            {
+                string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.item.add";
 
+                // Подготавливаем товары
+                var productRows = products.Select((p, index) => new
+                {
+                    PRODUCT_ID = p.ProductId,
+                    PRODUCT_NAME = p.ProductName,
+                    QUANTITY = p.Quantity,
+                    PRICE = p.Price
+                }).ToArray();
+
+                // Используем entityTypeId = 31 (новые смарт-счета)
+                var requestData = new
+                {
+                    entityTypeId = 31, // Смарт-счета
+                    fields = new
+                    {
+                        TITLE = orderTopic,
+                        UF_COMPANY_ID = clientCompanyId,
+                        UF_MYCOMPANY_ID = myCompanyId,
+                        PRODUCT_ROWS = productRows
+                    }
+                };
+
+                Console.WriteLine($"Отправляем запрос на создание счета (универсальный метод):");
+                Console.WriteLine($"URL: {webhookUrl}");
+                Console.WriteLine($"Данные: {JsonConvert.SerializeObject(requestData, Formatting.Indented)}");
+
+                string jsonRequest = JsonConvert.SerializeObject(requestData);
+                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync(webhookUrl, content);
+                string jsonResponse = await response.Content.ReadAsStringAsync();
+
+                Console.WriteLine($"Ответ от сервера:");
+                Console.WriteLine($"Статус код: {response.StatusCode}");
+                Console.WriteLine($"Тело ответа: {jsonResponse}");
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine($"Ошибка HTTP: {response.StatusCode}");
+
+                    // Попробуем старую версию (ID: 5)
+                    Console.WriteLine("Пробуем старую версию счетов (entityTypeId = 5)...");
+                    return await CreateInvoiceOldVersion(clientCompanyId, myCompanyId, orderTopic, products);
+                }
+
+                dynamic result = JsonConvert.DeserializeObject(jsonResponse);
+
+                if (result?.error != null)
+                {
+                    string errorMessage = result.error;
+                    string errorDescription = result.error_description ?? "Нет описания ошибки";
+                    Console.WriteLine($"Ошибка API: {errorMessage}");
+                    Console.WriteLine($"Описание: {errorDescription}");
+
+                    // Попробуем старую версию
+                    return await CreateInvoiceOldVersion(clientCompanyId, myCompanyId, orderTopic, products);
+                }
+
+                if (result?.result?.item?.id != null)
+                {
+                    int invoiceId = (int)result.result.item.id;
+                    Console.WriteLine($"✅ Счет создан! ID: {invoiceId}");
+                    return invoiceId;
+                }
+
+                Console.WriteLine("Не удалось получить ID счета из ответа");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Исключение при создании счета: {ex.Message}");
+                Console.WriteLine($"StackTrace: {ex.StackTrace}");
+
+                // Попробуем старую версию
+                return await CreateInvoiceOldVersion(clientCompanyId, myCompanyId, orderTopic, products);
+            }
+        }
+
+        // Метод для старой версии счетов (entityTypeId = 5)
+        private async Task<int> CreateInvoiceOldVersion(
+            int clientCompanyId,
+            int myCompanyId,
+            string orderTopic,
+            List<InvoiceProduct> products)
+        {
+            try
+            {
+                string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.item.add";
+
+                var productRows = products.Select((p, index) => new
+                {
+                    PRODUCT_ID = p.ProductId,
+                    PRODUCT_NAME = p.ProductName,
+                    QUANTITY = p.Quantity,
+                    PRICE = p.Price
+                }).ToArray();
+
+                // Используем старую версию счетов
+                var requestData = new
+                {
+                    entityTypeId = 5, // Старые счета
+                    fields = new
+                    {
+                        TITLE = orderTopic,
+                        UF_COMPANY_ID = clientCompanyId,
+                        UF_MYCOMPANY_ID = myCompanyId,
+                        PRODUCT_ROWS = productRows
+                    }
+                };
+
+                Console.WriteLine($"Попытка создания счета через старый API (entityTypeId = 5)");
+                Console.WriteLine($"Данные: {JsonConvert.SerializeObject(requestData, Formatting.Indented)}");
+
+                string jsonRequest = JsonConvert.SerializeObject(requestData);
+                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync(webhookUrl, content);
+                string jsonResponse = await response.Content.ReadAsStringAsync();
+
+                Console.WriteLine($"Ответ (старая версия): {jsonResponse}");
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine($"Ошибка HTTP для старой версии: {response.StatusCode}");
+                    return 0;
+                }
+
+                dynamic result = JsonConvert.DeserializeObject(jsonResponse);
+
+                if (result?.error != null)
+                {
+                    Console.WriteLine($"Ошибка API (старая версия): {result.error}");
+                    return 0;
+                }
+
+                if (result?.result?.item?.id != null)
+                {
+                    int invoiceId = (int)result.result.item.id;
+                    Console.WriteLine($"✅ Счет создан через старый API! ID: {invoiceId}");
+                    return invoiceId;
+                }
+
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при создании счета через старый API: {ex.Message}");
+                return 0;
+            }
+        }
+        public async Task<int> CreateInvoice(
+     int clientCompanyId,
+     int myCompanyId,
+     string orderTopic,
+     List<InvoiceProduct> products,
+     DateTime? payBeforeDate = null,
+     int responsibleId = 1,
+     string comments = "",
+     string userDescription = "",
+     string statusId = "N")
+        {
+            try
+            {
+                string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.invoice.add";
+
+                // Устанавливаем срок оплаты (по умолчанию +30 дней)
+                if (!payBeforeDate.HasValue)
+                {
+                    payBeforeDate = DateTime.Now.AddDays(30);
+                }
+
+                // Форматируем даты в нужный формат
+                string dateFormat = "yyyy-MM-ddTHH:mm:ss+03:00";
+
+                // Подготавливаем товары
+                var productRows = products.Select((p, index) => new
+                {
+                    ID = index,
+                    PRODUCT_ID = p.ProductId,
+                    PRODUCT_NAME = p.ProductName,
+                    QUANTITY = p.Quantity,
+                    PRICE = p.Price
+                }).ToArray();
+
+                // Важные изменения:
+                // 1. Добавляем PRINT_FORM_ID (ID печатной формы счета)
+                // 2. Используем PAY_SYSTEM_ID = 7 (Счет) 
+                // 3. PERSON_TYPE_ID = 2 (юридическое лицо)
+                var requestData = new
+                {
+                    fields = new
+                    {
+                        ORDER_TOPIC = orderTopic,
+                        STATUS_ID = statusId,
+                        DATE_INSERT = DateTime.Now.ToString(dateFormat),
+                        DATE_BILL = DateTime.Now.ToString(dateFormat),
+                        DATE_PAY_BEFORE = payBeforeDate.Value.ToString(dateFormat),
+                        RESPONSIBLE_ID = responsibleId,
+                        UF_COMPANY_ID = clientCompanyId,
+                        UF_MYCOMPANY_ID = myCompanyId,
+                        PERSON_TYPE_ID = 2, // 2 - юридическое лицо
+                        PAY_SYSTEM_ID = 7,  // 7 - Счет
+                        PRINT_FORM_ID = 1,  // ВАЖНО: ID печатной формы счета (обычно 1 для первой формы)
+                        COMMENTS = comments,
+                        USER_DESCRIPTION = userDescription,
+                        PRODUCT_ROWS = productRows
+                    }
+                };
+
+                Console.WriteLine($"Отправляем запрос на создание счета:");
+                Console.WriteLine($"URL: {webhookUrl}");
+                Console.WriteLine($"Данные: {JsonConvert.SerializeObject(requestData, Formatting.Indented)}");
+
+                string jsonRequest = JsonConvert.SerializeObject(requestData);
+                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync(webhookUrl, content);
+                string jsonResponse = await response.Content.ReadAsStringAsync();
+
+                Console.WriteLine($"Ответ от сервера:");
+                Console.WriteLine($"Статус код: {response.StatusCode}");
+                Console.WriteLine($"Тело ответа: {jsonResponse}");
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine($"Ошибка HTTP: {response.StatusCode}");
+                    return 0;
+                }
+
+                dynamic result = JsonConvert.DeserializeObject(jsonResponse);
+
+                if (result?.error != null)
+                {
+                    string errorMessage = result.error;
+                    string errorDescription = result.error_description ?? "Нет описания ошибки";
+                    Console.WriteLine($"Ошибка API: {errorMessage}");
+                    Console.WriteLine($"Описание: {errorDescription}");
+                    return 0;
+                }
+
+                if (result?.result != null)
+                {
+                    int invoiceId = (int)result.result;
+                    Console.WriteLine($"✅ Счет успешно создан! ID: {invoiceId}");
+                    return invoiceId;
+                }
+
+                Console.WriteLine("Не удалось получить ID счета из ответа");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Исключение при создании счета: {ex.Message}");
+                Console.WriteLine($"StackTrace: {ex.StackTrace}");
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// Получает реквизиты компании
+        /// </summary>
+        public async Task<CompanyRequisites> GetCompanyRequisites(int companyId)
+        {
+            string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.requisite.list";
+
+            var requestData = new
+            {
+                filter = new
+                {
+                    ENTITY_TYPE_ID = 4, // 4 - компания
+                    ENTITY_ID = companyId
+                },
+                order = new
+                {
+                    DATE_CREATE = "DESC"
+                },
+                select = new[] { "ID", "NAME", "RQ_COMPANY_NAME", "RQ_INN", "RQ_KPP", "RQ_ADDR" }
+            };
+
+            try
+            {
+                string jsonRequest = JsonConvert.SerializeObject(requestData);
+                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync(webhookUrl, content);
+                string jsonResponse = await response.Content.ReadAsStringAsync();
+
+                dynamic result = JsonConvert.DeserializeObject(jsonResponse);
+
+                // TODO: Парсинг реквизитов
+                return new CompanyRequisites
+                {
+                    CompanyName = result?.result?[0]?.RQ_COMPANY_NAME,
+                    INN = result?.result?[0]?.RQ_INN,
+                    KPP = result?.result?[0]?.RQ_KPP,
+                    Address = result?.result?[0]?.RQ_ADDR
+                };
+            }
+            catch
+            {
+                return null;
+            }
+        }
+        public class InvoiceProduct
+        {
+            public int ProductId { get; set; }
+            public string ProductName { get; set; }
+            public decimal Quantity { get; set; }
+            public decimal Price { get; set; }
+        }
+
+        public class CompanyRequisites
+        {
+            public string CompanyName { get; set; }
+            public string INN { get; set; }
+            public string KPP { get; set; }
+            public string Address { get; set; }
+            public string ContactPerson { get; set; }
+            public string Phone { get; set; }
+            public string Email { get; set; }
+        }
         /// <summary>
         /// Создает компанию с расширенными полями (все поля необязательные, кроме названия)
         /// </summary>
