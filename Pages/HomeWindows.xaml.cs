@@ -116,9 +116,9 @@ namespace ManagerApp.Pages
 
         private void btnHistory_Click(object sender, RoutedEventArgs e)
         {
-            // Загружаем страницу истории
-            //HistoryPage historyPage = new HistoryPage();
-            //MainFrame.Navigate(historyPage);
+            //Загружаем страницу истории
+           History historyPage = new History();
+            MainFrame.Navigate(historyPage);
         }
 
         private void btnSettings_Click(object sender, RoutedEventArgs e)

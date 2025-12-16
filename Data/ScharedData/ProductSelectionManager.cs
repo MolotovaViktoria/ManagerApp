@@ -10,6 +10,7 @@ namespace ManagerApp.Data.ScharedData
     {
         public static List<string> SelectedProducts { get; set; } = new List<string>();
 
+
         public static void SetProducts(List<string> products)
         {
             SelectedProducts = products ?? new List<string>();
@@ -20,9 +21,10 @@ namespace ManagerApp.Data.ScharedData
             return SelectedProducts;
         }
 
-        public static void Clear()
+        public static void ClearProducts()
         {
             SelectedProducts.Clear();
         }
+
     }
 }

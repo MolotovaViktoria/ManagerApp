@@ -8,6 +8,7 @@ namespace ManagerApp.Data.ScharedData
 {
     public class MatchedProduct
     {
+        public int BitrixProductId { get; set; } // ДОБАВЬТЕ ЭТО!
         public string OriginalProductName { get; set; }
         public string BitrixProductName { get; set; }
         public decimal BitrixPrice { get; set; }

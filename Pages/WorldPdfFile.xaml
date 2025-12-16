@@ -80,19 +80,40 @@
                     </Grid.RowDefinitions>
 
                     <!-- Панель инструментов -->
+                    <!-- Панель инструментов -->
                     <Border Grid.Row="0" Background="#F5F5F5" Padding="10" CornerRadius="5">
-                        <StackPanel Orientation="Horizontal">
-                            <Button x:Name="btnLoadExcel" Content="Открыть другой"
-                                    Background="#E2542A" Foreground="White" FontWeight="Bold"
-                                    Padding="10,5" Margin="10,0,0,0" Click="btnLoadExcel_Click"/>
+                        <StackPanel Orientation="Vertical">
+                            <StackPanel Orientation="Horizontal">
+                                <Button x:Name="btnLoadExcel" Content="Открыть другой"
+                    Background="#E2542A" Foreground="White" FontWeight="Bold"
+                    Padding="10,5" Margin="10,0,0,0" Click="btnLoadExcel_Click"/>
 
-                            <Button x:Name="btnAI" Content="Сформировать список товаров с помощью ИИ"
-                                    Background="#E2542A" Foreground="White" FontWeight="Bold"
-                                    Padding="10,5" Margin="10,0,0,0" Click="btnAI_Click"/>
+                                <Button x:Name="btnAI" Content="Сформировать список товаров с помощью ИИ"
+                    Background="#E2542A" Foreground="White" FontWeight="Bold"
+                    Padding="10,5" Margin="10,0,0,0" Click="btnAI_Click"/>
 
-                            <Button x:Name="btnMath" Content="Сформировать список товаров с помощью алгоритма"
-                                    Background="#E2542A" Foreground="White" FontWeight="Bold"
-                                    Padding="10,5" Margin="10,0,0,0" Click="btnMath_Click"/>
+                                <Button x:Name="btnMath" Content="Сформировать список товаров с помощью алгоритма"
+                    Background="#E2542A" Foreground="White" FontWeight="Bold"
+                    Padding="10,5" Margin="10,0,0,0" Click="btnMath_Click"/>
+                            </StackPanel>
+
+                            <!-- Панель прогресса (добавлено) -->
+                            <Grid x:Name="progressPanel" Visibility="Collapsed" Margin="10,5,10,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Прогресс-бар -->
+                                <ProgressBar x:Name="progressBar" Grid.Column="0" Height="20" 
+                        Minimum="0" Maximum="100" Value="0"
+                        Background="#E0E0E0" Foreground="#E2542A"/>
+
+                                <!-- Текст статуса -->
+                                <TextBlock x:Name="statusText" Grid.Column="1" Margin="10,0,0,0"
+                      VerticalAlignment="Center" FontWeight="Medium"
+                      Foreground="#333333" Text="Обработка..."/>
+                            </Grid>
                         </StackPanel>
                     </Border>
 
@@ -178,7 +199,7 @@
                 <!-- Кнопка "Назад" -->
                 <Button x:Name="btnBack" Grid.Column="1" Content="НАЗАД" Width="120" Height="40"
                         Background="#E2542A" Foreground="White" FontWeight="Bold" FontSize="14"
-                        BorderThickness="0" Opacity="0.5" Click="btnBack_Click"/>
+                        BorderThickness="0"  Click="btnBack_Click"/>
 
                 <!-- Кнопка "Далее" -->
                 <Button x:Name="btnNext" Grid.Column="3" Content="ДАЛЕЕ" Width="120" Height="40"

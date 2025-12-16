@@ -6,6 +6,8 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
@@ -25,7 +27,28 @@ namespace ManagerApp.Pages
         private BitrixService _bitrixService;
         private List<Company> _allCompanies; // Полный список компаний для фильтрации
 
+        // Добавляем новое свойство для поиска
+        private string _searchText;
+        public string SearchText
+        {
+            get => _searchText;
+            set
+            {
+                _searchText = value;
+                OnPropertyChanged(nameof(SearchText));
+            }
+        }
 
+        private string _companyInfo;
+        public string CompanyInfo
+        {
+            get => _companyInfo;
+            set
+            {
+                _companyInfo = value;
+                OnPropertyChanged(nameof(CompanyInfo));
+            }
+        }
         // Коллекции для комбобоксов
         public ObservableCollection<Company> Companies { get; set; }
         public ObservableCollection<Company> MyCompanies { get; set; }
@@ -150,7 +173,88 @@ namespace ManagerApp.Pages
             InitializeData();
             LoadCompaniesAsync();
             InitializePaymentStatuses(); // Добавьте эту строку
+            // Подписываемся на событие изменения текста в комбобоксе
+            cmbCompanies.AddHandler(TextBox.TextChangedEvent,
+                new TextChangedEventHandler(cmbCompanies_TextChanged),
+                true);
         }
+
+        // Метод для поиска компании по кнопке
+        private void btnSearch_Click(object sender, RoutedEventArgs e)
+        {
+            SearchAndSelectCompany();
+        }
+
+        // Обработка изменения текста в реальном времени
+        private void cmbCompanies_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (sender is ComboBox comboBox && comboBox.IsEditable)
+            {
+                // Автоматически открываем выпадающий список при вводе
+                if (!string.IsNullOrWhiteSpace(comboBox.Text))
+                {
+                    comboBox.IsDropDownOpen = true;
+                }
+            }
+        }
+
+        // Умный поиск компании
+        private void SearchAndSelectCompany()
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(SearchText))
+                {
+                    txtCompanyStatus.Text = "Введите название или ID компании для поиска";
+                    return;
+                }
+
+                string searchTerm = SearchText.Trim().ToLower();
+                Company foundCompany = null;
+
+                // 1. Поиск по точному названию
+                foundCompany = Companies.FirstOrDefault(c =>
+                    c.Title?.ToLower() == searchTerm);
+
+                // 2. Поиск по части названия
+                if (foundCompany == null)
+                {
+                    foundCompany = Companies.FirstOrDefault(c =>
+                        c.Title?.ToLower().Contains(searchTerm) == true);
+                }
+
+                // 3. Поиск по ID
+                if (foundCompany == null && int.TryParse(searchTerm, out int companyId))
+                {
+                    foundCompany = Companies.FirstOrDefault(c => c.Id == companyId);
+                }
+
+                if (foundCompany != null)
+                {
+                    // Нашли компанию
+                    SelectedCompany = foundCompany;
+                    CompanyInfo = $"Найдена компания:\nНазвание: {foundCompany.Title}\nID: {foundCompany.Id}";
+                    txtCompanyStatus.Text = $"✓ Найдена компания: {foundCompany.Title}";
+
+                    // Очищаем поле поиска
+                    SearchText = string.Empty;
+                }
+                else
+                {
+                    // Компания не найдена
+                    CompanyInfo = $"Компания не найдена по запросу: '{SearchText}'";
+                    txtCompanyStatus.Text = $"❌ Не найдена компания по запросу: '{SearchText}'";
+                }
+            }
+            catch (Exception ex)
+            {
+                txtCompanyStatus.Text = $"Ошибка поиска: {ex.Message}";
+                MessageBox.Show($"Ошибка при поиске компании: {ex.Message}",
+                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        
         private void InitializePaymentStatuses()
         {
             PaymentStatuses = new ObservableCollection<PaymentStatus>
@@ -174,21 +278,102 @@ namespace ManagerApp.Pages
             public string Id { get; set; }
             public string Name { get; set; }
         }
+        //SSSSSS
+        private async Task ProcessSuccessfulInvoiceAsync(int invoiceId,
+    List<(string Name, int Id)> foundProducts, List<string> notFoundProducts)
+        {
+            txtCompanyStatus.Text = $"✅ Счет создан! ID: {invoiceId}";
 
+            // ГЕНЕРАЦИЯ ДОКУМЕНТА WORD СРАЗУ ПОСЛЕ СОЗДАНИЯ СЧЕТА
+            await GenerateAndDownloadDocumentAsync(invoiceId, foundProducts, notFoundProducts);
 
+        }
+
+        private async Task GenerateAndDownloadDocumentAsync(int invoiceId,
+            List<(string Name, int Id)> foundProducts, List<string> notFoundProducts)
+        {
+            try
+            {
+                txtCompanyStatus.Text = "Генерация документа Word...";
+
+                // ГЕНЕРАЦИЯ И СКАЧИВАНИЕ ДОКУМЕНТА
+                string downloadUrl = await _bitrixService.GenerateInvoiceDocument(invoiceId, 2, "docx");
+
+                string successMessage = $"Счет #{invoiceId} создан!\n" +
+                                       $"Товаров: {foundProducts.Count}\n" +
+                                       $"Итого: {GrandTotal:#,##0.00} ₽";
+
+                if (!string.IsNullOrEmpty(downloadUrl))
+                {
+                    successMessage += $"\n\n📄 Документ Word готов!";
+
+                    // Автоматическое скачивание файла в несколько мест
+                    string mainPath = await DownloadDocumentFileAsync(
+                        downloadUrl,
+                        invoiceId,
+                        SelectedCompany?.Title ?? "БезНазвания");
+
+                    if (!string.IsNullOrEmpty(mainPath))
+                    {
+                        successMessage += $"\n\nФайл сохранен в:\n1. {mainPath}";
+                    }
+                }
+                else
+                {
+                    successMessage += $"\n\n⚠️ Документ не сгенерирован";
+                }
+
+                if (notFoundProducts.Any())
+                {
+                    successMessage += $"\n\nПропущено: {notFoundProducts.Count} товаров";
+                }
+
+                MessageBox.Show(successMessage, "Готово", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка генерации документа: {ex.Message}");
+                MessageBox.Show($"Счет создан, но документ не сгенерирован:\n{ex.Message}",
+                    "Внимание", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+        private void LoadInvoiceItems(List<InvoiceItem> items)
+        {
+            InvoiceItems.Clear();
+
+            foreach (var item in items)
+            {
+                var invoiceItem = new InvoiceItemViewModel
+                {
+                    BitrixProductId = item.BitrixProductId, // ДОБАВЬТЕ ЭТУ СТРОЧКУ
+                    ProductName = item.ProductName,
+                    OriginalProductName = item.OriginalProductName,
+                    Price = item.Price,
+                    Quantity = item.Quantity,
+                    Unit = item.Unit,
+                    VAT = item.VAT,
+                    Total = item.Total
+                };
+
+                invoiceItem.PropertyChanged += InvoiceItem_PropertyChanged;
+                InvoiceItems.Add(invoiceItem);
+            }
+
+            CalculateTotals();
+        }
         private async Task CreateInvoiceAsync()
         {
             try
             {
-                // ТЕСТОВАЯ ФИКСИРОВАННАЯ КОМПАНИЯ
-                // Вместо проверки выбранных компаний используем фиксированные значения для теста
-                int clientCompanyId = 897; // Фиксированный ID тестовой компании клиента
-                string clientCompanyTitle = "ООО 'Тестовая компания'";
+                // ПРОВЕРКА ВЫБРАННЫХ КОМПАНИЙ
+                if (SelectedCompany == null || SelectedMyCompany == null)
+                {
+                    MessageBox.Show("Выберите обе компании!", "Ошибка",
+                        MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
 
-                int myCompanyId = 6; // Фиксированный ID вашей компании
-                string myCompanyTitle = "ООО 'Моя компания'";
-
-                // Проверяем наличие товаров
+                // ПРОВЕРКА ТОВАРОВ
                 if (!InvoiceItems.Any())
                 {
                     MessageBox.Show("Добавьте товары в счет!", "Ошибка",
@@ -196,123 +381,413 @@ namespace ManagerApp.Pages
                     return;
                 }
 
-                // ТЕСТОВОЕ ПОДТВЕРЖДЕНИЕ
+                // ПОДТВЕРЖДЕНИЕ
                 var confirmResult = MessageBox.Show(
-                    $"ТЕСТОВЫЙ РЕЖИМ!\n\n" +
-                    $"Создать ТЕСТОВЫЙ счет?\n" +
-                    $"Клиент: {clientCompanyTitle} (ID: {clientCompanyId})\n" +
-                    $"Ваша компания: {myCompanyTitle} (ID: {myCompanyId})\n" +
-                    $"Товаров: {InvoiceItems.Count}\n" +
-                    $"Итого: {GrandTotal:#,##0.00} ₽\n\n" +
-                    $"ВСЕ ТОВАРЫ БУДУТ С ID = 34045 (тестовый)",
-                    "ТЕСТ: Подтверждение создания счета",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning);
+                    $"Создать счет для {SelectedCompany.Title}?\n" +
+                    $"Итого: {GrandTotal:#,##0.00} ₽", "Подтверждение",
+                    MessageBoxButton.YesNo, MessageBoxImage.Question);
 
-                if (confirmResult != MessageBoxResult.Yes)
+                if (confirmResult != MessageBoxResult.Yes) return;
+
+                // БЛОКИРОВКА КНОПОК
+                DisableButtons();
+
+                // ПОДГОТОВКА ТОВАРОВ
+                var (invoiceProducts, foundProducts, notFoundProducts) = await PrepareProductsAsync();
+
+                // ПРОВЕРКА РЕЗУЛЬТАТОВ
+                if (!invoiceProducts.Any(p => p.ProductId > 0))
                 {
+                    ShowNoProductsError(notFoundProducts);
                     return;
                 }
 
-                // ТЕСТОВЫЕ ТОВАРЫ - ИСПОЛЬЗУЕМ ФИКСИРОВАННЫЙ ID 34045 ДЛЯ ВСЕХ ТОВАРОВ
-                var invoiceProducts = InvoiceItems.Select((item, index) => new InvoiceProduct
-                {
-                    ProductId = 34045, // ТЕСТОВЫЙ ID для всех товаров
-                    ProductName = $"[ТЕСТ] {item.ProductName}",
-                    Quantity = item.Quantity,
-                    Price = item.Price
-                }).ToList();
+                if (notFoundProducts.Any()) ShowNotFoundWarning(notFoundProducts);
 
-                // ТЕСТОВАЯ ТЕМА СЧЕТА
-                string orderTopic = $"[ТЕСТ] Счет для {clientCompanyTitle} от {DateTime.Now:dd.MM.yyyy HH:mm}";
-
-                // Показываем статус создания
-                txtCompanyStatus.Text = "Создание ТЕСТОВОГО счета...";
-                btnCreateInvoice.IsEnabled = false;
-                btnFinish.IsEnabled = false;
-                btnPreview.IsEnabled = false;
-
-                // СОЗДАЕМ ТЕСТОВЫЙ СЧЕТ
-                int invoiceId = await _bitrixService.CreateInvoiceUniversal(
-                    clientCompanyId,      // Фиксированный ID клиентской компании
-                    myCompanyId,          // Фиксированный ID вашей компании
-                    orderTopic,
-                    invoiceProducts);
+                // СОЗДАНИЕ СЧЕТА
+                int invoiceId = await CreateBitrixInvoiceAsync(invoiceProducts);
 
                 if (invoiceId > 0)
                 {
-                    txtCompanyStatus.Text = $"✅ ТЕСТОВЫЙ счет создан! ID: {invoiceId}";
-
-                    MessageBox.Show($"ТЕСТОВЫЙ счет успешно создан!\n\n" +
-                                  $"Режим: ТЕСТ\n" +
-                                  $"Номер счета: {invoiceId}\n" +
-                                  $"Клиент: {clientCompanyTitle}\n" +
-                                  $"Ваша компания: {myCompanyTitle}\n" +
-                                  $"Товаров: {InvoiceItems.Count}\n" +
-                                  $"ProductId для всех товаров: 34045\n" +
-                                  $"Итого: {GrandTotal:#,##0.00} ₽",
-                                  "ТЕСТ: Счет создан",
-                                  MessageBoxButton.OK,
-                                  MessageBoxImage.Information);
-
-                    // Журналирование для отладки
-                    Console.WriteLine($"ТЕСТОВЫЙ СЧЕТ СОЗДАН:");
-                    Console.WriteLine($"ID счета: {invoiceId}");
-                    Console.WriteLine($"Клиент ID: {clientCompanyId}");
-                    Console.WriteLine($"Моя компания ID: {myCompanyId}");
-                    Console.WriteLine($"Товары: {InvoiceItems.Count}");
-                    Console.WriteLine($"Все ProductId: 34045");
-
-                    // Возвращаемся на главную страницу через 3 секунды
-                    await Task.Delay(3000);
-
-                    if (NavigationService != null && NavigationService.CanGoBack)
-                    {
-                        NavigationService.GoBack();
-                    }
+                    await ProcessSuccessfulInvoiceAsync(invoiceId, foundProducts, notFoundProducts);
                 }
-                else if (invoiceId == 0)
+                else
                 {
-                    txtCompanyStatus.Text = "❌ Ошибка создания ТЕСТОВОГО счета";
-
-                    // Более подробное сообщение об ошибке
-                    MessageBox.Show($"ТЕСТОВЫЙ счет не создан!\n\n" +
-                                  $"Проверьте:\n" +
-                                  $"1. Существует ли товар с ID=34045 в Bitrix24?\n" +
-                                  $"2. Проверьте консоль приложения для деталей ошибки\n" +
-                                  $"3. Компании с ID {clientCompanyId} и {myCompanyId} должны существовать\n" +
-                                  $"4. Вебхук должен быть активен",
-                                  "ТЕСТ: Ошибка",
-                                  MessageBoxButton.OK,
-                                  MessageBoxImage.Error);
-                }
-                else if (invoiceId == -1)
-                {
-                    txtCompanyStatus.Text = "❌ Компания уже существует (это нормально для теста)";
+                    ShowInvoiceError();
                 }
             }
             catch (Exception ex)
             {
-                txtCompanyStatus.Text = $"❌ ТЕСТОВАЯ ошибка: {ex.Message}";
-
-                // Детальное сообщение об ошибке
-                string errorDetails = $"ТЕСТОВАЯ ошибка при создании счета:\n\n" +
-                                     $"Сообщение: {ex.Message}\n" +
-                                     $"Тип: {ex.GetType().Name}\n\n" +
-                                     $"Детали:\n{ex.StackTrace}";
-
-                MessageBox.Show(errorDetails,
-                              "ТЕСТ: Ошибка",
-                              MessageBoxButton.OK,
-                              MessageBoxImage.Error);
+                HandleException(ex);
             }
             finally
             {
-                btnCreateInvoice.IsEnabled = true;
-                btnFinish.IsEnabled = true;
-                btnPreview.IsEnabled = true;
+
             }
         }
+
+        // === ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ===
+
+        private void DisableButtons()
+        {
+            txtCompanyStatus.Text = "Подготовка товаров...";
+         
+        }
+
+        private async Task<(List<InvoiceProduct> products, List<(string Name, int Id)> found, List<string> notFound)>
+            PrepareProductsAsync()
+        {
+            var invoiceProducts = new List<InvoiceProduct>();
+            var notFoundProducts = new List<string>();
+            var foundProducts = new List<(string Name, int Id)>();
+
+            foreach (var item in InvoiceItems)
+            {
+                try
+                {
+                    txtCompanyStatus.Text = $"Обработка: {item.ProductName}";
+
+                    int productId = item.BitrixProductId;
+
+                    if (productId == 0)
+                    {
+                        productId = await _bitrixService.GetProductIdByName(item.OriginalProductName ?? item.ProductName);
+
+                        if (productId == 0)
+                        {
+                            var result = MessageBox.Show(
+                                $"Товар '{item.ProductName}' не найден.\nСоздать?",
+                                "Внимание", MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+                            if (result == MessageBoxResult.Yes)
+                            {
+                                productId = await _bitrixService.CreateProductIfNotExists(
+                                    item.OriginalProductName ?? item.ProductName, item.Price);
+
+                                if (productId > 0)
+                                {
+                                    await BitrixCache.RefreshCacheAsync();
+                                    foundProducts.Add((item.ProductName, productId));
+                                }
+                                else
+                                {
+                                    notFoundProducts.Add($"{item.ProductName} (не создан)");
+                                    continue;
+                                }
+                            }
+                            else
+                            {
+                                notFoundProducts.Add($"{item.ProductName} (пропущен)");
+                                continue;
+                            }
+                        }
+                    }
+
+                    if (productId > 0)
+                    {
+                        foundProducts.Add((item.ProductName, productId));
+                        invoiceProducts.Add(new InvoiceProduct
+                        {
+                            ProductId = productId,
+                            ProductName = item.ProductName,
+                            Quantity = item.Quantity,
+                            Price = item.Price
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    notFoundProducts.Add($"{item.ProductName} (ошибка: {ex.Message})");
+                }
+            }
+
+            return (invoiceProducts, foundProducts, notFoundProducts);
+        }
+
+        private void ShowNoProductsError(List<string> notFoundProducts)
+        {
+            MessageBox.Show($"Нет товаров с реальными ID!\n\n" +
+                           $"Не найдено:\n{string.Join("\n", notFoundProducts)}",
+                           "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            txtCompanyStatus.Text = "❌ Нет товаров для счета";
+        }
+
+        private void ShowNotFoundWarning(List<string> notFoundProducts)
+        {
+            string warning = $"Следующие товары не добавлены:\n" +
+                            string.Join("\n", notFoundProducts.Take(3));
+            if (notFoundProducts.Count > 3) warning += $"\n...и еще {notFoundProducts.Count - 3}";
+
+            MessageBox.Show(warning, "Внимание", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        private async Task<int> CreateBitrixInvoiceAsync(List<InvoiceProduct> invoiceProducts)
+        {
+            txtCompanyStatus.Text = "Создание счета...";
+
+            // Получаем вебхук из настроек
+            string webhook = WebhookManager.GetWebhookFromFile();
+
+            if (string.IsNullOrWhiteSpace(webhook))
+            {
+                MessageBox.Show("Вебхук Bitrix24 не настроен. Пожалуйста, укажите его в настройках.",
+                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return -1;
+            }
+
+            string orderTopic = $"Счет для {SelectedCompany.Title} от {DateTime.Now:dd.MM.yyyy}";
+
+            return await _bitrixService.CreateSmartInvoice(
+                webhook, // Используем вебхук из настроек
+                SelectedCompany.Id,
+                SelectedMyCompany.Id,
+                orderTopic,
+                invoiceProducts.Where(p => p.ProductId > 0).ToList());
+        }
+
+
+        
+
+
+        private async Task<string> DownloadDocumentFileAsync(string documentUrl, int invoiceId, string companyName)
+        {
+            try
+            {
+                byte[] fileBytes = await _bitrixService.DownloadDocumentBytes(documentUrl);
+
+                if (fileBytes == null || fileBytes.Length == 0)
+                {
+                    Console.WriteLine("❌ Не удалось загрузить документ");
+                    return null;
+                }
+
+                List<string> savedPaths = new List<string>();
+
+                // 1. Сохраняем в папку ManagerApp\History
+                string appHistoryPath = GetAppHistoryFilePath(invoiceId, companyName);
+                await SaveToFileAsync(fileBytes, appHistoryPath);
+                savedPaths.Add(appHistoryPath);
+
+                // 2. Сохраняем в папку Downloads текущего пользователя
+                string downloadsPath = GetDownloadsFilePath(invoiceId, companyName);
+                await SaveToFileAsync(fileBytes, downloadsPath);
+                savedPaths.Add(downloadsPath);
+
+                // 3. Предлагаем пользователю выбрать дополнительную папку
+                string userSelectedPath = await SaveWithUserDialogAsync(fileBytes, invoiceId, companyName);
+                if (!string.IsNullOrEmpty(userSelectedPath))
+                {
+                    savedPaths.Add(userSelectedPath);
+                }
+
+                Console.WriteLine($"✅ Документ сохранен в {savedPaths.Count} местах:");
+                foreach (var path in savedPaths)
+                {
+                    Console.WriteLine($"   📁 {path}");
+                }
+
+                // Открываем папку History для просмотра
+                OpenFolderInExplorer(appHistoryPath);
+
+                return appHistoryPath; // Возвращаем основной путь к файлу
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Ошибка скачивания: {ex.Message}");
+
+                // Если не удалось сохранить, открываем URL напрямую
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = documentUrl,
+                    UseShellExecute = true
+                });
+
+                return null;
+            }
+        }
+
+        // Получаем путь к файлу в папке History приложения
+        private string GetAppHistoryFilePath(int invoiceId, string companyName)
+        {
+            try
+            {
+                // Папка History относительно папки приложения
+                string appBasePath = AppDomain.CurrentDomain.BaseDirectory;
+                string historyPath = Path.Combine(appBasePath, "History");
+
+                // Создаем папку History, если её нет
+                if (!Directory.Exists(historyPath))
+                {
+                    Directory.CreateDirectory(historyPath);
+                }
+
+                // Создаем подпапку по году и месяцу для организации
+                string yearMonthPath = Path.Combine(historyPath, DateTime.Now.ToString("yyyy-MM"));
+                if (!Directory.Exists(yearMonthPath))
+                {
+                    Directory.CreateDirectory(yearMonthPath);
+                }
+
+                // Очищаем имя компании от недопустимых символов
+                string safeCompanyName = RemoveInvalidFileNameChars(companyName);
+
+                // Формируем имя файла
+                string fileName = $"Счет_{invoiceId}_{safeCompanyName}_{DateTime.Now:yyyyMMdd_HHmmss}.docx";
+
+                return Path.Combine(yearMonthPath, fileName);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка формирования пути History: {ex.Message}");
+                return null;
+            }
+        }
+
+        // Получаем путь к файлу в папке Downloads
+        private string GetDownloadsFilePath(int invoiceId, string companyName)
+        {
+            try
+            {
+                string downloadsPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    "Downloads");
+
+                string safeCompanyName = RemoveInvalidFileNameChars(companyName);
+                string fileName = $"Счет_{invoiceId}_{safeCompanyName}_{DateTime.Now:yyyyMMdd}.docx";
+
+                return Path.Combine(downloadsPath, fileName);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        // Предлагаем пользователю выбрать папку для сохранения
+        private async Task<string> SaveWithUserDialogAsync(byte[] fileBytes, int invoiceId, string companyName)
+        {
+            try
+            {
+                return await Task.Run(() =>
+                {
+                    // Используем диалог сохранения файла WPF
+                    var saveFileDialog = new Microsoft.Win32.SaveFileDialog
+                    {
+                        Title = "Сохранить документ счета",
+                        Filter = "Документ Word (*.docx)|*.docx|Все файлы (*.*)|*.*",
+                        FileName = $"Счет_{invoiceId}_{RemoveInvalidFileNameChars(companyName)}.docx",
+                        DefaultExt = ".docx",
+                        AddExtension = true
+                    };
+
+                    bool? result = saveFileDialog.ShowDialog();
+
+                    if (result == true && !string.IsNullOrEmpty(saveFileDialog.FileName))
+                    {
+                        // Сохраняем файл в выбранное место
+                        File.WriteAllBytes(saveFileDialog.FileName, fileBytes);
+                        return saveFileDialog.FileName;
+                    }
+
+                    return null;
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка диалога сохранения: {ex.Message}");
+                return null;
+            }
+        }
+
+        // Утилита для сохранения байтов в файл
+        private async Task SaveToFileAsync(byte[] fileBytes, string filePath)
+        {
+            try
+            {
+                if (fileBytes == null || string.IsNullOrEmpty(filePath))
+                    return;
+
+                // Создаем директорию, если её нет
+                string directory = Path.GetDirectoryName(filePath);
+                if (!Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                // Сохраняем файл (синхронно)
+                File.WriteAllBytes(filePath, fileBytes);
+                Console.WriteLine($"✅ Сохранено: {filePath}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Ошибка сохранения в {filePath}: {ex.Message}");
+            }
+        }
+
+        // Удаляем недопустимые символы из имени файла
+        private string RemoveInvalidFileNameChars(string fileName)
+        {
+            if (string.IsNullOrEmpty(fileName))
+                return "БезНазвания";
+
+            string invalidChars = new string(Path.GetInvalidFileNameChars()) + new string(Path.GetInvalidPathChars());
+
+            foreach (char c in invalidChars)
+            {
+                fileName = fileName.Replace(c.ToString(), "");
+            }
+
+            // Ограничиваем длину имени файла
+            if (fileName.Length > 50)
+            {
+                fileName = fileName.Substring(0, 50);
+            }
+
+            return fileName.Trim();
+        }
+
+        // Открываем папку с файлом в проводнике
+        private void OpenFolderInExplorer(string filePath)
+        {
+            try
+            {
+                if (File.Exists(filePath))
+                {
+                    string directory = Path.GetDirectoryName(filePath);
+
+                    // Открываем проводник и выделяем файл
+                    Process.Start("explorer.exe", $"/select,\"{filePath}\"");
+                }
+                else if (Directory.Exists(Path.GetDirectoryName(filePath)))
+                {
+                    // Открываем только папку
+                    Process.Start("explorer.exe", $"\"{Path.GetDirectoryName(filePath)}\"");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка открытия папки: {ex.Message}");
+            }
+        }
+    
+    
+
+    private void ShowInvoiceError()
+        {
+            txtCompanyStatus.Text = "❌ Ошибка создания счета";
+            MessageBox.Show("Не удалось создать счет.\nПроверьте консоль для деталей.",
+                "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+
+        private void HandleException(Exception ex)
+        {
+            txtCompanyStatus.Text = $"❌ Ошибка: {ex.Message}";
+            MessageBox.Show($"Ошибка при создании счета:\n{ex.Message}",
+                "Критическая ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+
+
+
         // Конструктор с передачей списка товаров
         public InvoicionCreatePage(List<InvoiceItem> invoiceItems) : this()
         {
@@ -604,29 +1079,6 @@ namespace ManagerApp.Pages
             MyCompanyDetails = details.ToString();
         }
 
-        private void LoadInvoiceItems(List<InvoiceItem> items)
-        {
-            InvoiceItems.Clear();
-
-            foreach (var item in items)
-            {
-                var invoiceItem = new InvoiceItemViewModel
-                {
-                    ProductName = item.ProductName,
-                    OriginalProductName = item.OriginalProductName,
-                    Price = item.Price,
-                    Quantity = item.Quantity,
-                    Unit = item.Unit,
-                    VAT = item.VAT,
-                    Total = item.Total
-                };
-
-                invoiceItem.PropertyChanged += InvoiceItem_PropertyChanged;
-                InvoiceItems.Add(invoiceItem);
-            }
-
-            CalculateTotals();
-        }
 
         private void InvoiceItem_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
@@ -694,16 +1146,13 @@ namespace ManagerApp.Pages
                               $"Итого: {GrandTotal:#,##0.00} ₽",
                               "Счет создан", MessageBoxButton.OK, MessageBoxImage.Information);
 
-                // Возвращаемся на главную страницу
-                if (NavigationService.CanGoBack)
-                {
-                    NavigationService.GoBack();
-                }
+                // Возвращаемся на страницу DombPage
+                var dombPage = new DombPage();
+                NavigationService.Navigate(dombPage);
             }
             catch (Exception ex)
             {
                 // Логируем ошибку и показываем пользователю
-
                 MessageBox.Show($"Ошибка при создании счета: {ex.Message}",
                               "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -714,7 +1163,7 @@ namespace ManagerApp.Pages
             }
         }
 
-      
+
 
         private void PreviewInvoice()
         {
@@ -791,6 +1240,16 @@ namespace ManagerApp.Pages
     // ViewModel для элемента счета
     public class InvoiceItemViewModel : INotifyPropertyChanged
     {
+        private int _bitrixProductId;
+        public int BitrixProductId
+        {
+            get => _bitrixProductId;
+            set
+            {
+                _bitrixProductId = value;
+                OnPropertyChanged(nameof(BitrixProductId));
+            }
+        }
         private string _productName;
         public string ProductName
         {

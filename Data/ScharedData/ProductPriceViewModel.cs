@@ -9,6 +9,18 @@ namespace ManagerApp.Data.ScharedData
 {
     public class ProductPriceViewModel : INotifyPropertyChanged
     {
+        // Добавьте это свойство:
+        private int _bitrixProductId;
+        public int BitrixProductId
+        {
+            get => _bitrixProductId;
+            set
+            {
+                _bitrixProductId = value;
+                OnPropertyChanged(nameof(BitrixProductId));
+            }
+        }
+
         private string _originalProductName;
         public string OriginalProductName
         {

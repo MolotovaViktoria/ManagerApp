@@ -35,8 +35,8 @@
              IsIndeterminate="False">
                 <ProgressBar.Foreground>
                     <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                        <GradientStop Color="#0078D4" Offset="0"/>
-                        <GradientStop Color="#005A9E" Offset="1"/>
+                        <GradientStop Color="#E2542A" Offset="0"/>
+                        <GradientStop Color="#E2545A" Offset="1"/>
                     </LinearGradientBrush>
                 </ProgressBar.Foreground>
             </ProgressBar>

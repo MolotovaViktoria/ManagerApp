@@ -93,10 +93,11 @@ namespace ManagerApp.Pages
             {
                 var product = new ProductPriceViewModel
                 {
+                    BitrixProductId = matchedProduct.BitrixProductId, // ДОБАВЬТЕ ЭТУ СТРОЧКУ
                     OriginalProductName = matchedProduct.OriginalProductName,
                     BitrixProductName = matchedProduct.BitrixProductName,
                     BitrixPrice = matchedProduct.BitrixPrice,
-                    CustomPrice = matchedProduct.BitrixPrice, // По умолчанию цена из Bitrix
+                    CustomPrice = matchedProduct.BitrixPrice,
                     Quantity = matchedProduct.Quantity > 0 ? matchedProduct.Quantity : 1,
                     Unit = matchedProduct.Unit ?? "шт.",
                     VAT = SettingsHelper.GetVATAsString()
@@ -214,6 +215,7 @@ namespace ManagerApp.Pages
             // Создаем список товаров для передачи на страницу формирования счета
             var invoiceItems = Products.Select(p => new InvoiceItem
             {
+                BitrixProductId = p.BitrixProductId, // ДОБАВЬТЕ!
                 ProductName = p.BitrixProductName,
                 OriginalProductName = p.OriginalProductName,
                 Price = p.PriceWithVAT, // Передаем цену с НДС
@@ -242,6 +244,7 @@ namespace ManagerApp.Pages
             {
                 OriginalProductName = p.OriginalProductName,
                 BitrixProductName = p.BitrixProductName,
+                BitrixProductId = p.BitrixProductId, // ДОБАВЬТЕ ЭТО
                 BitrixPrice = p.BitrixPrice,
                 CustomPrice = p.CustomPrice,
                 Quantity = p.Quantity,
@@ -345,6 +348,7 @@ namespace ManagerApp.Pages
     // Класс для передачи данных о товарах в счет
     public class InvoiceItem
     {
+        public int BitrixProductId { get; set; } // ДОБАВЬТЕ ЭТУ СТРОЧКУ
         public string ProductName { get; set; }
         public string OriginalProductName { get; set; }
         public decimal Price { get; set; }

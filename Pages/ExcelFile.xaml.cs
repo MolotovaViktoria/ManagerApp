@@ -539,7 +539,13 @@ namespace ManagerApp.Pages
             _originalRowColors.Clear();
         }
 
-        private void btnBack_Click(object sender, RoutedEventArgs e) { }
+        private void btnBack_Click(object sender, RoutedEventArgs e) 
+        {
+            if (NavigationService.CanGoBack)
+            {
+                NavigationService.GoBack();
+            }
+        }
 
         private void btnNext_Click(object sender, RoutedEventArgs e) {
 

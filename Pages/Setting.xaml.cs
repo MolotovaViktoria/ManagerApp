@@ -1,11 +1,13 @@
-﻿using System;
+﻿using ManagerApp.Classes.Setting;
+
+using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.ComponentModel;
 
 namespace ManagerApp.Pages
 {
@@ -15,6 +17,7 @@ namespace ManagerApp.Pages
         private const string DefaultVAT = "20";
 
         private string _vat = DefaultVAT;
+        private string _webhook = WebhookManager.GetWebhookFromFile();
 
         public string VAT
         {
@@ -25,6 +28,19 @@ namespace ManagerApp.Pages
                 {
                     _vat = value;
                     OnPropertyChanged(nameof(VAT));
+                }
+            }
+        }
+
+        public string Webhook
+        {
+            get { return _webhook; }
+            set
+            {
+                if (_webhook != value)
+                {
+                    _webhook = value;
+                    OnPropertyChanged(nameof(Webhook));
                 }
             }
         }
@@ -45,6 +61,7 @@ namespace ManagerApp.Pages
         private void Page_Loaded(object sender, RoutedEventArgs e)
         {
             LoadVATFromFile();
+            // Вебхук уже загружен в конструкторе через WebhookManager
         }
 
         private void LoadVATFromFile()
@@ -61,7 +78,6 @@ namespace ManagerApp.Pages
                             var value = line.Substring(4);
                             if (!string.IsNullOrEmpty(value))
                             {
-                                // Используем поле напрямую, а не свойство, чтобы не вызывать сохранение
                                 _vat = value;
                                 OnPropertyChanged(nameof(VAT));
                             }
@@ -76,7 +92,7 @@ namespace ManagerApp.Pages
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка загрузки настроек: {ex.Message}", "Ошибка",
+                MessageBox.Show($"Ошибка загрузки настроек НДС: {ex.Message}", "Ошибка",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 VAT = DefaultVAT;
             }
@@ -91,7 +107,20 @@ namespace ManagerApp.Pages
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка сохранения настроек: {ex.Message}", "Ошибка",
+                MessageBox.Show($"Ошибка сохранения настроек НДС: {ex.Message}", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void SaveWebhookToFile()
+        {
+            try
+            {
+                WebhookManager.SaveWebhookToFile(Webhook);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка сохранения вебхука: {ex.Message}", "Ошибка",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -180,9 +209,20 @@ namespace ManagerApp.Pages
             }
         }
 
+        private void txtWebhook_LostFocus(object sender, RoutedEventArgs e)
+        {
+            // Проверяем и очищаем URL при потере фокуса
+            if (!string.IsNullOrWhiteSpace(txtWebhook.Text))
+            {
+                // Удаляем пробелы в начале и конце
+                txtWebhook.Text = txtWebhook.Text.Trim();
+
+
+            }
+        }
+
         private void btnCheckInternet_Click(object sender, RoutedEventArgs e)
         {
-            // Заглушка для проверки интернета
             try
             {
                 MessageBox.Show("Проверка подключения к интернету...\n\n(Эта функция находится в разработке)",
@@ -197,7 +237,6 @@ namespace ManagerApp.Pages
 
         private void btnCheckApi_Click(object sender, RoutedEventArgs e)
         {
-            // Заглушка для проверки API
             try
             {
                 MessageBox.Show("Проверка API...\n\n(Эта функция находится в разработке)",
@@ -210,13 +249,25 @@ namespace ManagerApp.Pages
             }
         }
 
-        private void btnCheckBitrix_Click(object sender, RoutedEventArgs e)
+        private async void btnCheckBitrix_Click(object sender, RoutedEventArgs e)
         {
-            // Заглушка для проверки Bitrix
             try
             {
-                MessageBox.Show("Проверка подключения к Bitrix...\n\n(Эта функция находится в разработке)",
-                    "Проверка", MessageBoxButton.OK, MessageBoxImage.Information);
+                if (string.IsNullOrWhiteSpace(Webhook))
+                {
+                    MessageBox.Show("Вебхук Bitrix24 не указан. Пожалуйста, укажите URL вебхука в настройках.",
+                        "Вебхук не указан",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                    return;
+                }
+
+            
+                // Здесь можно добавить реальную проверку подключения
+                // bool isConnected = await WebhookManager.TestConnectionAsync();
+                // MessageBox.Show(isConnected ? "Подключение успешно!" : "Ошибка подключения", 
+                //                 "Результат проверки", MessageBoxButton.OK, 
+                //                 isConnected ? MessageBoxImage.Information : MessageBoxImage.Error);
             }
             catch (Exception ex)
             {
@@ -227,15 +278,18 @@ namespace ManagerApp.Pages
 
         private void btnSave_Click(object sender, RoutedEventArgs e)
         {
-            // Сохраняем настройки
+            // Сохраняем настройки НДС
             SaveVATToFile();
+
+            // Сохраняем вебхук в отдельный файл
+            SaveWebhookToFile();
+
             MessageBox.Show("Настройки успешно сохранены!", "Успех",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void btnClose_Click(object sender, RoutedEventArgs e)
         {
-            // Возвращаемся назад
             if (NavigationService.CanGoBack)
             {
                 NavigationService.GoBack();

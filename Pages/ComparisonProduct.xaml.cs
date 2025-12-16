@@ -30,7 +30,7 @@ namespace ManagerApp.Pages
             DataContext = this;
 
             // Загружаем сохраненные товары
-            LoadProductsFromManager();
+            //LoadProductsFromManager();
         }
 
         // Конструктор с параметром (для прямого вызова)
@@ -44,7 +44,14 @@ namespace ManagerApp.Pages
             }
         }
 
-       
+        private void btnBack_Click(object sender, RoutedEventArgs e)
+        {
+            if (NavigationService.CanGoBack)
+            {
+                NavigationService.GoBack();
+            }
+        }
+
         private void LoadSampleData()
         {
             // Тестовые данные для дизайнера
@@ -242,11 +249,7 @@ namespace ManagerApp.Pages
         }
 
         // Обработчики кнопок навигации
-        private void btnBack_Click(object sender, RoutedEventArgs e)
-        {
-            MessageBox.Show("Возврат на предыдущую страницу",
-                "Назад", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
+
 
         private void btnNext_Click(object sender, RoutedEventArgs e)
         {
@@ -274,6 +277,7 @@ namespace ManagerApp.Pages
                 {
                     var matchedProduct = new MatchedProduct
                     {
+                        BitrixProductId = Convert.ToInt32(item.SelectedBitrixProduct.ProductId), // ДОБАВЬТЕ!
                         OriginalProductName = item.OriginalProduct,
                         BitrixProductName = item.SelectedBitrixProduct.ProductName,
                         BitrixPrice = item.SelectedBitrixProduct.Price,
@@ -353,7 +357,7 @@ namespace ManagerApp.Pages
                 var similarProducts = await _productMatcher.FindSimilarProductsAsync(
                     searchText,
                     maxResults: 10,
-                    minSimilarityThreshold: 0.1);
+                    minSimilarityThreshold: 0.5);
 
                 Console.WriteLine($"Получено товаров: {similarProducts.Count}");
 
@@ -401,62 +405,7 @@ namespace ManagerApp.Pages
             }
         }
 
-        // Вспомогательный метод для расчета сходства
-        private double CalculateSimilarity(string searchText, ProductWithCategoryInfo product)
-        {
-            if (string.IsNullOrWhiteSpace(searchText) || product == null)
-                return 0;
-
-            var normalizedSearch = searchText.Trim().ToLower();
-            var productName = product.ProductName?.ToLower() ?? "";
-            var categoryName = product.CategoryName?.ToLower() ?? "";
-
-            // 1. Проверяем точное совпадение
-            if (productName == normalizedSearch)
-                return 1.0;
-
-            // 2. Проверяем содержится ли поисковый запрос в названии
-            if (productName.Contains(normalizedSearch))
-                return 0.9;
-
-            // 3. Проверяем содержится ли в категории
-            if (categoryName.Contains(normalizedSearch))
-                return 0.7;
-
-            // 4. Разбиваем запрос на слова и считаем совпадения
-            var searchWords = normalizedSearch.Split(new[] { ' ', ',', '.', '-' }, StringSplitOptions.RemoveEmptyEntries);
-            var productWords = productName.Split(new[] { ' ', ',', '.', '-' }, StringSplitOptions.RemoveEmptyEntries);
-
-            if (!searchWords.Any() || !productWords.Any())
-                return 0;
-
-            int matchingWords = 0;
-            foreach (var searchWord in searchWords)
-            {
-                foreach (var productWord in productWords)
-                {
-                    if (productWord.Contains(searchWord) || searchWord.Contains(productWord))
-                    {
-                        matchingWords++;
-                        break;
-                    }
-                }
-            }
-
-            double wordSimilarity = (double)matchingWords / Math.Max(searchWords.Length, productWords.Length);
-
-            // 5. Учитываем длину совпадения
-            double lengthFactor = 1.0 - Math.Abs(normalizedSearch.Length - productName.Length) / 100.0;
-            lengthFactor = Math.Max(0.1, lengthFactor); // Минимум 0.1
-
-            // 6. Учитываем наличие цены
-            double priceFactor = product.HasPrice ? 1.05 : 0.95;
-
-            // Итоговое сходство
-            double similarity = wordSimilarity * 0.7 + lengthFactor * 0.3;
-            similarity *= priceFactor;
-
-            return Math.Min(similarity, 1.0);
-        }
+     
+        
     }
 }

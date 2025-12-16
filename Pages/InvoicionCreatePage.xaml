@@ -204,11 +204,12 @@
                                         <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
 
-                                    <!-- Компания с кнопкой создания и обновления -->
+                                    <!-- Панель с комбобоксом и кнопками -->
                                     <Grid Grid.Row="0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
@@ -219,6 +220,7 @@
                        Margin="0,0,10,0"
                        Width="100"/>
 
+                                        <!-- Упрощенный комбобокс с поиском -->
                                         <ComboBox x:Name="cmbCompanies"
                       Grid.Column="1"
                       ItemsSource="{Binding Companies}"
@@ -227,12 +229,27 @@
                       Height="35"
                       FontSize="14"
                       Padding="10,0"
-                      IsEditable="True"/>
+                      IsEditable="True"
+                      IsTextSearchEnabled="True"
+
+                      StaysOpenOnEdit="True"
+                      Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}">
+                                            <!-- Упрощенный стиль для комбобокса -->
+                                            <ComboBox.Style>
+                                                <Style TargetType="ComboBox">
+                                                    <Style.Triggers>
+                                                        <Trigger Property="IsEditable" Value="true">
+                                                            <Setter Property="IsDropDownOpen" Value="True"/>
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </ComboBox.Style>
+                                        </ComboBox>
+
 
                                         <!-- Кнопка обновления списка -->
                                         <Button x:Name="btnRefreshCompanies"
-                    Grid.Column="2"
-                    Content="↻"
+                    Grid.Column="3"
                     Width="35"
                     Height="35"
                     Margin="10,0,0,0"
@@ -242,12 +259,16 @@
                     FontSize="16"
                     BorderThickness="0"
                     ToolTip="Обновить список компаний"
-                    Click="btnRefreshCompanies_Click"/>
+                    Click="btnRefreshCompanies_Click">
+                                            <TextBlock Text="↻" 
+                           FontSize="16" 
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+                                        </Button>
 
                                         <!-- Кнопка создания новой компании -->
                                         <Button x:Name="btnCreateNewCompany"
-                    Grid.Column="3"
-                    Content="+"
+                    Grid.Column="4"
                     Width="35"
                     Height="35"
                     Margin="10,0,0,0"
@@ -257,10 +278,14 @@
                     FontSize="16"
                     BorderThickness="0"
                     ToolTip="Создать новую компанию"
-                    Click="btnCreateNewCompany_Click"/>
+                    Click="btnCreateNewCompany_Click">
+                                            <TextBlock Text="+" 
+                           FontSize="16" 
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"/>
+                                        </Button>
                                     </Grid>
 
-                                 
 
                                     <!-- Статус загрузки -->
                                     <TextBlock x:Name="txtCompanyStatus"
@@ -331,72 +356,11 @@
                                                     Padding="5"/>
                                     </Grid>
 
-                                    <!-- Номер -->
-                                    <Grid Grid.Row="2">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <TextBlock Grid.Column="0"
-                                                   Text="Номер:"
-                                                   VerticalAlignment="Center"
-                                                   Margin="0,0,10,0"
-                                                   Width="100"/>
-
-                                        <TextBox Grid.Column="1"
-                                                 Text="{Binding InvoiceNumber}"
-                                                 Height="35"
-                                                 FontSize="14"
-                                                 Padding="10,0"/>
-                                    </Grid>
                                 </Grid>
                             </GroupBox>
 
-                            <!-- Платежные условия -->
-                            <GroupBox Grid.Row="8"
-                                      Header="Платежные условия"
-                                      FontWeight="Bold"
-                                      Foreground="#333333">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
+                         
 
-                                    <TextBlock Grid.Column="0"
-                                               Text="Статус оплаты:"
-                                               VerticalAlignment="Center"
-                                               Margin="0,0,10,0"
-                                               Width="100"/>
-                                    <ComboBox Grid.Column="1"
-          ItemsSource="{Binding PaymentStatuses}" 
-                                        SelectedItem="{Binding SelectedPaymentStatus}"
-          Height="35"
-          FontSize="14"
-          Padding="10,0">
-                                        <ComboBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBlock Text="{Binding Name}"/>
-                                            </DataTemplate>
-                                        </ComboBox.ItemTemplate>
-                                    </ComboBox>
-                                </Grid>
-                            </GroupBox>
-
-                            <!-- Комментарий -->
-                            <GroupBox Grid.Row="10"
-                                      Header="Комментарий"
-                                      FontWeight="Bold"
-                                      Foreground="#333333">
-                                <TextBox Text="{Binding Comment}"
-                                         Height="80"
-                                         FontSize="14"
-                                         Padding="10"
-                                         TextWrapping="Wrap"
-                                         AcceptsReturn="True"
-                                         VerticalScrollBarVisibility="Auto"/>
-                            </GroupBox>
                         </Grid>
                     </ScrollViewer>
                 </Grid>
@@ -479,21 +443,7 @@
                                                            TextAlignment="Right"
                                                            Margin="5,0"/>
 
-                                                <!-- Удалить -->
-                                                <Button Grid.Column="3"
-                                                        Command="{Binding DataContext.RemoveItemCommand, RelativeSource={RelativeSource AncestorType=Page}}"
-                                                        CommandParameter="{Binding}"
-                                                        Background="Transparent"
-                                                        BorderThickness="0"
-                                                        Width="24"
-                                                        Height="24"
-                                                        ToolTip="Удалить товар">
-                                                    <TextBlock Text="✕"
-                                                               FontSize="14"
-                                                               Foreground="#999999"
-                                                               HorizontalAlignment="Center"
-                                                               VerticalAlignment="Center"/>
-                                                </Button>
+
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
@@ -573,40 +523,7 @@
                                        Foreground="#E2542A"/>
                         </Grid>
 
-                        <!-- Кнопки действий -->
-                        <StackPanel Grid.Row="5"
-                                    Orientation="Horizontal"
-                                    HorizontalAlignment="Center"
-                                    Margin="0,10,0,0">
-
-                            <!-- Предварительный просмотр (серая - неактивная) -->
-                            <!-- Предварительный просмотр (серая - неактивная) -->
-                            <Button x:Name="btnPreview"
-                                Content="ПРЕДПРОСМОТР"
-                                Width="180"
-                                Height="40"
-                                Background="#BDBDBD"
-                                Foreground="White"
-                                FontWeight="Bold"
-                                FontSize="14"
-                                Margin="0,0,10,0"
-                                BorderThickness="0"
-                                Click="btnPreview_Click"
-                                Cursor="Hand"/>
-
-                            <!-- Создать счет (оранжевая - основное действие) -->
-                            <Button x:Name="btnCreateInvoice"
-                                Content="СОЗДАТЬ СЧЕТ"
-                                Width="180"
-                                Height="40"
-                                Background="#E2542A"
-                                Foreground="White"
-                                FontWeight="Bold"
-                                FontSize="14"
-                                BorderThickness="0"
-                                Click="btnCreateInvoice_Click"
-                                Cursor="Hand"/>
-                        </StackPanel>
+                       
                     </Grid>
                 </Border>
             </Grid>
@@ -656,14 +573,14 @@
                         </Style>
                     </Button.Style>
                 </Button>
-
+                
                 <!-- Кнопка "Завершить" (серая - неактивная/второстепенная) -->
                 <Button x:Name="btnFinish"
                         Grid.Column="3"
                         Content="ЗАВЕРШИТЬ"
                         Width="140"
                         Height="45"
-                        Background="#BDBDBD"
+                        Background="#E2542A"
                         Foreground="White"
                         FontWeight="Bold"
                         FontSize="14"
