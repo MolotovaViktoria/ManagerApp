@@ -1,5 +1,6 @@
 ﻿using ManagerApp.Data.GetInfo;
 using ManagerApp.Data.ScharedData;
+using ManagerApp.Data.StructureList;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -58,6 +59,7 @@ namespace ManagerApp.Pages
             await LoadProductsFromBitrix();
         }
 
+     
         private async Task LoadProductsFromBitrix()
         {
             try
@@ -65,35 +67,30 @@ namespace ManagerApp.Pages
                 _isLoading = true;
                 txtStatus.Text = "Загрузка товаров из Bitrix...";
 
-                // Используем BitrixCache для загрузки товаров
-                var products = await BitrixCache.GetAllProductsWithCategories();
+                // ИСПОЛЬЗУЕМ НОВЫЙ МЕТОД: получаем все товары с нижними разделами
+                var productsWithSections = await BitrixCache.GetAllProductsWithLowerSections();
 
-                if (products == null || products.Count == 0)
+                if (productsWithSections == null || productsWithSections.Count == 0)
                 {
-                    txtStatus.Text = "Не удалось загрузить товары";
-                    return;
-                }
+                    // Если новый метод не работает, пробуем старый
+                    var products = await BitrixCache.GetAllProductsWithCategories();
 
-                // Очищаем коллекции
-                _allProducts.Clear();
-
-                // Конвертируем в BitrixProductViewModel
-                foreach (var product in products)
-                {
-                    var viewModel = new BitrixProductViewModel
+                    if (products == null || products.Count == 0)
                     {
-                        ProductId = product.ProductId,
-                        ProductName = product.ProductName,
-                        CategoryName = product.CategoryName,
-                        Price = product.Price,
-                        HasPrice = product.HasPrice,
-                        SectionId = product.SectionId
-                    };
+                        txtStatus.Text = "Не удалось загрузить товары";
+                        return;
+                    }
 
-                    _allProducts.Add(viewModel);
+                    // Конвертируем из старого формата
+                    ConvertFromOldFormat(products);
+                }
+                else
+                {
+                    // Конвертируем из нового формата
+                    ConvertFromNewFormat(productsWithSections);
                 }
 
-                // Создаем чекбоксы для категорий
+                // Создаем чекбоксы для категорий (нижних разделов)
                 CreateCategoryFilters();
 
                 // Показываем все товары по умолчанию
@@ -115,6 +112,52 @@ namespace ManagerApp.Pages
             }
         }
 
+        // Новый метод для конвертации из формата с нижними разделами
+        private void ConvertFromNewFormat(List<ProductWithLowerSection> products)
+        {
+            _allProducts.Clear();
+
+            foreach (var product in products)
+            {
+                var viewModel = new BitrixProductViewModel
+                {
+                    ProductId = product.ProductId,
+                    ProductName = product.ProductName,
+                    // ИСПОЛЬЗУЕМ НИЖНИЙ РАЗДЕЛ КАК КАТЕГОРИЮ
+                    CategoryName = product.LowerSectionName ?? "Без категории",
+                    LowerSectionName = product.LowerSectionName,
+                    FullCategoryPath = product.CategoryPath,
+                    Price = product.Price,
+                    HasPrice = product.Price > 0,
+                    SectionId = product.LowerSectionId
+                };
+
+                _allProducts.Add(viewModel);
+            }
+        }
+
+        // Метод для конвертации из старого формата
+        private void ConvertFromOldFormat(List<ProductWithCategoryInfo> products)
+        {
+            _allProducts.Clear();
+
+            foreach (var product in products)
+            {
+                var viewModel = new BitrixProductViewModel
+                {
+                    ProductId = product.ProductId,
+                    ProductName = product.ProductName,
+                    CategoryName = product.CategoryName,
+                    LowerSectionName = product.CategoryName, // Дублируем
+                    FullCategoryPath = product.CategoryName,
+                    Price = product.Price,
+                    HasPrice = product.HasPrice,
+                    SectionId = product.SectionId
+                };
+
+                _allProducts.Add(viewModel);
+            }
+        }
         private void SelectProduct()
         {
             if (dgSearchResults.SelectedItem is BitrixProductViewModel selectedProduct)
@@ -216,6 +259,7 @@ namespace ManagerApp.Pages
                     checkBox.Tag?.ToString() != "ALL" &&
                     checkBox.IsChecked == true)
                 {
+                    // Теперь фильтруем по LowerSectionName
                     _selectedCategories.Add(checkBox.Tag.ToString());
                 }
             }
@@ -225,29 +269,30 @@ namespace ManagerApp.Pages
         {
             _currentSearchText = searchText;
 
-            // Сначала фильтруем по категориям
-            List<BitrixProductViewModel> categoryFiltered = _allProducts.ToList();
+            // Фильтруем по выбранным НИЖНИМ РАЗДЕЛАМ
+            List<BitrixProductViewModel> sectionFiltered = _allProducts.ToList();
 
             if (_selectedCategories.Count > 0)
             {
-                categoryFiltered = _allProducts
-                    .Where(product => _selectedCategories.Contains(product.CategoryName))
+                sectionFiltered = _allProducts
+                    .Where(product => _selectedCategories.Contains(product.LowerSectionName ?? ""))
                     .ToList();
             }
 
             // Затем по поисковому запросу
             if (string.IsNullOrWhiteSpace(searchText))
             {
-                _filteredProducts = categoryFiltered;
+                _filteredProducts = sectionFiltered;
             }
             else
             {
                 var searchWords = searchText.ToLower().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
 
-                _filteredProducts = categoryFiltered
+                _filteredProducts = sectionFiltered
                     .Where(product => searchWords.All(word =>
-                        product.ProductName.ToLower().Contains(word) ||
-                        product.CategoryName.ToLower().Contains(word)))
+                        (product.ProductName?.ToLower() ?? "").Contains(word) ||
+                        (product.LowerSectionName?.ToLower() ?? "").Contains(word) ||
+                        (product.FullCategoryPath?.ToLower() ?? "").Contains(word)))
                     .ToList();
             }
 
@@ -413,30 +458,32 @@ namespace ManagerApp.Pages
             if (_allProducts == null || _allProducts.Count == 0)
                 return;
 
-            // Получаем уникальные категории из загруженных товаров
-            var categories = _allProducts
-                .Where(p => !string.IsNullOrEmpty(p.CategoryName))
-                .GroupBy(p => p.CategoryName)
+            // Группируем по НИЖНИМ РАЗДЕЛАМ (LowerSectionName)
+            var lowerSections = _allProducts
+                .Where(p => !string.IsNullOrEmpty(p.LowerSectionName))
+                .GroupBy(p => p.LowerSectionName)
                 .Select(g => new
                 {
                     Name = g.Key,
-                    Count = g.Count()
+                    Count = g.Count(),
+                    // Дополнительно: полный путь для tooltip
+                    FullPath = g.FirstOrDefault()?.FullCategoryPath ?? g.Key
                 })
                 .OrderBy(c => c.Name)
                 .ToList();
 
-            if (categories.Count == 0)
+            if (lowerSections.Count == 0)
                 return;
 
-            // Кнопка "Выбрать все"
+            // Чекбокс "Все разделы"
             var selectAllCheckBox = new CheckBox
             {
-                Content = $"Все категории ({categories.Sum(c => c.Count)})",
+                Content = $"Все разделы ({lowerSections.Sum(c => c.Count)})",
                 Margin = new Thickness(0, 0, 20, 0),
                 FontSize = 11,
                 IsChecked = true,
                 Tag = "ALL",
-                ToolTip = "Выбрать все категории"
+                ToolTip = "Выбрать все нижние разделы"
             };
 
             selectAllCheckBox.Checked += CategoryCheckBox_CheckedChanged;
@@ -444,17 +491,17 @@ namespace ManagerApp.Pages
 
             spCategories.Children.Add(selectAllCheckBox);
 
-            // Создаем чекбоксы для каждой категории с количеством товаров
-            foreach (var category in categories)
+            // Чекбоксы для каждого нижнего раздела
+            foreach (var section in lowerSections)
             {
                 var checkBox = new CheckBox
                 {
-                    Content = $"{category.Name} ({category.Count})",
+                    Content = $"{section.Name} ({section.Count})",
                     Margin = new Thickness(0, 0, 20, 0),
                     FontSize = 11,
                     IsChecked = true,
-                    Tag = category.Name,
-                    ToolTip = $"{category.Name} - {category.Count} товаров"
+                    Tag = section.Name,
+                    ToolTip = section.FullPath // Показываем полный путь при наведении
                 };
 
                 checkBox.Checked += CategoryCheckBox_CheckedChanged;

@@ -1,13 +1,16 @@
 ﻿using ManagerApp.Data.GetInfo;
 using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace ManagerApp.Pages
 {
     public partial class SplashScreen : Window
     {
+        private DispatcherTimer _progressTimer;
+        private bool _isLoading = false;
+
         public SplashScreen()
         {
             InitializeComponent();
@@ -16,106 +19,211 @@ namespace ManagerApp.Pages
 
         private async Task InitializeApp()
         {
-            var steps = new[]
+            try
             {
-                ("Инициализация кеша...", 10),
-                ("Загрузка категорий...", 20),
-                ("Загрузка товаров...", 80),
-                ("Завершение...", 100)
-            };
+                _isLoading = true;
 
-            foreach (var (status, progress) in steps)
-            {
-                txtStatus.Text = status;
+                // 1. Начальная инициализация
+                UpdateStatus("Подготовка приложения...", 0);
+                await Task.Delay(500);
 
-                // Для этапа товаров НЕ вызываем SmoothProgressTo, чтобы не прыгал прогресс
-                if (!status.Contains("товаров"))
-                {
-                    await SmoothProgressTo(progress);
-                }
+                // 2. Инициализация кэша
+                UpdateStatus("Инициализация кэша данных...", 10);
+                await InitializeCacheWithProgress();
 
-                // Выполняем загрузку данных
-                if (status.Contains("кеша"))
-                {
-                    await BitrixCache.InitializeAsync();
-                }
-                else if (status.Contains("товаров"))
-                {
-                    // Загружаем товары с прогрессом в реальном времени
-                    await LoadProductsWithRealProgress();
-                }
-                else
-                {
-                    await Task.Delay(600);
-                }
+                // 3. Проверка загруженных данных
+                UpdateStatus("Проверка данных...", 95);
+                await CheckCacheData();
+
+                // 4. Завершение
+                UpdateStatus("Запуск приложения...", 100);
+                await Task.Delay(800);
+
+                // 5. Открытие основного окна
+                OpenMainWindow();
             }
-
-            var mainWindow = new HomeWindows();
-            mainWindow.Show();
-            this.Close();
+            catch (Exception ex)
+            {
+                HandleInitializationError(ex);
+            }
+            finally
+            {
+                _isLoading = false;
+            }
         }
 
-        private async Task LoadProductsWithRealProgress()
+        private async Task InitializeCacheWithProgress()
         {
             try
             {
-                // Задачи загрузки обеих категорий
-                var loadTask691 = BitrixCache.GetAllProductsSimple();
-                //var loadTask692 = BitrixCache.GetProductsByCategory(692);
-                //var loadTask685 = BitrixCache.GetProductsByCategory(685);
+                // Запускаем инициализацию кэша
+                var cacheTask = BitrixCache.InitializeAsync();
 
-                // Задача анимации прогресса
-                var progressTask = AnimateProgressDuringLoad();
+                // Запускаем анимацию прогресса
+                StartProgressAnimation(10, 80, 30000); // 30 секунд на загрузку
 
-                // Ждём, пока обе загрузки завершатся
-                await Task.WhenAll(loadTask691, progressTask);
+                // Ждем завершения инициализации кэша
+                await cacheTask;
 
-                // Устанавливаем точное значение 80%
+                // Останавливаем анимацию
+                StopProgressAnimation();
+
+                // Устанавливаем точное значение
                 progressBar.Value = 80;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Ошибка загрузки: {ex.Message}");
+                StopProgressAnimation();
+                throw new Exception($"Ошибка инициализации кэша: {ex.Message}", ex);
             }
         }
 
-
-        private async Task AnimateProgressDuringLoad()
+        private async Task CheckCacheData()
         {
-            int startProgress = 20; // Начинаем с текущего значения (20%)
-            int endProgress = 80;
-            int totalSteps = endProgress - startProgress;
-
-            // 40 секунд / 60 шагов = ~667ms на 1%
-            int delayPerPercent = 667; // 40 секунд на 60%
-
-            for (int i = 0; i <= totalSteps; i++)
+            try
             {
-                int currentProgress = startProgress + i;
-                progressBar.Value = currentProgress;
-                txtStatus.Text = $"Загрузка товаров... {currentProgress}%";
-                await Task.Delay(delayPerPercent);
+                // Проверяем, загружены ли данные
+                if (!BitrixCache.IsCacheReady())
+                {
+                    UpdateStatus("Повторная загрузка данных...", 85);
+                    await BitrixCache.RefreshCacheAsync();
+                }
+
+                // Получаем статистику
+                var stats = BitrixCache.GetCacheStats();
+                Console.WriteLine($"[SplashScreen] Статистика кэша: {stats}");
+
+                // Плавное завершение прогресса
+                await SmoothProgressTo(95, 1000);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SplashScreen] Ошибка проверки данных: {ex.Message}");
+                // Продолжаем работу даже если проверка не удалась
             }
         }
 
-        private async Task SmoothProgressTo(int targetValue)
+        private void StartProgressAnimation(int startValue, int endValue, int totalMilliseconds)
         {
-            if (progressBar.Value >= targetValue) return;
+            _progressTimer = new DispatcherTimer();
+            _progressTimer.Interval = TimeSpan.FromMilliseconds(100);
 
-            double duration = 1000;
-            double steps = 20;
-            double delay = duration / steps;
+            int steps = (endValue - startValue);
+            if (steps <= 0) return;
+
+            double increment = (double)steps / (totalMilliseconds / 100);
+            double currentValue = startValue;
+
+            _progressTimer.Tick += (s, e) =>
+            {
+                if (!_isLoading || currentValue >= endValue)
+                {
+                    StopProgressAnimation();
+                    return;
+                }
+
+                currentValue += increment;
+                if (currentValue > endValue)
+                    currentValue = endValue;
+
+                progressBar.Value = currentValue;
+                txtStatus.Text = $"Загрузка данных... {(int)currentValue}%";
+            };
+
+            _progressTimer.Start();
+        }
+
+        private void StopProgressAnimation()
+        {
+            if (_progressTimer != null)
+            {
+                _progressTimer.Stop();
+                _progressTimer = null;
+            }
+        }
+
+        private async Task SmoothProgressTo(int targetValue, int durationMilliseconds)
+        {
+            if (progressBar.Value >= targetValue)
+                return;
+
             double startValue = progressBar.Value;
+            double steps = 20;
+            double delay = durationMilliseconds / steps;
             double increment = (targetValue - startValue) / steps;
 
             for (int i = 0; i < steps; i++)
             {
+                if (!_isLoading) break;
+
                 progressBar.Value += increment;
                 await Task.Delay((int)delay);
-                await Task.Yield();
             }
 
             progressBar.Value = targetValue;
+        }
+
+        private void UpdateStatus(string status, int progress)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                txtStatus.Text = status;
+                progressBar.Value = progress;
+            });
+        }
+
+        private void OpenMainWindow()
+        {
+            Dispatcher.Invoke(() =>
+            {
+                try
+                {
+                    var mainWindow = new HomeWindows();
+                    mainWindow.Show();
+                    this.Close();
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Ошибка открытия основного окна: {ex.Message}",
+                        "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                    Application.Current.Shutdown();
+                }
+            });
+        }
+
+        private void HandleInitializationError(Exception ex)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                string errorMessage = $"Не удалось инициализировать приложение:\n\n{ex.Message}";
+
+                if (ex.InnerException != null)
+                {
+                    errorMessage += $"\n\nДополнительная информация:\n{ex.InnerException.Message}";
+                }
+
+                var result = MessageBox.Show(errorMessage + "\n\nПопробовать загрузить данные снова?",
+                    "Ошибка инициализации",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Error);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    // Пробуем снова
+                    _isLoading = false;
+                    _ = InitializeApp();
+                }
+                else
+                {
+                    Application.Current.Shutdown();
+                }
+            });
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            StopProgressAnimation();
+            base.OnClosed(e);
         }
     }
 }

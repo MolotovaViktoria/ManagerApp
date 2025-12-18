@@ -9,42 +9,79 @@
         Height="200" 
         Width="400">
     <Border Background="White" 
-            BorderBrush="#0078D4" 
-            BorderThickness="2" 
-            CornerRadius="10">
-        <Grid Margin="20">
+            CornerRadius="10" 
+            Margin="20">
+        <Grid>
             <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <TextBlock Grid.Row="0" 
-                       Text="Загрузка данных..." 
-                       FontSize="16" 
-                       FontWeight="Bold" 
-                       HorizontalAlignment="Center" 
-                       Margin="0,0,0,20"/>
+            <!-- Логотип или название -->
+            <StackPanel Grid.Row="1" 
+                        HorizontalAlignment="Center" 
+                        VerticalAlignment="Center">
+                <TextBlock Text="Менеджер товаров" 
+                           FontSize="18" 
+                           FontWeight="Bold" 
+                           Foreground="#1a73e8"
+                           HorizontalAlignment="Center"/>
 
-            <ProgressBar Grid.Row="1" 
-             Name="progressBar" 
-             Height="20" 
-             Minimum="0" 
-             Maximum="100" 
-             Value="0"
-             IsIndeterminate="False">
-                <ProgressBar.Foreground>
-                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                        <GradientStop Color="#E2542A" Offset="0"/>
-                        <GradientStop Color="#E2545A" Offset="1"/>
-                    </LinearGradientBrush>
-                </ProgressBar.Foreground>
-            </ProgressBar>
-            <TextBlock Grid.Row="2" 
-                       Name="txtStatus" 
-                       Text="Подключение к Bitrix..." 
-                       HorizontalAlignment="Center" 
-                       Margin="0,10,0,0"/>
+                <TextBlock Text="Bitrix24 Integration" 
+                           FontSize="12" 
+                           Foreground="#5f6368"
+                           Margin="0,5,0,0"
+                           HorizontalAlignment="Center"/>
+            </StackPanel>
+
+            <!-- Прогресс бар -->
+            <Border Grid.Row="2" 
+                    Margin="30,20,30,10">
+                <Grid>
+                    <ProgressBar x:Name="progressBar" 
+                                 Height="20" 
+                                 Minimum="0" 
+                                 Maximum="100"
+                                 Value="0">
+                        <ProgressBar.Style>
+                            <Style TargetType="ProgressBar">
+                                <Setter Property="Background" Value="#E0E0E0"/>
+                                <Setter Property="BorderBrush" Value="#E0E0E0"/>
+                                <Setter Property="Foreground" Value="#1a73e8"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ProgressBar">
+                                            <Grid x:Name="TemplateRoot">
+                                                <Border Background="{TemplateBinding Background}" 
+                                                        BorderBrush="{TemplateBinding BorderBrush}" 
+                                                        BorderThickness="1" 
+                                                        CornerRadius="10"/>
+                                                <Border x:Name="PART_Track" 
+                                                        Background="Transparent" 
+                                                        Margin="2"/>
+                                                <Border x:Name="PART_Indicator" 
+                                                        Background="{TemplateBinding Foreground}" 
+                                                        CornerRadius="10" 
+                                                        HorizontalAlignment="Left"/>
+                                            </Grid>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ProgressBar.Style>
+                    </ProgressBar>
+
+                    <TextBlock x:Name="txtStatus" 
+                               Text="Инициализация..." 
+                               HorizontalAlignment="Center" 
+                               VerticalAlignment="Center"
+                               FontSize="11" 
+                               Foreground="White" 
+                               FontWeight="SemiBold"/>
+                </Grid>
+            </Border>
         </Grid>
     </Border>
 </Window>

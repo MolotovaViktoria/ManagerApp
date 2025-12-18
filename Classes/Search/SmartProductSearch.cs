@@ -1,4 +1,5 @@
 ﻿using ManagerApp.Data.GetInfo;
+using ManagerApp.Data.Search;
 using ManagerApp.Data.StructureList;
 using System;
 using System.Collections.Generic;
@@ -26,51 +27,117 @@ namespace ManagerApp.Classes.Search
         }
 
         /// <summary>
+        /// Получить все товары из кэша
+        /// </summary>
+        private async Task<List<Product>> GetAllCachedProducts()
+        {
+            try
+            {
+                Console.WriteLine("[SmartProductSearch] Загрузка товаров из кэша...");
+
+                // Пробуем получить товары из кэша
+                var products = await BitrixCache.GetAllProductsSimple();
+
+                if (products == null || !products.Any())
+                {
+                    Console.WriteLine("[SmartProductSearch] Кэш пуст, пытаемся обновить...");
+
+                    // Обновляем кэш
+                    await BitrixCache.RefreshCacheAsync();
+
+                    // Пробуем снова
+                    products = await BitrixCache.GetAllProductsSimple();
+                }
+
+                if (products == null)
+                {
+                    Console.WriteLine("[SmartProductSearch] Не удалось загрузить товары");
+                    return new List<Product>();
+                }
+
+                Console.WriteLine($"[SmartProductSearch] Загружено {products.Count} товаров из кэша");
+                return products;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SmartProductSearch] Ошибка загрузки товаров: {ex.Message}");
+                return new List<Product>();
+            }
+        }
+
+        /// <summary>
         /// Умный поиск товаров с учетом различных форматов написания
         /// </summary>
         public async Task<List<SearchResult>> SmartSearch(string searchQuery, int maxResults = 10)
         {
-            await InitializeAsync();
-
-            if (string.IsNullOrWhiteSpace(searchQuery))
-                return new List<SearchResult> { new SearchResult { Score = 0, Message = "Введите поисковый запрос" } };
-
-            if (!_allProducts.Any())
-                return new List<SearchResult> { new SearchResult { Score = 0, Message = "Кеш товаров пуст" } };
-
-            // Нормализуем поисковый запрос
-            var normalizedQuery = NormalizeText(searchQuery);
-            var queryWords = Tokenize(normalizedQuery);
-
-            var results = new List<SearchResult>();
-
-            foreach (var product in _allProducts)
+            try
             {
-                if (product.Name == null) continue;
-
-                var normalizedProductName = NormalizeText(product.Name);
-                var productWords = Tokenize(normalizedProductName);
-
-                // Вычисляем несколько метрик схожести
-                var score = CalculateSimilarityScore(queryWords, productWords, normalizedQuery, normalizedProductName);
-
-                if (score > 0.1) // Пороговое значение для отсечения совсем непохожих
+                // Инициализируем, если еще не сделали
+                if (!_isCacheLoaded)
                 {
-                    results.Add(new SearchResult
-                    {
-                        Product = product,
-                        Score = score,
-                        MatchedWords = GetMatchedWords(queryWords, productWords),
-                        Message = FormatProductResult(product)
-                    });
+                    await InitializeAsync();
                 }
-            }
 
-            // Сортируем по релевантности и возвращаем топ результатов
-            return results
-                .OrderByDescending(r => r.Score)
-                .Take(maxResults)
-                .ToList();
+                if (string.IsNullOrWhiteSpace(searchQuery))
+                    return new List<SearchResult> {
+                        new SearchResult {
+                            Score = 0,
+                            Message = "Введите поисковый запрос"
+                        }
+                    };
+
+                if (_allProducts == null || !_allProducts.Any())
+                    return new List<SearchResult> {
+                        new SearchResult {
+                            Score = 0,
+                            Message = "Кэш товаров пуст"
+                        }
+                    };
+
+                // Нормализуем поисковый запрос
+                var normalizedQuery = NormalizeText(searchQuery);
+                var queryWords = Tokenize(normalizedQuery);
+
+                var results = new List<SearchResult>();
+
+                foreach (var product in _allProducts)
+                {
+                    if (product?.Name == null) continue;
+
+                    var normalizedProductName = NormalizeText(product.Name);
+                    var productWords = Tokenize(normalizedProductName);
+
+                    // Вычисляем несколько метрик схожести
+                    var score = CalculateSimilarityScore(queryWords, productWords, normalizedQuery, normalizedProductName);
+
+                    if (score > 0.1) // Пороговое значение для отсечения совсем непохожих
+                    {
+                        results.Add(new SearchResult
+                        {
+                            Product = product,
+                            Score = score,
+                            MatchedWords = GetMatchedWords(queryWords, productWords),
+                            Message = FormatProductResult(product)
+                        });
+                    }
+                }
+
+                // Сортируем по релевантности и возвращаем топ результатов
+                return results
+                    .OrderByDescending(r => r.Score)
+                    .Take(maxResults)
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SmartProductSearch] Ошибка поиска: {ex.Message}");
+                return new List<SearchResult> {
+                    new SearchResult {
+                        Score = 0,
+                        Message = $"Ошибка поиска: {ex.Message}"
+                    }
+                };
+            }
         }
 
         /// <summary>
@@ -217,82 +284,147 @@ namespace ManagerApp.Classes.Search
         /// </summary>
         public async Task<string> SearchSimple(string searchQuery)
         {
-            var results = await SmartSearch(searchQuery, 5);
-
-            // Фильтруем только валидные результаты с Product != null
-            var validResults = results.Where(r => r.Product != null).ToList();
-
-            if (!validResults.Any())
-                return $"Товары по запросу '{searchQuery}' не найдены";
-
-            var bestResult = validResults.First();
-
-            if (bestResult.Score > 0.7)
-            {
-                return $"Найден товар: {bestResult.Product.Name}\nЦена: {FormatPrice((decimal?)bestResult.Product.Price)}\n(Уверенность: {bestResult.Score:P0})";
-            }
-            else
-            {
-                var sb = new StringBuilder();
-                sb.AppendLine($"Найдено {validResults.Count} похожих товаров:");
-
-                foreach (var result in validResults.Take(3))
-                {
-                    sb.AppendLine($"• {result.Product.Name} - {FormatPrice((decimal?)result.Product.Price)} (схожесть: {result.Score:P0})");
-                }
-
-                return sb.ToString();
-            }
-        }
-        private async Task<List<Product>> GetAllCachedProducts()
-        {
             try
             {
-                // Загружаем все продукты из единого кеша
-                var products = await BitrixCache.GetAllProductsSimple();
+                var results = await SmartSearch(searchQuery, 5);
 
-                if (products == null || products.Count == 0)
+                // Фильтруем только валидные результаты с Product != null
+                var validResults = results.Where(r => r.Product != null).ToList();
+
+                if (!validResults.Any())
+                    return $"Товары по запросу '{searchQuery}' не найдены";
+
+                var bestResult = validResults.First();
+
+                if (bestResult.Score > 0.7)
                 {
-                    Console.WriteLine("Кеш продуктов пуст, пытаемся загрузить...");
-
-                    // Если кеш пустой, пробуем принудительно загрузить
-                    BitrixCache.ClearCache(); // Очищаем старый кеш
-                    products = await BitrixCache.GetAllProductsSimple();
+                    return $"Найден товар: {bestResult.Product.Name}\n" +
+                           $"Цена: {FormatPrice(bestResult.Product.Price)}\n" +
+                           $"(Уверенность: {bestResult.Score:P0})";
                 }
+                else
+                {
+                    var sb = new StringBuilder();
+                    sb.AppendLine($"Найдено {validResults.Count} похожих товаров:");
 
-                return products ?? new List<Product>();
+                    foreach (var result in validResults.Take(3))
+                    {
+                        sb.AppendLine($"• {result.Product.Name} - " +
+                                     $"{FormatPrice(result.Product.Price)} " +
+                                     $"(схожесть: {result.Score:P0})");
+                    }
+
+                    return sb.ToString();
+                }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Ошибка загрузки продуктов из кеша: {ex.Message}");
-                return new List<Product>();
+                return $"Ошибка при поиске: {ex.Message}";
             }
         }
 
+        /// <summary>
+        /// Быстрый поиск ID товара по названию
+        /// </summary>
+        public async Task<int> FindProductIdByName(string productName)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(productName))
+                    return 0;
+
+                // Сначала пробуем через BitrixCache
+                int cachedId = BitrixCache.GetProductIdByName(productName);
+                if (cachedId > 0)
+                    return cachedId;
+
+                // Если не нашли в кэше, делаем умный поиск
+                var results = await SmartSearch(productName, 1);
+                var bestResult = results.FirstOrDefault(r => r.Product != null);
+
+                if (bestResult != null && bestResult.Score > 0.5)
+                {
+                    if (int.TryParse(bestResult.Product.Id, out int productId))
+                        return productId;
+                }
+
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SmartProductSearch] Ошибка поиска ID: {ex.Message}");
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// Получить товар по ID
+        /// </summary>
+        public async Task<Product> GetProductById(int productId)
+        {
+            try
+            {
+                if (productId <= 0)
+                    return null;
+
+                // Проверяем кэш
+                if (!_isCacheLoaded)
+                {
+                    await InitializeAsync();
+                }
+
+                return _allProducts?.FirstOrDefault(p =>
+                    int.TryParse(p.Id, out int id) && id == productId);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SmartProductSearch] Ошибка получения товара по ID: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Получить все загруженные категории (для отладки)
+        /// </summary>
         private List<int> GetLoadedCategoryIds()
         {
-            return new List<int> { 691 };
+            return new List<int> { 691, 692, 685, 684, 683, 686, 687 };
         }
 
+        /// <summary>
+        /// Форматирование информации о товаре
+        /// </summary>
         private string FormatProductResult(Product product)
         {
-            return $"{product.Name} - {FormatPrice((decimal?)product.Price)}";
+            return $"{product.Name} - {FormatPrice(product.Price)}";
         }
 
+        /// <summary>
+        /// Форматирование цены
+        /// </summary>
         private string FormatPrice(decimal? price)
         {
             return price.HasValue ? $"{price.Value:N2} руб." : "Цена не указана";
         }
-    }
 
-    /// <summary>
-    /// Результат поиска с дополнительной информацией
-    /// </summary>
-    public class SearchResult
-    {
-        public Product Product { get; set; }
-        public double Score { get; set; } // 0-1, где 1 - полное совпадение
-        public List<string> MatchedWords { get; set; }
-        public string Message { get; set; }
+        /// <summary>
+        /// Очистить кэш поиска
+        /// </summary>
+        public void ClearSearchCache()
+        {
+            _allProducts = null;
+            _isCacheLoaded = false;
+        }
+
+        /// <summary>
+        /// Получить статистику поиска
+        /// </summary>
+        public string GetSearchStats()
+        {
+            if (_allProducts == null)
+                return "Кэш не загружен";
+
+            return $"Товаров в кэше: {_allProducts.Count}";
+        }
     }
 }

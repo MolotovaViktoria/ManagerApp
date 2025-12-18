@@ -21,6 +21,10 @@ namespace ManagerApp.Data.GetInfo
         /// <summary>
         /// Получает название раздела для товара из кэша
         /// </summary>
+       private static List<Category> _cachedCategories = null;
+        private static DateTime _lastCategoriesUpdate = DateTime.MinValue;
+        private static readonly TimeSpan _categoriesCacheDuration = TimeSpan.FromMinutes(30);
+        private static readonly object _categoriesLock = new object();
         private async Task<string> GetSectionNameForProductFromCache(int productId)
         {
             try
@@ -28,8 +32,22 @@ namespace ManagerApp.Data.GetInfo
                 var allProducts = await BitrixCache.GetAllProductsWithCategories();
                 var productInfo = allProducts?.FirstOrDefault(p => p.ProductId == productId.ToString());
 
-                // Просто возвращаем CategoryName - возможно это уже и есть название раздела
-                return productInfo?.CategoryName ?? string.Empty;
+                if (productInfo != null && !string.IsNullOrEmpty(productInfo.CategoryName))
+                {
+                    return productInfo.CategoryName;
+                }
+
+                // Если не нашли в кэше, получаем напрямую
+                var products = await GetProducts();
+                var product = products.FirstOrDefault(p => p.Id == productId.ToString());
+
+                if (product != null && !string.IsNullOrEmpty(product.SectionId))
+                {
+                    var categoryPath = await GetCategoryPath(product.SectionId);
+                    return categoryPath;
+                }
+
+                return string.Empty;
             }
             catch (Exception ex)
             {
@@ -275,24 +293,7 @@ namespace ManagerApp.Data.GetInfo
             }
         }
 
-        /// <summary>
-        /// Старый метод (теперь вызывает новый SmartInvoice)
-        /// </summary>
-        public async Task<int> CreateInvoiceWithProducts(
-       int clientCompanyId,
-       int myCompanyId,
-       string orderTopic,
-       List<InvoiceProduct> products)
-        {
-            // Получаем вебхук из настроек
-            string webhook = WebhookManager.Webhook;
-
-            // Просто вызываем новый метод с вебхуком из настроек
-            return await CreateSmartInvoice(webhook, clientCompanyId, myCompanyId, orderTopic, products);
-        }
-        /// <summary>
-        /// Добавляет товары в смарт-счет
-        /// </summary>
+     
         private async Task<bool> AddProductsToSmartInvoice(int invoiceId, List<InvoiceProduct> products)
         {
             Console.WriteLine($"=== ДОБАВЛЕНИЕ ТОВАРОВ В СЧЕТ #{invoiceId} ===");
@@ -442,97 +443,7 @@ namespace ManagerApp.Data.GetInfo
 
 
 
-        public async Task<Dictionary<string, int>> GetProductIdsByNames(List<string> productNames)
-        {
-            var result = new Dictionary<string, int>();
 
-            try
-            {
-                var allProducts = await GetProducts();
-
-                foreach (var productName in productNames)
-                {
-                    var searchName = productName.Trim();
-                    int productId = 0;
-
-                    // Точное совпадение (без учета регистра)
-                    var product = allProducts.FirstOrDefault(p =>
-                        !string.IsNullOrEmpty(p.Name) &&
-                        p.Name.Trim().Equals(searchName, StringComparison.OrdinalIgnoreCase));
-
-                    if (product != null)
-                    {
-                        productId = Convert.ToInt32(product.Id);
-                    }
-                    else
-                    {
-                        // Частичное совпадение (без учета регистра)
-                        product = allProducts.FirstOrDefault(p =>
-                            !string.IsNullOrEmpty(p.Name) &&
-                            searchName.IndexOf(p.Name.Trim(), StringComparison.OrdinalIgnoreCase) >= 0);
-
-                        if (product != null)
-                        {
-                            productId = Convert.ToInt32(product.Id);
-                        }
-                    }
-
-                    result[productName] = productId;
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Ошибка при пакетном поиске товаров: {ex.Message}");
-            }
-
-            return result;
-        }
-
-        /// <summary>
-        /// Улучшенный метод поиска товаров с несколькими стратегиями
-        /// </summary>
-        public async Task<(int productId, string matchedName)> FindProduct(string searchTerm)
-        {
-            if (string.IsNullOrWhiteSpace(searchTerm))
-                return (0, null);
-
-            var allProducts = await GetProducts();
-            var normalizedSearch = searchTerm.Trim();
-
-            // 1. Точное совпадение (полное)
-            var product = allProducts.FirstOrDefault(p =>
-                !string.IsNullOrEmpty(p.Name) &&
-                p.Name.Trim().Equals(normalizedSearch, StringComparison.OrdinalIgnoreCase));
-
-            if (product != null)
-                return (Convert.ToInt32(product.Id), product.Name);
-
-            // 2. Точное совпадение (без лишних пробелов и символов)
-            product = allProducts.FirstOrDefault(p =>
-                !string.IsNullOrEmpty(p.Name) &&
-                NormalizeString(p.Name).Equals(NormalizeString(normalizedSearch), StringComparison.OrdinalIgnoreCase));
-
-            if (product != null)
-                return (Convert.ToInt32(product.Id), product.Name);
-
-            // 3. Частичное совпадение (содержит)
-            product = allProducts.FirstOrDefault(p =>
-                !string.IsNullOrEmpty(p.Name) &&
-                normalizedSearch.IndexOf(p.Name.Trim(), StringComparison.OrdinalIgnoreCase) >= 0);
-
-            if (product != null)
-                return (Convert.ToInt32(product.Id), product.Name);
-
-            // 4. Частичное совпадение (содержится в)
-            product = allProducts.FirstOrDefault(p =>
-                !string.IsNullOrEmpty(p.Name) &&
-                p.Name.Trim().IndexOf(normalizedSearch, StringComparison.OrdinalIgnoreCase) >= 0);
-
-            if (product != null)
-                return (Convert.ToInt32(product.Id), product.Name);
-
-            return (0, null);
-        }
 
         /// <summary>
         /// Нормализует строку для сравнения (убирает лишние пробелы, символы)
@@ -605,37 +516,189 @@ namespace ManagerApp.Data.GetInfo
             }
         }
 
-        public async Task<List<StructureList.Category>> GetСategories()
+
+        public async Task<string> GetCategoryPath(string categoryId)
         {
-            string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.productsection.list";
-
-            // Делаем запрос
-            var response = await _httpClient.GetAsync(webhookUrl);
-
-            // Получаем ответ как текст
-            string jsonResponse = await response.Content.ReadAsStringAsync();
-
-            // Парсим JSON и берем только нужные поля
-            BitrixCategoryResponse data = JsonConvert.DeserializeObject<BitrixCategoryResponse>(jsonResponse);
-
-            List<StructureList.Category> anwer = new List<StructureList.Category>();
-
-            foreach (var item in data.Categories)
+            try
             {
-                try
-                {
-                    StructureList.Category category = new StructureList.Category();
-                    category.Name = item.Name;
-                    category.SelectionId = item.SelectionId + 1;
-                    anwer.Add(category);
-                }
-                catch
-                {
-                    // Логирование ошибки
-                }
+                if (string.IsNullOrEmpty(categoryId))
+                    return "Без категории";
+
+                var categories = await GetСategories(); // Использует кэш
+
+                // Создаем словарь для быстрого поиска
+                var categoryDict = categories.ToDictionary(c => c.SelectionId, c => c);
+
+                return BuildCategoryPath(categoryId, categoryDict);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка получения пути категории: {ex.Message}");
+                return "Неизвестная категория";
+            }
+        }
+
+        // Добавьте этот приватный метод
+        private string BuildCategoryPath(string categoryId, Dictionary<string, Category> categoryDict)
+        {
+            if (string.IsNullOrEmpty(categoryId) || !categoryDict.ContainsKey(categoryId))
+                return "Без категории";
+
+            var pathParts = new List<string>();
+            var currentId = categoryId;
+            var visited = new HashSet<string>();
+
+            while (!string.IsNullOrEmpty(currentId) && categoryDict.TryGetValue(currentId, out var category))
+            {
+                // Защита от циклических ссылок
+                if (visited.Contains(currentId))
+                    break;
+                visited.Add(currentId);
+
+                pathParts.Insert(0, category.Name);
+                currentId = category.ParentId;
+
+                if (pathParts.Count > 10) // Ограничение глубины
+                    break;
             }
 
-            return anwer;
+            return pathParts.Count > 0 ? string.Join(" → ", pathParts) : "Без категории";
+        }
+        public void ClearCategoriesCache()
+        {
+            lock (_categoriesLock)
+            {
+                _cachedCategories = null;
+                _lastCategoriesUpdate = DateTime.MinValue;
+                Console.WriteLine("[BitrixService] Кэш категорий очищен");
+            }
+        }
+
+        public async Task<List<Category>> GetСategories(bool forceRefresh = false)
+        {
+            try
+            {
+                // Проверяем кэш
+                lock (_categoriesLock)
+                {
+                    if (!forceRefresh &&
+                        _cachedCategories != null &&
+                        (DateTime.Now - _lastCategoriesUpdate) < _categoriesCacheDuration)
+                    {
+                        Console.WriteLine($"[BitrixService] Возвращаем категории из кэша: {_cachedCategories.Count} категорий");
+                        return _cachedCategories;
+                    }
+                }
+
+                Console.WriteLine("[BitrixService] Загрузка категорий из Bitrix...");
+
+                string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.productsection.list";
+
+                var categories = new List<Category>();
+                int start = 0;
+                const int pageSize = 50;
+
+                while (true)
+                {
+                    var requestData = new
+                    {
+                        order = new { NAME = "ASC" },
+                        select = new[] { "ID", "NAME", "SECTION_ID", "CODE" },
+                        start = start
+                    };
+
+                    string jsonRequest = JsonConvert.SerializeObject(requestData);
+                    var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+
+                    var response = await _httpClient.PostAsync(webhookUrl, content);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        Console.WriteLine($"[BitrixService] Ошибка HTTP при загрузке категорий: {response.StatusCode}");
+                        break;
+                    }
+
+                    string jsonResponse = await response.Content.ReadAsStringAsync();
+
+                    // Дебаг
+                    Console.WriteLine($"[BitrixService] Ответ от Bitrix (категории): {jsonResponse.Length} символов");
+
+                    // Парсим JSON - используем правильный класс
+                    var data = JsonConvert.DeserializeObject<BitrixCategoryListResponse>(jsonResponse);
+
+                    if (data?.Result == null || data.Result.Count == 0)
+                        break;
+
+                    foreach (var item in data.Result)
+                    {
+                        try
+                        {
+                            Category category = new Category
+                            {
+                                Name = item.Name ?? "Без названия",
+                                SelectionId = item.Id ?? "0",
+                                ParentId = item.SectionId,
+                                Code = item.Code
+                            };
+                            categories.Add(category);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[BitrixService] Ошибка обработки категории: {ex.Message}");
+                        }
+                    }
+
+                    // Пагинация - проверяем по next
+                    if (data.Next.HasValue && data.Next.Value > 0)
+                    {
+                        start = data.Next.Value;
+                    }
+                    else if (data.Result.Count < pageSize)
+                    {
+                        break;
+                    }
+                    else
+                    {
+                        start += pageSize;
+                    }
+
+                    // Защита от бесконечного цикла
+                    if (start > 500) // Максимум 500 категорий
+                    {
+                        Console.WriteLine("[BitrixService] Достигнут лимит выборки категорий (500)");
+                        break;
+                    }
+
+                    // Небольшая задержка для Bitrix API
+                    await Task.Delay(100);
+                }
+
+                // Сохраняем в кэш
+                lock (_categoriesLock)
+                {
+                    _cachedCategories = categories;
+                    _lastCategoriesUpdate = DateTime.Now;
+                }
+
+                Console.WriteLine($"[BitrixService] Загружено {categories.Count} категорий");
+                return categories;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[BitrixService] Ошибка в GetСategories: {ex.Message}");
+
+                // В случае ошибки возвращаем кэшированные данные, если они есть
+                lock (_categoriesLock)
+                {
+                    if (_cachedCategories != null)
+                    {
+                        Console.WriteLine($"[BitrixService] Возвращаем старые кэшированные категории: {_cachedCategories.Count}");
+                        return _cachedCategories;
+                    }
+                }
+
+                return new List<Category>();
+            }
         }
 
         public async Task<List<Product>> GetProducts()
@@ -706,113 +769,9 @@ namespace ManagerApp.Data.GetInfo
         /// Получает все товары с информацией о категории, цене, количестве и единице измерения
         /// </summary>
         /// <returns>Список товаров с расширенной информацией</returns>
-        public async Task<List<ProductWithCategoryInfo>> GetProductsWithCategoryInfo()
-        {
-            // Получаем все категории и создаем словарь для быстрого поиска по ID
-            var categories = await GetСategories();
+       
 
-            // Создаем словарь категорий с проверкой на null
-            var categoryDict = new Dictionary<string, string>();
-
-            foreach (var category in categories)
-            {
-                // Проверяем, что SelectionId не null и не пустой
-                if (category.SelectionId != null)
-                {
-                    string key = category.SelectionId.ToString(); // Преобразуем в строку
-                    if (!string.IsNullOrEmpty(key) && !categoryDict.ContainsKey(key))
-                    {
-                        categoryDict[key] = category.Name ?? "Без названия";
-                    }
-                }
-            }
-
-            // Получаем все товары
-            var allProducts = await GetProducts();
-
-            var result = new List<ProductWithCategoryInfo>();
-
-            foreach (var product in allProducts)
-            {
-                try
-                {
-                    var productInfo = new ProductWithCategoryInfo
-                    {
-                        // Название категории (ищем по SECTION_ID)
-                        CategoryName = !string.IsNullOrEmpty(product.SectionId) &&
-                                       categoryDict.ContainsKey(product.SectionId)
-                                     ? categoryDict[product.SectionId]
-                                     : "Без категории",
-
-                        // Информация о товаре
-                        ProductName = product.Name ?? "Без названия",
-
-                        // Цена (проверяем наличие)
-                        Price = product.Price.HasValue ? product.Price.Value : 0m,
-                        HasPrice = product.Price.HasValue,
-
-                        // SECTION_ID для возможной дальнейшей обработки
-                        SectionId = product.SectionId,
-
-                        // Дополнительная информация из продукта (если есть)
-                        ProductCode = product.Code,
-                        ProductId = product.Id
-                    };
-
-                    result.Add(productInfo);
-                }
-                catch (Exception ex)
-                {
-                    // Логирование ошибки обработки товара
-                    Console.WriteLine($"Ошибка обработки товара {product?.Id}: {ex.Message}");
-                }
-            }
-
-            return result;
-        }
-
-        /// <summary>
-        /// Получает товары с информацией о категории для определенной категории
-        /// </summary>
-        /// <param name="categoryId">ID категории</param>
-        /// <returns>Список товаров с информацией о категории</returns>
-        public async Task<List<ProductWithCategoryInfo>> GetProductsWithCategoryInfoByCategory(int categoryId)
-        {
-            // Получаем название категории
-            var categories = await GetСategories();
-            var categoryName = categories.FirstOrDefault(c => c.SelectionId.ToString() == categoryId.ToString())?.Name
-                               ?? "Неизвестная категория";
-
-            // Получаем товары для категории
-            var products = await GetProductsByCategory(categoryId);
-
-            var result = new List<ProductWithCategoryInfo>();
-
-            foreach (var product in products)
-            {
-                try
-                {
-                    var productInfo = new ProductWithCategoryInfo
-                    {
-                        CategoryName = categoryName,
-                        ProductName = product.Name ?? "Без названия",
-                        Price = product.Price.HasValue ? product.Price.Value : 0m,
-                        HasPrice = product.Price.HasValue,
-                        SectionId = product.SectionId,
-                        ProductCode = product.Code,
-                        ProductId = product.Id
-                    };
-
-                    result.Add(productInfo);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Ошибка обработки товара {product?.Id}: {ex.Message}");
-                }
-            }
-
-            return result;
-        }
+    
         public async Task<List<Company>> GetAllCompanies()
         {
             var allCompanies = new List<Company>();
@@ -998,64 +957,109 @@ namespace ManagerApp.Data.GetInfo
                 return 0;
             }
         }
-      
-     
 
-     
-        /// <summary>
-        /// Создает счет с товарами через правильный API
-        /// </summary>
-      
 
-        /// <summary>
-        /// Получает реквизиты компании
-        /// </summary>
-        public async Task<CompanyRequisites> GetCompanyRequisites(int companyId)
+        public async Task<List<ProductWithCategoryInfo>> GetProductsWithCategoryInfoByCategory(int categoryId)
         {
-            string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.requisite.list";
-
-            var requestData = new
-            {
-                filter = new
-                {
-                    ENTITY_TYPE_ID = 4, // 4 - компания
-                    ENTITY_ID = companyId
-                },
-                order = new
-                {
-                    DATE_CREATE = "DESC"
-                },
-                select = new[] { "ID", "NAME", "RQ_COMPANY_NAME", "RQ_INN", "RQ_KPP", "RQ_ADDR" }
-            };
-
             try
             {
-                string jsonRequest = JsonConvert.SerializeObject(requestData);
-                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+                // Используем кэшированные категории
+                var categories = await GetСategories();
+                var categoryDict = categories.ToDictionary(c => c.SelectionId, c => c);
 
-                var response = await _httpClient.PostAsync(webhookUrl, content);
-                string jsonResponse = await response.Content.ReadAsStringAsync();
+                string categoryName = categoryDict.TryGetValue(categoryId.ToString(), out var category)
+                    ? category.Name
+                    : "Неизвестная категория";
 
-                dynamic result = JsonConvert.DeserializeObject(jsonResponse);
+                // Получаем товары для категории
+                var products = await GetProductsByCategory(categoryId);
 
-                // TODO: Парсинг реквизитов
-                return new CompanyRequisites
+                var result = new List<ProductWithCategoryInfo>();
+
+                foreach (var product in products)
                 {
-                    CompanyName = result?.result?[0]?.RQ_COMPANY_NAME,
-                    INN = result?.result?[0]?.RQ_INN,
-                    KPP = result?.result?[0]?.RQ_KPP,
-                    Address = result?.result?[0]?.RQ_ADDR
-                };
+                    try
+                    {
+                        var productInfo = new ProductWithCategoryInfo
+                        {
+                            CategoryName = categoryName,
+                            ProductName = product.Name ?? "Без названия",
+                            Price = product.Price.HasValue ? product.Price.Value : 0m,
+                            HasPrice = product.Price.HasValue,
+                            SectionId = product.SectionId,
+                            ProductCode = product.Code,
+                            ProductId = product.Id
+                        };
+
+                        result.Add(productInfo);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Ошибка обработки товара {product?.Id}: {ex.Message}");
+                    }
+                }
+
+                return result;
             }
-            catch
+            catch (Exception ex)
             {
-                return null;
+                Console.WriteLine($"Ошибка в GetProductsWithCategoryInfoByCategory: {ex.Message}");
+                return new List<ProductWithCategoryInfo>();
             }
         }
+        public async Task<List<ProductWithCategoryInfo>> GetProductsWithCategoryInfo()
+        {
+            try
+            {
+                // Загружаем категории ОДИН РАЗ и создаем словарь
+                var categories = await GetСategories(); // Использует кэш
+                var categoryDict = categories.ToDictionary(c => c.SelectionId, c => c);
 
+                // Получаем товары
+                var allProducts = await GetProducts();
 
+                var result = new List<ProductWithCategoryInfo>();
 
+                foreach (var product in allProducts)
+                {
+                    try
+                    {
+                        string categoryPath = "Без категории";
 
+                        if (!string.IsNullOrEmpty(product.SectionId) &&
+                            categoryDict.TryGetValue(product.SectionId, out var category))
+                        {
+                            // Строим путь ЛОКАЛЬНО, без вызова GetCategoryPath
+                            categoryPath = BuildCategoryPath(category.SelectionId, categoryDict);
+                        }
+
+                        var productInfo = new ProductWithCategoryInfo
+                        {
+                            CategoryName = categoryPath,
+                            ProductName = product.Name ?? "Без названия",
+                            Price = product.Price.HasValue ? product.Price.Value : 0m,
+                            HasPrice = product.Price.HasValue,
+                            SectionId = product.SectionId,
+                            ProductCode = product.Code,
+                            ProductId = product.Id
+                        };
+
+                        result.Add(productInfo);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Ошибка обработки товара {product?.Id}: {ex.Message}");
+                    }
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка в GetProductsWithCategoryInfo: {ex.Message}");
+                return new List<ProductWithCategoryInfo>();
+            }
+        }
 
         public class InvoiceProduct
         {
@@ -1078,124 +1082,11 @@ namespace ManagerApp.Data.GetInfo
         /// <summary>
         /// Создает компанию с расширенными полями (все поля необязательные, кроме названия)
         /// </summary>
-        public async Task<int> CreateCompanyExtended(
-            string title,
-            string phone = null,
-            string address = null,
-            string companyType = null,
-            string industry = null,
-            string employees = null,
-            string currencyId = null,
-            decimal? revenue = null,
-            bool isOpened = true,
-            int? assignedById = null,
-            bool registerEvent = true)
-        {
-            if (string.IsNullOrWhiteSpace(title))
-            {
-                throw new ArgumentException("Название компании обязательно");
-            }
-
-            string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.company.add";
-
-            // Основные поля
-            var fields = new Dictionary<string, object>
-            {
-                ["TITLE"] = title.Trim()
-            };
-
-            // Телефон
-            if (!string.IsNullOrWhiteSpace(phone))
-            {
-                fields["PHONE"] = new[]
-                {
-                    new { VALUE = phone.Trim(), VALUE_TYPE = "WORK" }
-                };
-            }
-
-            // Адрес
-            if (!string.IsNullOrWhiteSpace(address))
-            {
-                fields["ADDRESS"] = address.Trim();
-            }
-
-            // Дополнительные поля (если указаны)
-            if (!string.IsNullOrWhiteSpace(companyType))
-                fields["COMPANY_TYPE"] = companyType;
-
-            if (!string.IsNullOrWhiteSpace(industry))
-                fields["INDUSTRY"] = industry;
-
-            if (!string.IsNullOrWhiteSpace(employees))
-                fields["EMPLOYEES"] = employees;
-
-            if (!string.IsNullOrWhiteSpace(currencyId))
-                fields["CURRENCY_ID"] = currencyId;
-
-            if (revenue.HasValue)
-                fields["REVENUE"] = revenue.Value;
-
-            fields["OPENED"] = isOpened ? "Y" : "N";
-
-            if (assignedById.HasValue)
-                fields["ASSIGNED_BY_ID"] = assignedById.Value;
-
-            var requestData = new
-            {
-                fields = fields,
-                @params = new
-                {
-                    REGISTER_SONET_EVENT = registerEvent ? "Y" : "N"
-                }
-            };
-
-            try
-            {
-                string jsonRequest = JsonConvert.SerializeObject(requestData);
-                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
-
-                var response = await _httpClient.PostAsync(webhookUrl, content);
-                string jsonResponse = await response.Content.ReadAsStringAsync();
-
-                var result = JsonConvert.DeserializeObject<BitrixAddResponse>(jsonResponse);
-
-                if (!string.IsNullOrEmpty(result?.Error))
-                {
-                    Console.WriteLine($"Ошибка создания компании: {result.Error}");
-                    return 0;
-                }
-
-                return result?.Result ?? 0;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Исключение при создании компании: {ex.Message}");
-                return 0;
-            }
-        }
-
+     
         /// <summary>
         /// Пытается создать компанию, если не существует компаний с таким названием
         /// </summary>
-        public async Task<int> CreateCompanyIfNotExists(string title, string phone = null, string address = null)
-        {
-            // Получаем все компании для проверки дубликатов
-            var companies = await GetAllCompanies();
-
-            // Проверяем, существует ли компания с таким названием
-            var exists = companies.Any(c =>
-                c.Title?.Equals(title, StringComparison.OrdinalIgnoreCase) ?? false);
-
-            if (exists)
-            {
-                Console.WriteLine($"Компания '{title}' уже существует");
-                return -1; // Специальный код для существующей компании
-            }
-
-            // Создаем новую компанию
-            return await CreateCompany(title, phone, address);
-        }
-
+     
         // Вспомогательный класс для десериализации ответа от метода add
         public class BitrixAddResponse
         {
@@ -1255,6 +1146,36 @@ namespace ManagerApp.Data.GetInfo
         public int AssignedById { get; set; }
         public DateTime CreatedTime { get; set; }
         public string IsMyCompany { get; set; }
+    }
+
+    public class BitrixCategoryListResponse
+    {
+        [JsonProperty("result")]
+        public List<CategoryItem> Result { get; set; }
+
+        [JsonProperty("total")]
+        public int Total { get; set; }
+
+        [JsonProperty("next")]
+        public int? Next { get; set; }
+    }
+
+    public class CategoryItem
+    {
+        [JsonProperty("ID")]
+        public string Id { get; set; }
+
+        [JsonProperty("NAME")]
+        public string Name { get; set; }
+
+        [JsonProperty("SECTION_ID")]
+        public string SectionId { get; set; }
+
+        [JsonProperty("CODE")]
+        public string Code { get; set; }
+
+        [JsonProperty("XML_ID")]
+        public string XmlId { get; set; }
     }
 }
 

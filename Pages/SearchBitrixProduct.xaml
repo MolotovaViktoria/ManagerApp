@@ -210,6 +210,9 @@
                             <DataGridTextColumn Header="Категория" 
                                                 Binding="{Binding CategoryName}"
                                                 Width="150"/>
+                            <DataGridTextColumn Header="Нижний раздел" 
+                        Binding="{Binding LowerSectionName}"
+                        Width="150"/>
                             <DataGridTextColumn Header="Цена" 
                                                 Binding="{Binding Price, StringFormat=\{0:##0.00\} ₽}"
                                                 Width="120">

@@ -13,6 +13,8 @@ namespace ManagerApp.Data.ScharedData
         private string _productId;
         private string _productName;
         private string _categoryName;
+        private string _lowerSectionName;
+        private string _fullCategoryPath;
         private decimal _price;
         private bool _hasPrice;
         private string _sectionId;
@@ -56,6 +58,34 @@ namespace ManagerApp.Data.ScharedData
             }
         }
 
+        // НОВОЕ ПОЛЕ: Нижний раздел (непосредственный раздел товара)
+        public string LowerSectionName
+        {
+            get => _lowerSectionName;
+            set
+            {
+                if (_lowerSectionName != value)
+                {
+                    _lowerSectionName = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        // НОВОЕ ПОЛЕ: Полный путь категории (например: "ЭЛЕКТРОТОВАРЫ → Розетки")
+        public string FullCategoryPath
+        {
+            get => _fullCategoryPath;
+            set
+            {
+                if (_fullCategoryPath != value)
+                {
+                    _fullCategoryPath = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         public decimal Price
         {
             get => _price;
@@ -94,6 +124,14 @@ namespace ManagerApp.Data.ScharedData
                 }
             }
         }
+
+        // Свойство для отображения (можно использовать в XAML)
+        public string DisplayCategory =>
+            !string.IsNullOrEmpty(LowerSectionName) ? LowerSectionName : CategoryName;
+
+        // Свойство для отображения полной информации о категории
+        public string CategoryTooltip =>
+            !string.IsNullOrEmpty(FullCategoryPath) ? FullCategoryPath : CategoryName;
 
         // Для сравнения товаров по ID
         public bool Equals(BitrixProductViewModel other)
