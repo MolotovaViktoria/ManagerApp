@@ -43,325 +43,204 @@ namespace ManagerApp.Data.Search
             return products;
         }
 
-        // УЛУЧШЕННЫЙ ПОИСК ПОХОЖИХ ТОВАРОВ
+        // ОСНОВНОЙ МЕТОД ПОИСКА - МАКСИМАЛЬНО ПРОСТОЙ
         public async Task<List<ProductWithCategoryInfo>> FindSimilarProductsAsync(
             string searchQuery,
-            int maxResults = 10,
-            double minSimilarityThreshold = 0.3)
+            int maxResults = 5)
         {
             if (string.IsNullOrWhiteSpace(searchQuery))
                 return new List<ProductWithCategoryInfo>();
 
             try
             {
-                // Получаем все товары из кеша
+                // Получаем все товары
                 var allProducts = await GetAllProductsAsync();
 
-                // Отладочный вывод
-                Console.WriteLine($"🔍 Поиск: '{searchQuery}'");
-                Console.WriteLine($"Всего товаров в кеше: {allProducts?.Count ?? 0}");
-
                 if (allProducts == null || !allProducts.Any())
-                {
-                    Console.WriteLine("⚠️ Кеш пустой!");
                     return new List<ProductWithCategoryInfo>();
-                }
 
-                // Нормализуем поисковый запрос
-                var normalizedQuery = searchQuery.Trim().ToLower();
+                var query = searchQuery.Trim().ToLower();
+                Console.WriteLine($"🔍 Поиск: '{query}'");
 
-                // РАЗДЕЛЯЕМ ПОИСК НА ЭТАПЫ:
+                // Разбиваем запрос на важные части
+                var searchParts = ExtractSearchParts(query);
 
-                // 1. БЫСТРЫЙ ПОИСК ТОЧНЫХ СОВПАДЕНИЙ
-                var stage1Results = new List<ProductWithCategoryInfo>();
-                Console.WriteLine($"Этап 1: Точный поиск...");
+                if (!searchParts.Any())
+                    return new List<ProductWithCategoryInfo>();
 
-                // Точное совпадение названия
+                Console.WriteLine($"Поисковые части: [{string.Join(", ", searchParts)}]");
+
+                // 1. Ищем товары по разным стратегиям
+                var allMatches = new HashSet<ProductWithCategoryInfo>();
+
+                // Стратегия 1: Точное совпадение
                 var exactMatches = allProducts
-                    .Where(p => p.ProductName?.ToLower() == normalizedQuery)
-                    .ToList();
+                    .Where(p => p.ProductName?.ToLower().Contains(query) == true)
+                    .Take(10);
+                AddToSet(allMatches, exactMatches);
 
-                if (exactMatches.Any())
+                // Если нашли точные совпадения - возвращаем их
+                if (allMatches.Count >= 3)
                 {
-                    Console.WriteLine($"✅ Найдено точных совпадений: {exactMatches.Count}");
-                    stage1Results.AddRange(exactMatches);
+                    return allMatches.Take(maxResults).ToList();
                 }
 
-                // Частичное совпадение названия (содержит запрос)
-                var containsMatches = allProducts
-                    .Where(p => p.ProductName?.ToLower().Contains(normalizedQuery) == true)
-                    .Where(p => !exactMatches.Contains(p)) // Не дублируем точные совпадения
-                    .ToList();
-
-                if (containsMatches.Any())
+                // Стратегия 2: По всем частям запроса
+                foreach (var product in allProducts)
                 {
-                    Console.WriteLine($"✅ Найдено частичных совпадений: {containsMatches.Count}");
-                    stage1Results.AddRange(containsMatches);
-                }
+                    var productName = product.ProductName?.ToLower() ?? "";
+                    var categoryName = product.CategoryName?.ToLower() ?? "";
+                    var fullText = productName + " " + categoryName;
 
-                // 2. УМНЫЙ ПОИСК ПО СЛОВАМ (если результатов мало)
-                var stage2Results = new List<ProductWithCategoryInfo>();
-                if (stage1Results.Count < maxResults)
-                {
-                    Console.WriteLine($"Этап 2: Умный поиск по словам...");
-
-                    // Разбиваем запрос на значимые слова
-                    var searchWords = ExtractSignificantWords(normalizedQuery);
-
-                    if (searchWords.Any())
+                    // Считаем совпадения
+                    int matchCount = 0;
+                    foreach (var part in searchParts)
                     {
-                        // Поиск по каждому слову
-                        foreach (var word in searchWords)
+                        if (fullText.Contains(part))
                         {
-                            var wordMatches = allProducts
-                                .Where(p => ContainsWord(p.ProductName?.ToLower(), word) ||
-                                           ContainsWord(p.CategoryName?.ToLower(), word))
-                                .Where(p => !stage1Results.Contains(p) && !stage2Results.Contains(p))
-                                .Take(maxResults - (stage1Results.Count + stage2Results.Count))
-                                .ToList();
+                            matchCount++;
+                        }
+                    }
 
-                            if (wordMatches.Any())
-                            {
-                                stage2Results.AddRange(wordMatches);
-                            }
+                    // Если нашли хотя бы 50% частей
+                    if (matchCount >= (searchParts.Count / 2) + 1)
+                    {
+                        allMatches.Add(product);
+                        if (allMatches.Count >= maxResults * 3)
+                            break;
+                    }
+                }
 
-                            // Если набрали достаточно результатов, выходим
-                            if (stage1Results.Count + stage2Results.Count >= maxResults)
+                // Стратегия 3: По первым двум частям (самые важные)
+                if (allMatches.Count < maxResults && searchParts.Count >= 2)
+                {
+                    var firstTwoParts = searchParts.Take(2).ToList();
+
+                    foreach (var product in allProducts.Where(p => !allMatches.Contains(p)))
+                    {
+                        var productName = product.ProductName?.ToLower() ?? "";
+
+                        bool hasFirst = firstTwoParts.Count > 0 && productName.Contains(firstTwoParts[0]);
+                        bool hasSecond = firstTwoParts.Count > 1 && productName.Contains(firstTwoParts[1]);
+
+                        if (hasFirst && hasSecond)
+                        {
+                            allMatches.Add(product);
+                            if (allMatches.Count >= maxResults * 3)
                                 break;
                         }
                     }
                 }
 
-                // 3. ПОИСК ПО СХОДСТВУ (если все еще мало результатов)
-                var stage3Results = new List<ProductWithCategoryInfo>();
-                if (stage1Results.Count + stage2Results.Count < maxResults)
+                // Стратегия 4: По числам (размеры, диаметры и т.д.)
+                if (allMatches.Count < maxResults)
                 {
-                    Console.WriteLine($"Этап 3: Поиск по сходству...");
-
-                    // Используем улучшенный алгоритм сходства
-                    var scoredProducts = new List<(ProductWithCategoryInfo Product, double Score)>();
-
-                    foreach (var product in allProducts)
+                    var numbersInQuery = ExtractNumbers(query);
+                    if (numbersInQuery.Any())
                     {
-                        // Пропускаем уже найденные товары
-                        if (stage1Results.Contains(product) || stage2Results.Contains(product))
-                            continue;
-
-                        double similarity = CalculateEnhancedSimilarity(normalizedQuery, product);
-
-                        if (similarity >= minSimilarityThreshold)
+                        foreach (var product in allProducts.Where(p => !allMatches.Contains(p)))
                         {
-                            scoredProducts.Add((product, similarity));
+                            var productName = product.ProductName?.ToLower() ?? "";
+                            var numbersInProduct = ExtractNumbers(productName);
+
+                            // Если есть совпадение чисел
+                            if (numbersInQuery.Any(q => numbersInProduct.Contains(q)))
+                            {
+                                allMatches.Add(product);
+                                if (allMatches.Count >= maxResults * 3)
+                                    break;
+                            }
                         }
-
-
                     }
-
-                    // Сортируем по сходству и берем лучшие
-                    stage3Results = scoredProducts
-                        .OrderByDescending(x => x.Score)
-                        .Select(x => x.Product)
-                        .Take(maxResults - (stage1Results.Count + stage2Results.Count))
-                        .ToList();
                 }
 
-                // ОБЪЕДИНЯЕМ ВСЕ РЕЗУЛЬТАТЫ
-                var allResults = new List<ProductWithCategoryInfo>();
-                allResults.AddRange(stage1Results);
-                allResults.AddRange(stage2Results);
-                allResults.AddRange(stage3Results);
-
-                // Убираем дубликаты (на всякий случай)
-                allResults = allResults
-                    .GroupBy(p => p.ProductId)
-                    .Select(g => g.First())
-                    .Take(maxResults)
+                // 2. СОРТИРУЕМ И ВОЗВРАЩАЕМ
+                var sortedResults = allMatches
+                    .OrderByDescending(p => CalculateRelevance(p, searchParts)) // Сначала самые релевантные
+                    .ThenByDescending(p => p.HasPrice) // С ценами выше
+                    .ThenBy(p => p.ProductName?.Length ?? int.MaxValue) // Короткие названия выше
+                    .Take(maxResults) // Только потом обрезаем
                     .ToList();
 
-                Console.WriteLine($"✅ ИТОГО найдено: {allResults.Count} товаров");
-                Console.WriteLine($"   Этап 1: {stage1Results.Count}, Этап 2: {stage2Results.Count}, Этап 3: {stage3Results.Count}");
+                Console.WriteLine($"✅ Найдено: {sortedResults.Count} товаров");
 
-                if (allResults.Any())
+                if (sortedResults.Any())
                 {
-                    Console.WriteLine("Примеры найденных товаров:");
-                    foreach (var product in allResults.Take(3))
+                    Console.WriteLine("Лучшие результаты:");
+                    for (int i = 0; i < Math.Min(3, sortedResults.Count); i++)
                     {
-                        Console.WriteLine($"   - {product.ProductName}");
+                        Console.WriteLine($"  {i + 1}. {sortedResults[i].ProductName}");
                     }
                 }
 
-                return allResults;
+                return sortedResults;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"❌ Ошибка поиска товаров: {ex.Message}");
+                Console.WriteLine($"❌ Ошибка: {ex.Message}");
                 return new List<ProductWithCategoryInfo>();
             }
         }
 
-        // УЛУЧШЕННЫЙ АЛГОРИТМ РАСЧЕТА СХОДСТВА
-        private double CalculateEnhancedSimilarity(string searchQuery, ProductWithCategoryInfo product)
+        // Извлечение значимых частей из запроса
+        private List<string> ExtractSearchParts(string query)
         {
-            if (string.IsNullOrWhiteSpace(searchQuery) || product == null)
-                return 0;
-
-            var productName = product.ProductName?.ToLower() ?? "";
-            var categoryName = product.CategoryName?.ToLower() ?? "";
-
-            // 1. ПРЯМОЕ СОВПАДЕНИЕ (самый высокий вес)
-            if (productName.Contains(searchQuery))
-                return 1.0;
-
-            // 2. РАЗБИВАЕМ НА СЛОВА
-            var queryWords = ExtractSignificantWords(searchQuery);
-            var productWords = ExtractSignificantWords(productName);
-            var categoryWords = ExtractSignificantWords(categoryName);
-
-            if (!queryWords.Any())
-                return 0;
-
-            // 3. СОВПАДЕНИЕ СЛОВ В НАЗВАНИИ
-            double nameWordMatch = CalculateWordMatchScore(queryWords, productWords);
-
-            // 4. СОВПАДЕНИЕ СЛОВ В КАТЕГОРИИ
-            double categoryWordMatch = CalculateWordMatchScore(queryWords, categoryWords);
-
-            // 5. СОВПАДЕНИЕ ПО НАЧАЛУ СЛОВ
-            double prefixMatch = CalculatePrefixMatchScore(queryWords, productWords);
-
-            // 6. УЧЕТ ЦИФРОВЫХ КОМПОНЕНТОВ (для размеров, диаметров и т.д.)
-            double numberMatch = CalculateNumberMatchScore(searchQuery, productName);
-
-            // 7. УЧЕТ СОКРАЩЕНИЙ И АББРЕВИАТУР
-            double abbreviationMatch = CalculateAbbreviationMatchScore(searchQuery, productName);
-
-            // ВЗВЕШЕННАЯ СУММА ВСЕХ МЕТРИК
-            double totalScore =
-                nameWordMatch * 0.4 +           // 40% за совпадение слов в названии
-                categoryWordMatch * 0.2 +       // 20% за совпадение в категории
-                prefixMatch * 0.15 +            // 15% за совпадение начала слов
-                numberMatch * 0.15 +            // 15% за совпадение чисел
-                abbreviationMatch * 0.1;        // 10% за совпадение сокращений
-
-            // БОНУСЫ:
-            if (product.HasPrice) totalScore += 0.05;        // +5% за наличие цены
-            if (!string.IsNullOrEmpty(categoryName)) totalScore += 0.03; // +3% за наличие категории
-
-            return Math.Min(totalScore, 1.0);
-        }
-
-        // УЛУЧШЕННЫЕ ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ:
-
-        // Извлечение значимых слов (игнорирует стоп-слова)
-        private List<string> ExtractSignificantWords(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text))
+            if (string.IsNullOrWhiteSpace(query))
                 return new List<string>();
 
-            // Список стоп-слов (короткие и неинформативные слова)
-            var stopWords = new HashSet<string>
+            // Просто разбиваем по всем разделителям
+            var parts = query.Split(new[] { ' ', ',', '.', '-', '_', '/', '\\', '(', ')', '[', ']' },
+                                 StringSplitOptions.RemoveEmptyEntries)
+                           .Select(p => p.Trim().ToLower())
+                           .Where(p => p.Length >= 2) // Не берем слишком короткие
+                           .ToList();
+
+            // Фильтруем совсем общие слова
+            var commonWords = new HashSet<string>
             {
-                "и", "в", "на", "с", "по", "для", "из", "от", "до", "за",
-                "а", "но", "или", "то", "же", "бы", "ли", "как", "что",
-                "мм", "см", "м", "кг", "г", "л", "шт", "уп", "набор"
+                "и", "в", "на", "с", "по", "для", "из", "от", "до",
+                "шт", "уп", "комплект", "набор", "метров", "штук"
             };
 
-            // Разбиваем на слова, фильтруем стоп-слова и короткие слова
-            return text.Split(new[] { ' ', '-', '_', ',', '.', '(', ')', '[', ']', '/' },
-                           StringSplitOptions.RemoveEmptyEntries)
-                      .Where(word => word.Length > 2) // Игнорируем слова короче 3 символов
-                      .Where(word => !stopWords.Contains(word.ToLower()))
-                      .Select(word => word.ToLower())
-                      .ToList();
+            return parts.Where(p => !commonWords.Contains(p)).ToList();
         }
 
-        // Проверка содержит ли строка слово (с учетом разделителей)
-        private bool ContainsWord(string text, string word)
+        // Простой расчет релевантности
+        private int CalculateRelevance(ProductWithCategoryInfo product, List<string> searchParts)
         {
-            if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(word))
-                return false;
+            var productName = product.ProductName?.ToLower() ?? "";
+            var categoryName = product.CategoryName?.ToLower() ?? "";
+            var fullText = productName + " " + categoryName;
 
-            // Ищем слово целиком, учитывая разделители
-            var separators = new[] { ' ', '-', '_', ',', '.', '(', ')', '[', ']', '/' };
+            int relevance = 0;
 
-            // Разбиваем текст на слова
-            var words = text.Split(separators, StringSplitOptions.RemoveEmptyEntries)
-                          .Select(w => w.ToLower())
-                          .ToList();
-
-            return words.Contains(word) || words.Any(w => w.Contains(word));
-        }
-
-        // Расчет совпадения слов
-        private double CalculateWordMatchScore(List<string> queryWords, List<string> targetWords)
-        {
-            if (!queryWords.Any() || !targetWords.Any())
-                return 0;
-
-            double matchCount = 0;
-            foreach (var queryWord in queryWords)
+            // 1. За каждую совпавшую часть +10 баллов
+            foreach (var part in searchParts)
             {
-                // Ищем точное совпадение слова
-                if (targetWords.Contains(queryWord))
-                {
-                    matchCount++;
-                }
-                else
-                {
-                    // Ищем частичное совпадение (слово содержится в другом слове)
-                    if (targetWords.Any(tw => tw.Contains(queryWord) || queryWord.Contains(tw)))
-                    {
-                        matchCount += 0.5; // Половина балла за частичное совпадение
-                    }
-                }
+                if (productName.Contains(part)) relevance += 10;
+                else if (categoryName.Contains(part)) relevance += 5;
             }
 
-            return (double)matchCount / queryWords.Count;
-        }
+            // 2. Бонус за совпадение всех частей
+            bool hasAllParts = searchParts.All(p => fullText.Contains(p));
+            if (hasAllParts) relevance += 30;
 
-        // Расчет совпадения по началу слов
-        private double CalculatePrefixMatchScore(List<string> queryWords, List<string> targetWords)
-        {
-            if (!queryWords.Any() || !targetWords.Any())
-                return 0;
-
-            int prefixMatchCount = 0;
-            foreach (var queryWord in queryWords)
+            // 3. Бонус за совпадение первых двух частей
+            if (searchParts.Count >= 2)
             {
-                // Ищем слова, начинающиеся с запроса или наоборот
-                if (targetWords.Any(tw => tw.StartsWith(queryWord) || queryWord.StartsWith(tw)))
-                {
-                    prefixMatchCount++;
-                }
+                bool hasFirst = productName.Contains(searchParts[0]);
+                bool hasSecond = productName.Contains(searchParts[1]);
+
+                if (hasFirst && hasSecond) relevance += 20;
+                else if (hasFirst) relevance += 10;
+                else if (hasSecond) relevance += 10;
             }
 
-            return (double)prefixMatchCount / queryWords.Count;
-        }
+            // 4. Бонусы
+            if (product.HasPrice) relevance += 5;
+            if (productName.Length < 60) relevance += 3; // Короткие названия лучше
 
-        // Расчет совпадения чисел (для размеров, диаметров и т.д.)
-        private double CalculateNumberMatchScore(string query, string productName)
-        {
-            // Извлекаем все числа из запроса
-            var queryNumbers = ExtractNumbers(query);
-            if (!queryNumbers.Any())
-                return 0;
-
-            // Извлекаем все числа из названия товара
-            var productNumbers = ExtractNumbers(productName);
-            if (!productNumbers.Any())
-                return 0;
-
-            // Проверяем совпадение чисел
-            int matchCount = 0;
-            foreach (var queryNumber in queryNumbers)
-            {
-                if (productNumbers.Contains(queryNumber))
-                {
-                    matchCount++;
-                }
-            }
-
-            return (double)matchCount / queryNumbers.Count;
+            return relevance;
         }
 
         // Извлечение чисел из строки
@@ -375,7 +254,7 @@ namespace ManagerApp.Data.Search
 
             foreach (char c in text)
             {
-                if (char.IsDigit(c) || c == '.' || c == ',')
+                if (char.IsDigit(c))
                 {
                     currentNumber.Append(c);
                 }
@@ -386,6 +265,7 @@ namespace ManagerApp.Data.Search
                 }
             }
 
+            // Последнее число
             if (currentNumber.Length > 0)
             {
                 numbers.Add(currentNumber.ToString());
@@ -394,46 +274,54 @@ namespace ManagerApp.Data.Search
             return numbers;
         }
 
-        // Расчет совпадения сокращений (например: "ВВГ" -> "кабель ВВГ")
-        private double CalculateAbbreviationMatchScore(string query, string productName)
+        // Добавление в множество с проверкой дубликатов
+        private void AddToSet(HashSet<ProductWithCategoryInfo> set, IEnumerable<ProductWithCategoryInfo> items)
         {
-            // Извлекаем возможные аббревиатуры из запроса (слова из заглавных букв)
-            var queryAbbreviations = ExtractAbbreviations(query);
-            if (!queryAbbreviations.Any())
-                return 0;
-
-            // Извлекаем аббревиатуры из названия товара
-            var productAbbreviations = ExtractAbbreviations(productName);
-            if (!productAbbreviations.Any())
-                return 0;
-
-            // Проверяем совпадение аббревиатур
-            int matchCount = 0;
-            foreach (var abbr in queryAbbreviations)
+            foreach (var item in items)
             {
-                if (productAbbreviations.Contains(abbr))
-                {
-                    matchCount++;
-                }
+                set.Add(item);
             }
-
-            return (double)matchCount / queryAbbreviations.Count;
         }
 
-        // Извлечение аббревиатур (слов из заглавных букв)
-        private List<string> ExtractAbbreviations(string text)
+        // БЫСТРЫЙ ПОИСК ДЛЯ КОМБОБОКСОВ
+        public async Task<List<ProductWithCategoryInfo>> QuickSearchAsync(string searchQuery, int maxResults = 5)
         {
-            if (string.IsNullOrWhiteSpace(text))
-                return new List<string>();
+            try
+            {
+                var allProducts = await GetAllProductsAsync();
 
-            return text.Split(new[] { ' ', '-', '_', ',', '.', '(', ')', '[', ']', '/' },
-                           StringSplitOptions.RemoveEmptyEntries)
-                      .Where(word => word.Length >= 2 && word.All(c => char.IsUpper(c) || char.IsDigit(c)))
-                      .Select(word => word.ToUpper())
-                      .ToList();
+                if (allProducts == null || !allProducts.Any())
+                    return new List<ProductWithCategoryInfo>();
+
+                var query = searchQuery.Trim().ToLower();
+
+                // Простой поиск по вхождению слов
+                var words = ExtractSearchParts(query);
+
+                if (!words.Any())
+                    return new List<ProductWithCategoryInfo>();
+
+                var results = allProducts
+                    .Where(p =>
+                    {
+                        var name = p.ProductName?.ToLower() ?? "";
+                        return words.Any(w => name.Contains(w));
+                    })
+                    .OrderByDescending(p => p.HasPrice)
+                    .ThenBy(p => p.ProductName?.Length ?? int.MaxValue)
+                    .Take(maxResults)
+                    .ToList();
+
+                return results;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка быстрого поиска: {ex.Message}");
+                return new List<ProductWithCategoryInfo>();
+            }
         }
 
-        // Остальные методы остаются без изменений:
+        // Остальные методы остаются без изменений
         public async Task<string> SearchProductAsync(string productName)
         {
             try
@@ -447,47 +335,19 @@ namespace ManagerApp.Data.Search
                     return FormatProductResult(exactMatch);
                 }
 
-                var partialMatches = allProducts
-                    .Where(p => p.ProductName.IndexOf(productName, StringComparison.OrdinalIgnoreCase) >= 0)
-                    .Take(5)
-                    .ToList();
-
-                if (partialMatches.Any())
-                {
-                    return FormatMultipleProductsResult(partialMatches);
-                }
-
-                return $"❌ Товар не найден в системе: {productName}";
+                return $"❌ Товар не найден: {productName}";
             }
             catch (Exception ex)
             {
-                return $"❌ Ошибка поиска: {ex.Message}";
+                return $"❌ Ошибка: {ex.Message}";
             }
         }
-
-        // ... остальные методы остаются без изменений ...
 
         private string FormatProductResult(ProductWithCategoryInfo product)
         {
-            var sb = new StringBuilder();
-            sb.AppendLine($"✅ НАЙДЕНО: {product.ProductName}");
-            sb.AppendLine($"   Категория: {product.CategoryName}");
-            sb.AppendLine($"   Цена: {(product.HasPrice ? product.Price.ToString() + " руб." : "Нет цены")}");
-            sb.AppendLine($"   ID товара: {product.ProductId}");
-            sb.AppendLine($"   ID категории: {product.SectionId}");
-            return sb.ToString();
-        }
-
-        private string FormatMultipleProductsResult(List<ProductWithCategoryInfo> products)
-        {
-            var sb = new StringBuilder();
-            sb.AppendLine($"🔍 Найдено {products.Count} похожих товаров:");
-            foreach (var product in products)
-            {
-                sb.AppendLine($"   • {product.ProductName}");
-                sb.AppendLine($"     Категория: {product.CategoryName}");
-            }
-            return sb.ToString();
+            return $"✅ НАЙДЕНО: {product.ProductName}\n" +
+                   $"   Категория: {product.CategoryName}\n" +
+                   $"   Цена: {(product.HasPrice ? product.Price.ToString() + " руб." : "Нет цены")}";
         }
 
         public void ClearCache()

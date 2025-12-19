@@ -346,29 +346,22 @@ namespace ManagerApp.Pages
 
 
         // Асинхронный поиск товаров для комбобокса
-        // Асинхронный поиск товаров для комбобокса
         private async Task SearchProductsForComboBox(ProductItemViewModel item, string searchText)
         {
             try
             {
-                Console.WriteLine($"=== ПОИСК ДЛЯ: '{searchText}' ===");
+                Console.WriteLine($"=== ПОИСК ДЛЯ КОМБОБОКСА: '{searchText}' ===");
 
-                // Ищем похожие товары в Bitrix
-                var similarProducts = await _productMatcher.FindSimilarProductsAsync(
-                    searchText,
-                    maxResults: 10,
-                    minSimilarityThreshold: 0.5);
+                // Используем основной метод поиска
+                var similarProducts = await _productMatcher.FindSimilarProductsAsync(searchText, maxResults: 5);
 
-                Console.WriteLine($"Получено товаров: {similarProducts.Count}");
+                Console.WriteLine($"Найдено: {similarProducts.Count} товаров");
 
-                // Очищаем текущий список
+                // Очищаем и добавляем
                 item.BitrixProducts.Clear();
 
-                // Добавляем найденные товары
                 foreach (var product in similarProducts)
                 {
-                    Console.WriteLine($"Добавляем товар: {product.ProductName}");
-
                     item.BitrixProducts.Add(new BitrixProductViewModel
                     {
                         ProductId = product.ProductId,
@@ -380,32 +373,21 @@ namespace ManagerApp.Pages
                     });
                 }
 
-                // Если ничего не найдено, комбобокс останется пустым
-                if (!item.BitrixProducts.Any())
+                if (item.BitrixProducts.Any())
                 {
-                    Console.WriteLine($"Товары не найдены для: {searchText}");
+                    Console.WriteLine($"✅ Загружено в комбобокс: {item.BitrixProducts.Count}");
                 }
                 else
                 {
-                    Console.WriteLine($"Добавлено товаров: {item.BitrixProducts.Count}");
-
-                    //// Автоматически выбираем первый товар (самый релевантный, так как уже отсортирован)
-                    //if (item.SelectedBitrixProduct == null && item.BitrixProducts.Any())
-                    //{
-                    //    item.SelectedBitrixProduct = item.BitrixProducts.First();
-                    //    Console.WriteLine($"Автоматически выбран: {item.SelectedBitrixProduct.ProductName}");
-                    //}
+                    Console.WriteLine($"⚠️ Ничего не найдено");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"ОШИБКА поиска товаров: {ex.Message}");
-                MessageBox.Show($"Ошибка поиска товаров: {ex.Message}",
-                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                Console.WriteLine($"❌ Ошибка: {ex.Message}");
             }
-        }
+        }                                                                    
 
-     
-        
+
     }
 }
