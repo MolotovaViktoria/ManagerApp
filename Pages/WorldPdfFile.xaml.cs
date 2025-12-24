@@ -371,8 +371,8 @@ namespace ManagerApp.Pages
                 progressPanel.Visibility = isProcessing ? Visibility.Visible : Visibility.Collapsed;
 
                 // Блокируем/разблокируем кнопки
-                btnAI.IsEnabled = !isProcessing;
-                btnMath.IsEnabled = !isProcessing;
+                //btnAI.IsEnabled = !isProcessing;
+                //btnMath.IsEnabled = !isProcessing;
                 btnLoadExcel.IsEnabled = !isProcessing;
 
                 if (!string.IsNullOrEmpty(status))
@@ -383,13 +383,13 @@ namespace ManagerApp.Pages
                 if (!isProcessing)
                 {
                     progressBar.Value = 0;
-                    btnAI.Content = "Сформировать список товаров с помощью ИИ";
-                    btnMath.Content = "Сформировать список товаров с помощью алгоритма";
+                    //btnAI.Content = "Сформировать список товаров с помощью ИИ";
+                    //btnMath.Content = "Сформировать список товаров с помощью алгоритма";
                 }
                 else
                 {
-                    btnAI.Content = "Идет анализ...";
-                    btnMath.Content = "Идет анализ...";
+                    //btnAI.Content = "Идет анализ...";
+                    //btnMath.Content = "Идет анализ...";
                 }
             });
         }

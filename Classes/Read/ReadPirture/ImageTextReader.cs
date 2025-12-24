@@ -1,4 +1,5 @@
-﻿using System;
+﻿using DocumentFormat.OpenXml.Wordprocessing;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -36,7 +37,7 @@ namespace ManagerApp.Classes.Read.ReadPirture
 
         private void CheckLanguageFiles()
         {
-            var requiredLanguages = new[] { "rus", "eng" };
+            var requiredLanguages = new[] { "rus" };
             var missingFiles = new List<string>();
 
             foreach (var lang in requiredLanguages)
@@ -80,7 +81,8 @@ namespace ManagerApp.Classes.Read.ReadPirture
             Console.WriteLine("===========================================");
         }
 
-        public List<string> ReadTextFromImage(string imagePath, string language = "rus+eng")
+        public List<string> ReadTextFromImage(string imagePath, string language = "rus")
+
         {
             var resultLines = new List<string>();
 
@@ -88,56 +90,37 @@ namespace ManagerApp.Classes.Read.ReadPirture
             {
                 Console.WriteLine($"\n=== НАЧАЛО РАСПОЗНАВАНИЯ: {Path.GetFileName(imagePath)} ===");
 
-                // Проверяем существование файла
                 if (!File.Exists(imagePath))
                 {
                     throw new FileNotFoundException($"Файл не найден: {imagePath}");
                 }
 
-                // Автоматически предобрабатываем изображение
                 string processedImagePath = PreprocessImageForOCR(imagePath);
                 bool isProcessed = processedImagePath != imagePath;
 
                 try
                 {
-                    // Настраиваем OCR в зависимости от типа изображения
                     var ocrResult = PerformOCR(processedImagePath, language, isProcessed);
 
-                    // Постобработка результатов
+                    // ТОЛЬКО постобработка, без добавления служебной информации
                     resultLines = PostProcessOCRResults(ocrResult);
-
-                    // Дополнительная попытка если результаты плохие
-                    if (resultLines.Count == 0 || resultLines.All(l => l.Length < 3))
-                    {
-                        Console.WriteLine("Попытка №2 с другими настройками...");
-                        ocrResult = PerformOCRAlternative(processedImagePath, language);
-                        resultLines = PostProcessOCRResults(ocrResult);
-                    }
                 }
                 finally
                 {
-                    // Удаляем временный файл если он создавался
                     if (isProcessed && File.Exists(processedImagePath))
                     {
-                        try
-                        {
-                            File.Delete(processedImagePath);
-                        }
-                        catch { }
+                        try { File.Delete(processedImagePath); } catch { }
                     }
                 }
-
-                Console.WriteLine($"=== ЗАВЕРШЕНО. Распознано строк: {resultLines.Count} ===");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Ошибка ReadTextFromImage: {ex}");
-                resultLines.Add($"Ошибка распознавания: {ex.Message}");
+                // Только простое сообщение об ошибке
+                resultLines.Add($"Ошибка: {ex.Message}");
             }
 
             return resultLines;
         }
-
         private OcrResult PerformOCR(string imagePath, string language, bool isProcessed)
         {
             // Пробуем разные режимы сегментации
@@ -213,21 +196,21 @@ namespace ManagerApp.Classes.Read.ReadPirture
             if (string.IsNullOrWhiteSpace(ocrResult.Text))
                 return new List<string>();
 
-            // Основная постобработка
+            // Основная постобработка - только текст
             string processedText = PostProcessText(ocrResult.Text);
 
-            // Разделение на строки с фильтрацией
+            // Разделение на строки с фильтрацией - НЕ добавляем служебные сообщения
             var lines = processedText
                 .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(line => line.Trim())
                 .Where(line => !string.IsNullOrWhiteSpace(line) && line.Length > 1)
                 .ToList();
 
-            // Если уверенность низкая, добавляем предупреждение
-            if (ocrResult.Confidence < 60 && lines.Count > 0)
-            {
-                lines.Insert(0, $"⚠️ Низкая уверенность распознавания: {ocrResult.Confidence:F1}%");
-            }
+            // УБЕРИТЕ этот блок - не добавляем сообщения об уверенности
+            // if (ocrResult.Confidence < 60 && lines.Count > 0)
+            // {
+            //     lines.Insert(0, $"⚠️ Низкая уверенность распознавания: {ocrResult.Confidence:F1}%");
+            // }
 
             return lines;
         }
@@ -281,7 +264,7 @@ namespace ManagerApp.Classes.Read.ReadPirture
 
             return processed;
         }
-
+        
         private string GetContext(string text, int position, int radius)
         {
             int start = Math.Max(0, position - radius);
@@ -397,7 +380,7 @@ namespace ManagerApp.Classes.Read.ReadPirture
             {
                 for (int x = 0; x < Math.Min(100, image.Width); x += 10)
                 {
-                    Color color = image.GetPixel(x, y);
+                    System.Drawing.Color color = image.GetPixel(x, y);
                     // Проверяем, является ли пиксель цветным (не оттенком серого)
                     if (Math.Abs(color.R - color.G) > 10 || Math.Abs(color.R - color.B) > 10)
                     {
@@ -421,7 +404,7 @@ namespace ManagerApp.Classes.Read.ReadPirture
             {
                 for (int x = 0; x < original.Width; x += 10)
                 {
-                    Color color = original.GetPixel(x, y);
+                    System.Drawing.Color color = original.GetPixel(x, y);
                     totalBrightness += (int)(color.R * 0.299 + color.G * 0.587 + color.B * 0.114);
                     sampleCount++;
                 }
@@ -437,9 +420,9 @@ namespace ManagerApp.Classes.Read.ReadPirture
             {
                 for (int x = 0; x < original.Width; x++)
                 {
-                    Color color = original.GetPixel(x, y);
+                    System.Drawing.Color color = original.GetPixel(x, y);
                     int brightness = (int)(color.R * 0.299 + color.G * 0.587 + color.B * 0.114);
-                    Color newColor = brightness > threshold ? Color.White : Color.Black;
+                    System.Drawing.Color newColor = brightness > threshold ? System.Drawing.Color.White : System.Drawing.Color.Black;
                     result.SetPixel(x, y, newColor);
                 }
             }
@@ -463,7 +446,7 @@ namespace ManagerApp.Classes.Read.ReadPirture
                     {
                         for (int dx = -1; dx <= 1; dx++)
                         {
-                            Color neighbor = image.GetPixel(x + dx, y + dy);
+                            System.Drawing.Color neighbor = image.GetPixel(x + dx, y + dy);
                             if (neighbor.R < 128) // Черный
                                 blackCount++;
                             else
@@ -472,14 +455,14 @@ namespace ManagerApp.Classes.Read.ReadPirture
                     }
 
                     // Если пиксель одинокий (окружен противоположными пикселями), исправляем
-                    Color current = image.GetPixel(x, y);
+                    System.Drawing.Color current = image.GetPixel(x, y);
                     if (current.R < 128 && blackCount <= 2) // Одинокий черный пиксель
                     {
-                        result.SetPixel(x, y, Color.White);
+                        result.SetPixel(x, y, System.Drawing.Color.White);
                     }
                     else if (current.R >= 128 && whiteCount <= 2) // Одинокий белый пиксель
                     {
-                        result.SetPixel(x, y, Color.Black);
+                        result.SetPixel(x, y, System.Drawing.Color.Black);
                     }
                     else
                     {
@@ -499,14 +482,14 @@ namespace ManagerApp.Classes.Read.ReadPirture
             {
                 for (int x = 0; x < image.Width; x++)
                 {
-                    Color color = image.GetPixel(x, y);
+                    System.Drawing.Color color = image.GetPixel(x, y);
                     int value = color.R; // В ч/б все каналы одинаковые
 
                     // Усиливаем контраст
                     int newValue = (int)((value - 128) * factor + 128);
                     newValue = Math.Max(0, Math.Min(255, newValue));
 
-                    result.SetPixel(x, y, Color.FromArgb(newValue, newValue, newValue));
+                    result.SetPixel(x, y, System.Drawing.Color.FromArgb(newValue, newValue, newValue));
                 }
             }
 
@@ -532,14 +515,14 @@ namespace ManagerApp.Classes.Read.ReadPirture
                     {
                         for (int kx = -kernelRadius; kx <= kernelRadius; kx++)
                         {
-                            Color pixel = image.GetPixel(x + kx, y + ky);
+                            System.Drawing.Color pixel = image.GetPixel(x + kx, y + ky);
                             int value = pixel.R;
                             sum += value * kernel[ky + kernelRadius, kx + kernelRadius];
                         }
                     }
 
                     sum = Math.Max(0, Math.Min(255, sum));
-                    result.SetPixel(x, y, Color.FromArgb(sum, sum, sum));
+                    result.SetPixel(x, y, System.Drawing.Color.FromArgb(sum, sum, sum));
                 }
             }
 

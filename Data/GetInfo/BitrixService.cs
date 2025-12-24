@@ -1,13 +1,15 @@
 ﻿using ManagerApp.Classes.Setting;
 using ManagerApp.Data.StructureList;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;  // Для Process
+using System.IO;           // Для File
 using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
-
 namespace ManagerApp.Data.GetInfo
 {
     public class BitrixService
@@ -95,7 +97,7 @@ namespace ManagerApp.Data.GetInfo
         /// <returns>URL для скачивания документа или null в случае ошибки</returns>
         public async Task<string> GenerateInvoiceDocument(
             int invoiceId,
-            int templateId = 2,
+            int templateId = 32,
             string format = "docx")
         {
             try
@@ -212,45 +214,77 @@ namespace ManagerApp.Data.GetInfo
                 return null;
             }
         }
+
+
         public async Task<int> CreateSmartInvoice(
-            string webhooc,
-      int clientCompanyId,
-      int myCompanyId,
-      string orderTopic,
-      List<InvoiceProduct> products,
-      DateTime? payBeforeDate = null,
-      int responsibleId = 1,
-      string statusId = "DT31_1:NEW")
+
+            int clientCompanyId,
+            int myCompanyId,
+            string orderTopic,
+            List<InvoiceProduct> products,
+            string number_chet,           // ОБЯЗАТЕЛЬНЫЕ параметры
+            string adress,                // должны быть ПЕРЕД
+            string day_dostavka,          // НЕОБЯЗАТЕЛЬНЫМИ
+            string sposob_oplata,
+            int responsibleId,      // НЕОБЯЗАТЕЛЬНЫЕ параметры
+            string statusId = "DT31_1:NEW",  // в конце
+            DateTime? payBeforeDate = null)
         {
             try
             {
                 Console.WriteLine("=== СОЗДАНИЕ НОВОГО СМАРТ-СЧЕТА (entityTypeId = 31) ===");
 
-                string webhookUrl = $"{webhooc}crm.item.add";
+                string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.item.add";
+
+                // Создаем уникальный номер счета
+                string invoiceNumber = number_chet;
 
                 var invoiceRequestData = new
                 {
-                    entityTypeId = 31, // Ключевое изменение: ID для новых счетов
+                    entityTypeId = 31,
                     fields = new
                     {
-                        TITLE = orderTopic,
-                        UF_COMPANY_ID = clientCompanyId,
-                        UF_MYCOMPANY_ID = myCompanyId,
+                        TITLE = $"Счет на оплату № {invoiceNumber} от {DateTime.Now:dd.MM.yyyy}",
+
+                        // Обязательные поля
+                        ACCOUNT_NUMBER = number_chet,
+                        COMPANY_ID = clientCompanyId,
+                        MYCOMPANY_ID = myCompanyId,
                         ASSIGNED_BY_ID = responsibleId,
-                        STATUS_ID = statusId
+                        STAGE_ID = statusId,
+
+                        // ДАТЫ
+                        BEGINDATE = DateTime.Now.ToString("yyyy-MM-dd"),
+                        CLOSEDATE = (payBeforeDate ?? DateTime.Now.AddDays(30)).ToString("yyyy-MM-dd"),
+
+                        // ПОЛЯ ДЛЯ ГЕНЕРАТОРА ДОКУМЕНТОВ (эти поля передаются в шаблон)
+                        // 1. Поле XML_ID - Внешний код
+                        XML_ID = adress,
+
+                        // 2. Поле COMMENTS - Комментарий
+
+                        COMMENTS = day_dostavka,
+
+                        // 3. Поле SOURCE_DESCRIPTION - Описание источника
+                        SOURCE_DESCRIPTION = sposob_oplata
+,
+                        // 4. Имя и Фамилия ответственного
+                        // Эти поля Bitrix заполняет автоматически по ASSIGNED_BY_ID
                     }
                 };
 
                 string invoiceJson = JsonConvert.SerializeObject(invoiceRequestData);
+                Console.WriteLine($"📤 Отправляемый JSON:\n{invoiceJson}");
                 var invoiceContent = new StringContent(invoiceJson, Encoding.UTF8, "application/json");
 
                 var response = await _httpClient.PostAsync(webhookUrl, invoiceContent);
                 string jsonResponse = await response.Content.ReadAsStringAsync();
 
+                Console.WriteLine($"📥 Ответ от Bitrix:\n{jsonResponse}");
+
                 if (!response.IsSuccessStatusCode)
                 {
-                    Console.WriteLine($"❌ Ошибка HTTP при создании счета: {response.StatusCode}");
-                    Console.WriteLine($"Тело ответа: {jsonResponse}");
+                    Console.WriteLine($"❌ Ошибка HTTP: {response.StatusCode}");
                     return 0;
                 }
 
@@ -258,7 +292,7 @@ namespace ManagerApp.Data.GetInfo
 
                 if (result?.error != null)
                 {
-                    Console.WriteLine($"❌ Ошибка API (создание счета): {result.error}");
+                    Console.WriteLine($"❌ Ошибка API: {result.error}");
                     return 0;
                 }
 
@@ -266,34 +300,132 @@ namespace ManagerApp.Data.GetInfo
 
                 if (invoiceId <= 0)
                 {
-                    Console.WriteLine("⚠️ Не удалось получить ID созданного счета.");
+                    Console.WriteLine("⚠️ Не удалось получить ID счета");
                     return 0;
                 }
 
-                Console.WriteLine($"✅ Смарт-счет создан. ID: {invoiceId}");
+                Console.WriteLine($"✅ Счет создан. ID: {invoiceId}");
+                Console.WriteLine($"🔍 Проверим какие поля реально сохранились...");
 
-                // Добавляем товары в созданный счет
+                // Проверяем что реально сохранилось
+                await CheckActualInvoiceFields(invoiceId);
+
+                // Добавляем товары
                 bool productsAdded = await AddProductsToSmartInvoice(invoiceId, products);
 
                 if (productsAdded)
                 {
-                    Console.WriteLine($"✅ Счет #{invoiceId} полностью готов с товарами.");
-                }
-                else
-                {
-                    Console.WriteLine($"⚠️ Счет #{invoiceId} создан, но добавление товаров завершилось с ошибками.");
+                    Console.WriteLine($"✅ Товары добавлены в счет #{invoiceId}");
+
+                    // Тест генерации документа
+                    string downloadUrl = await GenerateInvoiceDocument(invoiceId, 32, "docx");
+
+                    if (!string.IsNullOrEmpty(downloadUrl))
+                    {
+                        Console.WriteLine($"✅ Документ сгенерирован: {downloadUrl}");
+
+                        // Скачиваем и проверяем содержимое
+                        byte[] documentBytes = await DownloadDocumentBytes(downloadUrl);
+                        if (documentBytes != null)
+                        {
+                            // Сохраняем для анализа
+                            string testPath = $@"C:\TEST_INVOICE_{invoiceId}.docx";
+                            File.WriteAllBytes(testPath, documentBytes);
+                            Console.WriteLine($"💾 Документ сохранен: {testPath}");
+
+                            // Открываем для проверки
+                            //Process.Start("explorer.exe", $"/select,\"{testPath}\"");
+                        }
+                    }
                 }
 
                 return invoiceId;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"❌ Исключение в CreateSmartInvoice: {ex.Message}");
+                Console.WriteLine($"❌ Исключение: {ex.Message}");
                 return 0;
             }
         }
 
-     
+        /// <summary>
+        /// Проверяем какие поля реально сохранены в счете
+        /// </summary>
+        /// 
+        private async Task CheckActualInvoiceFields(int invoiceId)
+        {
+            try
+            {
+                Console.WriteLine($"\n🔍 ПРОВЕРКА ПОЛЕЙ СЧЕТА #{invoiceId}");
+
+                string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.item.get";
+                var requestData = new
+                {
+                    entityTypeId = 31,
+                    id = invoiceId
+                };
+
+                string jsonRequest = JsonConvert.SerializeObject(requestData);
+                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync(webhookUrl, content);
+                string jsonResponse = await response.Content.ReadAsStringAsync();
+
+                Console.WriteLine($"📊 Данные счета из Bitrix:\n{jsonResponse}");
+
+                // Парсим ответ
+                dynamic result = JsonConvert.DeserializeObject(jsonResponse);
+
+                if (result?.result?.item != null)
+                {
+                    var item = result.result.item;
+                    Console.WriteLine($"\n📋 ВОТ ЧТО СОХРАНИЛОСЬ:");
+                    Console.WriteLine($"TITLE: {item.title}");
+                    Console.WriteLine($"XML_ID: {item.xmlId}");
+                    Console.WriteLine($"COMMENTS: {item.comments}");
+                    Console.WriteLine($"SOURCE_DESCRIPTION: {item.sourceDescription}");
+                    Console.WriteLine($"BEGINDATE: {item.begindate}");
+                    Console.WriteLine($"ASSIGNED_BY_ID: {item.assignedById}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка проверки полей: {ex.Message}");
+            }
+        }
+
+       
+
+
+
+        // Вспомогательный метод для проверки сохраненных данных
+        private async Task TestRetrieveInvoiceData(int invoiceId)
+        {
+            try
+            {
+                Console.WriteLine($"\n=== ПРОВЕРКА ДАННЫХ СЧЕТА #{invoiceId} ===");
+
+                string webhookUrl = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.item.get";
+                var requestData = new
+                {
+                    entityTypeId = 31,
+                    id = invoiceId
+                };
+
+                string jsonRequest = JsonConvert.SerializeObject(requestData);
+                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync(webhookUrl, content);
+                string jsonResponse = await response.Content.ReadAsStringAsync();
+
+                Console.WriteLine($"Данные счета из Bitrix:\n{jsonResponse}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при проверке данных счета: {ex.Message}");
+            }
+        }
+
         private async Task<bool> AddProductsToSmartInvoice(int invoiceId, List<InvoiceProduct> products)
         {
             Console.WriteLine($"=== ДОБАВЛЕНИЕ ТОВАРОВ В СЧЕТ #{invoiceId} ===");
@@ -322,7 +454,7 @@ namespace ManagerApp.Data.GetInfo
                             ownerType = "SI",
                             productId = product.ProductId > 0 ? (int?)product.ProductId : null,
                             // ДОБАВЛЯЕМ РАЗДЕЛ В НАЗВАНИЕ ТОВАРА
-                            productName = $"{categoryName} | {product.ProductName}",
+                            productName = $"{product.ProductName}",
                             price = product.Price,
                             quantity = product.Quantity,
                             taxRate = 20.0,

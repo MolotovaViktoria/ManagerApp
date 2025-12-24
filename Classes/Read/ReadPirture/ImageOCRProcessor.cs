@@ -26,23 +26,23 @@ namespace ManagerApp.Classes.Read.ReadPirture
 
                 if (!languages.Contains("rus") || !languages.Contains("eng"))
                 {
-                    MessageBox.Show($"Не найдены необходимые языковые файлы.\n" +
-                                  $"Найдены: {string.Join(", ", languages)}\n" +
-                                  $"Требуются: rus, eng\n\n" +
-                                  $"Скачайте файлы с: https://github.com/tesseract-ocr/tessdata_best",
-                        "Внимание", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    //MessageBox.Show($"Не найдены необходимые языковые файлы.\n" +
+                    //              $"Найдены: {string.Join(", ", languages)}\n" +
+                    //              $"Требуются: rus, eng\n\n" +
+                    //              $"Скачайте файлы с: https://github.com/tesseract-ocr/tessdata_best",
+                    //    "Внимание", MessageBoxButton.OK, MessageBoxImage.Warning);
                 }
             }
             catch (Exception ex)
             {
                 _tesseractAvailable = false;
                 Console.WriteLine($"Ошибка инициализации Tesseract: {ex.Message}");
-                MessageBox.Show($"Tesseract OCR не доступен!\n\n{ex.Message}\n\n" +
-                              "Решение:\n" +
-                              "1. Скачайте tessdata_best с GitHub\n" +
-                              "2. Поместите rus.traineddata и eng.traineddata в папку tessdata\n" +
-                              "3. Перезапустите приложение",
-                    "Ошибка OCR", MessageBoxButton.OK, MessageBoxImage.Error);
+                //MessageBox.Show($"Tesseract OCR не доступен!\n\n{ex.Message}\n\n" +
+                //              "Решение:\n" +
+                //              "1. Скачайте tessdata_best с GitHub\n" +
+                //              "2. Поместите rus.traineddata и eng.traineddata в папку tessdata\n" +
+                //              "3. Перезапустите приложение",
+                //    "Ошибка OCR", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -55,11 +55,11 @@ namespace ManagerApp.Classes.Read.ReadPirture
                 if (!_tesseractAvailable)
                 {
                     return new List<string>
-                    {
-                        "❌ Tesseract OCR не инициализирован",
-                        "Установите языковые файлы Tesseract",
-                        $"Файл: {Path.GetFileName(filePath)}"
-                    };
+            {
+                "❌ Tesseract OCR не инициализирован",
+                "Установите языковые файлы Tesseract",
+                $"Файл: {Path.GetFileName(filePath)}"
+            };
                 }
 
                 Console.WriteLine($"\n{'='.Repeat(60)}");
@@ -73,41 +73,23 @@ namespace ManagerApp.Classes.Read.ReadPirture
                     throw new ArgumentException($"Неподдерживаемый формат: {extension}");
                 }
 
-                // Получаем информацию о файле
-                var fileInfo = new FileInfo(filePath);
-                if (!fileInfo.Exists)
-                {
-                    throw new FileNotFoundException($"Файл не найден: {filePath}");
-                }
+                // Основное распознавание - получаем только чистый текст
+                resultLines = _imageReader.ReadTextFromImage(filePath, "rus");
 
-                Console.WriteLine($"Размер файла: {FormatFileSize(fileInfo.Length)}");
-                Console.WriteLine($"Создан: {fileInfo.CreationTime}");
-
-                // Основное распознавание
-                resultLines = _imageReader.ReadTextFromImage(filePath);
+                // Фильтруем пустые строки и убираем служебные сообщения
+                resultLines = resultLines
+                    .Where(line => !string.IsNullOrWhiteSpace(line))
+                    .Where(line => !line.Contains("уверенность") &&
+                                  !line.Contains("низкая") &&
+                                  !line.Contains("предупреждение") &&
+                                  !line.Contains("распознавания") &&
+                                  !line.StartsWith("⚠️"))
+                    .ToList();
 
                 // Если ничего не найдено
-                if (resultLines.Count == 0 || resultLines.All(string.IsNullOrWhiteSpace))
+                if (resultLines.Count == 0)
                 {
-                    resultLines = new List<string>
-                    {
-                        $"📄 Файл: {Path.GetFileName(filePath)}",
-                        $"📏 Размер: {FormatFileSize(fileInfo.Length)}",
-                        $"📅 Создан: {fileInfo.CreationTime:yyyy-MM-dd HH:mm}",
-                        "⚠️ Текст не найден на изображении",
-                        "",
-                        "Возможные причины:",
-                        "• Слишком маленькое разрешение",
-                        "• Слишком низкий контраст",
-                        "• Нет текста на изображении",
-                        "• Очень мелкий или декоративный шрифт"
-                    };
-                }
-                else
-                {
-                    // Добавляем заголовок с информацией о файле
-                    resultLines.Insert(0, $"📄 {Path.GetFileName(filePath)} ({FormatFileSize(fileInfo.Length)})");
-                    resultLines.Insert(1, new string('=', 40));
+                    resultLines = new List<string> { "Текст на изображении не найден" };
                 }
 
                 Console.WriteLine($"Обработка завершена. Результат: {resultLines.Count} строк");
@@ -115,23 +97,47 @@ namespace ManagerApp.Classes.Read.ReadPirture
             catch (Exception ex)
             {
                 Console.WriteLine($"❌ Ошибка обработки: {ex}");
-
-                resultLines = new List<string>
-                {
-                    $"❌ Ошибка обработки изображения",
-                    $"📄 Файл: {Path.GetFileName(filePath)}",
-                    $"💬 Сообщение: {ex.Message}",
-                    "",
-                    "Проверьте:",
-                    "• Корректность файла изображения",
-                    "• Поддерживаемый формат (PNG, JPG, BMP, TIFF)",
-                    "• Доступность файла"
-                };
+                resultLines = new List<string> { $"Ошибка обработки: {ex.Message}" };
             }
 
             return resultLines;
         }
+        public List<string> GetCleanTextFromImage(string filePath)
+        {
+            if (!_tesseractAvailable)
+            {
+                return new List<string> { "OCR не доступен" };
+            }
 
+            try
+            {
+                // Получаем текст
+                var lines = _imageReader.ReadTextFromImage(filePath);
+
+                // Фильтруем служебную информацию
+                return lines.Where(line => !IsServiceLine(line)).ToList();
+            }
+            catch
+            {
+                return new List<string> { "Ошибка распознавания" };
+            }
+        }
+
+        private bool IsServiceLine(string line)
+        {
+            if (string.IsNullOrWhiteSpace(line)) return true;
+
+            // Список ключевых фраз, которые считаются служебными
+            string[] servicePhrases =
+            {
+        "уверенность", "распознавания", "низкая", "предупреждение",
+        "РЕЖИМ:", "⚠️", "Обработка", "Файл:", "Размер:", "DPI",
+        "Начало распознавания", "Завершено", "Строк:"
+    };
+
+            return servicePhrases.Any(phrase =>
+                line.IndexOf(phrase, StringComparison.OrdinalIgnoreCase) >= 0);
+        }
         public string FormatOCRResult(List<string> textLines)
         {
             if (textLines == null || textLines.Count == 0)

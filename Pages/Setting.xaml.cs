@@ -1,10 +1,13 @@
 ﻿using ManagerApp.Classes.Setting;
-
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -17,7 +20,8 @@ namespace ManagerApp.Pages
         private const string DefaultVAT = "20";
 
         private string _vat = DefaultVAT;
-        private string _webhook = WebhookManager.GetWebhookFromFile();
+        private ObservableCollection<BitrixUser> _employees = new ObservableCollection<BitrixUser>();
+        private BitrixUser _selectedEmployee;
 
         public string VAT
         {
@@ -32,15 +36,31 @@ namespace ManagerApp.Pages
             }
         }
 
-        public string Webhook
+        public ObservableCollection<BitrixUser> Employees
         {
-            get { return _webhook; }
+            get { return _employees; }
             set
             {
-                if (_webhook != value)
+                _employees = value;
+                OnPropertyChanged(nameof(Employees));
+            }
+        }
+
+        public BitrixUser SelectedEmployee
+        {
+            get { return _selectedEmployee; }
+            set
+            {
+                if (_selectedEmployee != value)
                 {
-                    _webhook = value;
-                    OnPropertyChanged(nameof(Webhook));
+                    _selectedEmployee = value;
+                    OnPropertyChanged(nameof(SelectedEmployee));
+
+                    // Сохраняем ID выбранного сотрудника
+                    if (value != null)
+                    {
+                        SaveEmployeeId(value.id);
+                    }
                 }
             }
         }
@@ -61,7 +81,7 @@ namespace ManagerApp.Pages
         private void Page_Loaded(object sender, RoutedEventArgs e)
         {
             LoadVATFromFile();
-            // Вебхук уже загружен в конструкторе через WebhookManager
+            LoadEmployees();
         }
 
         private void LoadVATFromFile()
@@ -86,7 +106,6 @@ namespace ManagerApp.Pages
                 }
                 else
                 {
-                    // Создаем файл с настройками по умолчанию
                     SaveVATToFile();
                 }
             }
@@ -96,6 +115,72 @@ namespace ManagerApp.Pages
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 VAT = DefaultVAT;
             }
+        }
+
+        private void LoadEmployees()
+        {
+            try
+            {
+                // Загружаем статичный список сотрудников
+                var employees = StaticEmployeeProvider.GetAllEmployees();
+
+                Employees.Clear();
+                foreach (var employee in employees)
+                {
+                    Employees.Add(employee);
+                }
+
+                // Загружаем сохраненного сотрудника
+                var savedEmployeeId = GetSavedEmployeeId();
+                if (savedEmployeeId > 0)
+                {
+                    var savedEmployee = Employees.FirstOrDefault(e => e.id == savedEmployeeId);
+                    if (savedEmployee != null)
+                    {
+                        SelectedEmployee = savedEmployee;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка загрузки сотрудников: {ex.Message}",
+                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void SaveEmployeeId(int employeeId)
+        {
+            try
+            {
+                IDSetting.SaveSelectedEmployeeId(employeeId);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка сохранения ID сотрудника: {ex.Message}", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private int GetSavedEmployeeId()
+        {
+            return IDSetting.GetSelectedEmployeeId();
+        }
+
+        // Статический метод для получения ID из любого места в коде
+        public static int GetSelectedEmployeeId()
+        {
+            return IDSetting.GetSelectedEmployeeId();
+        }
+
+        // Статический метод для получения данных сотрудника по ID
+        public static BitrixUser GetSelectedEmployeeData()
+        {
+            var employeeId = IDSetting.GetSelectedEmployeeId();
+            if (employeeId > 0)
+            {
+                return StaticEmployeeProvider.GetEmployeeById(employeeId);
+            }
+            return null;
         }
 
         private void SaveVATToFile()
@@ -108,19 +193,6 @@ namespace ManagerApp.Pages
             catch (Exception ex)
             {
                 MessageBox.Show($"Ошибка сохранения настроек НДС: {ex.Message}", "Ошибка",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void SaveWebhookToFile()
-        {
-            try
-            {
-                WebhookManager.SaveWebhookToFile(Webhook);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка сохранения вебхука: {ex.Message}", "Ошибка",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -140,7 +212,7 @@ namespace ManagerApp.Pages
                             var value = line.Substring(4);
                             if (decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var vat))
                             {
-                                return vat / 100m; // Возвращаем как коэффициент (0.20 для 20%)
+                                return vat / 100m;
                             }
                         }
                     }
@@ -156,7 +228,6 @@ namespace ManagerApp.Pages
 
         private void txtVAT_PreviewTextInput(object sender, TextCompositionEventArgs e)
         {
-            // Разрешаем только цифры и запятую/точку
             foreach (char c in e.Text)
             {
                 if (!char.IsDigit(c) && c != ',' && c != '.')
@@ -166,13 +237,11 @@ namespace ManagerApp.Pages
                 }
             }
 
-            // Проверяем, что вводится корректное число
             var textBox = sender as TextBox;
             var newText = textBox.Text.Insert(textBox.SelectionStart, e.Text);
 
             if (decimal.TryParse(newText, NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
             {
-                // Ограничиваем максимальное значение
                 if (value > 100)
                 {
                     e.Handled = true;
@@ -186,7 +255,6 @@ namespace ManagerApp.Pages
 
         private void txtVAT_LostFocus(object sender, RoutedEventArgs e)
         {
-            // При потере фокуса форматируем значение
             if (string.IsNullOrWhiteSpace(txtVAT.Text))
             {
                 txtVAT.Text = DefaultVAT;
@@ -195,13 +263,13 @@ namespace ManagerApp.Pages
 
             if (decimal.TryParse(txtVAT.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
             {
-                // Ограничиваем диапазон значений
                 if (value < 0)
                     value = 0;
                 else if (value > 100)
                     value = 100;
 
                 txtVAT.Text = value.ToString("0.##");
+                SaveVATToFile();
             }
             else
             {
@@ -209,81 +277,9 @@ namespace ManagerApp.Pages
             }
         }
 
-        private void txtWebhook_LostFocus(object sender, RoutedEventArgs e)
-        {
-            // Проверяем и очищаем URL при потере фокуса
-            if (!string.IsNullOrWhiteSpace(txtWebhook.Text))
-            {
-                // Удаляем пробелы в начале и конце
-                txtWebhook.Text = txtWebhook.Text.Trim();
-
-
-            }
-        }
-
-        private void btnCheckInternet_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                MessageBox.Show("Проверка подключения к интернету...\n\n(Эта функция находится в разработке)",
-                    "Проверка", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void btnCheckApi_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                MessageBox.Show("Проверка API...\n\n(Эта функция находится в разработке)",
-                    "Проверка", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private async void btnCheckBitrix_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (string.IsNullOrWhiteSpace(Webhook))
-                {
-                    MessageBox.Show("Вебхук Bitrix24 не указан. Пожалуйста, укажите URL вебхука в настройках.",
-                        "Вебхук не указан",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning);
-                    return;
-                }
-
-            
-                // Здесь можно добавить реальную проверку подключения
-                // bool isConnected = await WebhookManager.TestConnectionAsync();
-                // MessageBox.Show(isConnected ? "Подключение успешно!" : "Ошибка подключения", 
-                //                 "Результат проверки", MessageBoxButton.OK, 
-                //                 isConnected ? MessageBoxImage.Information : MessageBoxImage.Error);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
         private void btnSave_Click(object sender, RoutedEventArgs e)
         {
-            // Сохраняем настройки НДС
             SaveVATToFile();
-
-            // Сохраняем вебхук в отдельный файл
-            SaveWebhookToFile();
-
             MessageBox.Show("Настройки успешно сохранены!", "Успех",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
@@ -294,6 +290,27 @@ namespace ManagerApp.Pages
             {
                 NavigationService.GoBack();
             }
+        }
+    }
+
+    // Класс для хранения данных сотрудника
+    public class BitrixUser : INotifyPropertyChanged
+    {
+        public int id { get; set; }
+        public string name { get; set; }
+        public string work_position { get; set; }
+        public string Initials { get; set; }
+
+        // Свойство для отображения в комбобоксе
+        public string DisplayName => !string.IsNullOrWhiteSpace(work_position)
+            ? $"{id}. {name} ({work_position})"
+            : $"{id}. {name}";
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        protected virtual void OnPropertyChanged(string propertyName)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
     }
 }

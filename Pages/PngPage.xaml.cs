@@ -475,8 +475,8 @@ namespace ManagerApp.Pages
             {
                 progressPanel.Visibility = isProcessing ? Visibility.Visible : Visibility.Collapsed;
 
-                btnAI.IsEnabled = !isProcessing;
-                btnMath.IsEnabled = !isProcessing;
+                //btnAI.IsEnabled = !isProcessing;
+                //btnMath.IsEnabled = !isProcessing;
                 btnLoadImage.IsEnabled = !isProcessing;
                 btnClearList.IsEnabled = !isProcessing;
                 btnNext.IsEnabled = !isProcessing;
@@ -488,13 +488,13 @@ namespace ManagerApp.Pages
                 if (!isProcessing)
                 {
                     progressBar.Value = 0;
-                    btnAI.Content = "Сформировать список товаров с помощью ИИ";
-                    btnMath.Content = "Сформировать список товаров с помощью алгоритма";
+                    //btnAI.Content = "Сформировать список товаров с помощью ИИ";
+                    //btnMath.Content = "Сформировать список товаров с помощью алгоритма";
                 }
                 else
                 {
-                    btnAI.Content = "Идет анализ...";
-                    btnMath.Content = "Идет анализ...";
+                    //btnAI.Content = "Идет анализ...";
+                    //btnMath.Content = "Идет анализ...";
                 }
             });
         }

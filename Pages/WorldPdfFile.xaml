@@ -88,13 +88,13 @@
                     Background="#E2542A" Foreground="White" FontWeight="Bold"
                     Padding="10,5" Margin="10,0,0,0" Click="btnLoadExcel_Click"/>
 
-                                <Button x:Name="btnAI" Content="Сформировать список товаров с помощью ИИ"
+                                <!--<Button x:Name="btnAI" Content="Сформировать список товаров с помощью ИИ"
                     Background="#E2542A" Foreground="White" FontWeight="Bold"
                     Padding="10,5" Margin="10,0,0,0" Click="btnAI_Click"/>
 
                                 <Button x:Name="btnMath" Content="Сформировать список товаров с помощью алгоритма"
                     Background="#E2542A" Foreground="White" FontWeight="Bold"
-                    Padding="10,5" Margin="10,0,0,0" Click="btnMath_Click"/>
+                    Padding="10,5" Margin="10,0,0,0" Click="btnMath_Click"/>-->
                             </StackPanel>
 
                             <!-- Панель прогресса (добавлено) -->

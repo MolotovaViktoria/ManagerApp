@@ -258,8 +258,9 @@
     <Compile Include="Classes\Search\AlgorithmicProductAnalyzer.cs" />
     <Compile Include="Classes\Search\ProductListIdentifier.cs" />
     <Compile Include="Classes\Search\SmartProductSearch.cs" />
+    <Compile Include="Classes\Setting\IDSetting .cs" />
     <Compile Include="Classes\Setting\SettingsHelper.cs" />
-    <Compile Include="Classes\Setting\WebhookManager.cs" />
+    <Compile Include="Classes\Setting\StaticEmployeeProvider.cs" />
     <Compile Include="Data\GetInfo\BitrixCache.cs" />
     <Compile Include="Data\GetInfo\BitrixService.cs" />
     <Compile Include="Data\ScharedData\BitrixProductViewModel.cs" />
@@ -336,9 +337,6 @@
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
     </EmbeddedResource>
-    <None Include="Classes\tessdata\eng.traineddata">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
     <None Include="Classes\tessdata\rus.traineddata">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

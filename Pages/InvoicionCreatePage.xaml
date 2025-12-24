@@ -144,6 +144,8 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                        <!-- НОВЫЙ РЯД ДЛЯ СТАТУСА -->
                     </Grid.RowDefinitions>
 
                     <!-- Заголовок -->
@@ -181,12 +183,9 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="10"/>
 
-                                <!-- Платежные условия -->
+                                <!-- Детали счета -->
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="10"/>
-
-                                <!-- Комментарий -->
-                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
                             <!-- Клиент -->
@@ -200,7 +199,6 @@
                                         <RowDefinition Height="10"/>
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="10"/>
-                                        <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
 
@@ -231,10 +229,8 @@
                       Padding="10,0"
                       IsEditable="True"
                       IsTextSearchEnabled="True"
-
                       StaysOpenOnEdit="True"
                       Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}">
-                                            <!-- Упрощенный стиль для комбобокса -->
                                             <ComboBox.Style>
                                                 <Style TargetType="ComboBox">
                                                     <Style.Triggers>
@@ -245,7 +241,6 @@
                                                 </Style>
                                             </ComboBox.Style>
                                         </ComboBox>
-
 
                                         <!-- Кнопка обновления списка -->
                                         <Button x:Name="btnRefreshCompanies"
@@ -285,20 +280,11 @@
                            VerticalAlignment="Center"/>
                                         </Button>
                                     </Grid>
-
-
-                                    <!-- Статус загрузки -->
-                                    <TextBlock x:Name="txtCompanyStatus"
-                   Grid.Row="4"
-                   FontSize="12"
-                   Foreground="#666666"
-                   Margin="0,5,0,0"/>
                                 </Grid>
                             </GroupBox>
 
-
                             <!-- Реквизиты компании -->
-                            <GroupBox Grid.Row="4"
+                            <GroupBox Grid.Row="2"
                                       Header="Реквизиты вашей компании"
                                       FontWeight="Bold"
                                       Foreground="#333333">
@@ -324,13 +310,19 @@
                                 </Grid>
                             </GroupBox>
 
-                            <!-- Дата и номер -->
-                            <GroupBox Grid.Row="6"
-                                      Header="Детали счета"
-                                      FontWeight="Bold"
-                                      Foreground="#333333">
+                            <!-- Детали счета -->
+                            <GroupBox Grid.Row="4"
+          Header="Детали счета"
+          FontWeight="Bold"
+          Foreground="#333333">
                                 <Grid>
                                     <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="10"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="10"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="10"/>
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="10"/>
                                         <RowDefinition Height="Auto"/>
@@ -344,25 +336,150 @@
                                         </Grid.ColumnDefinitions>
 
                                         <TextBlock Grid.Column="0"
-                                                   Text="Дата:"
-                                                   VerticalAlignment="Center"
-                                                   Margin="0,0,10,0"
-                                                   Width="100"/>
+                       Text="Дата:"
+                       VerticalAlignment="Center"
+                       Margin="0,0,10,0"
+                       Width="100"/>
 
                                         <DatePicker Grid.Column="1"
-                                                    SelectedDate="{Binding InvoiceDate}"
-                                                    Height="35"
-                                                    FontSize="14"
-                                                    Padding="5"/>
+                        SelectedDate="{Binding InvoiceDate}"
+                        Height="35"
+                        FontSize="14"
+                        Padding="5"/>
                                     </Grid>
 
+                                    <!-- 1. Номер счета -->
+                                    <Grid Grid.Row="2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0"
+                       Text="Номер счета:"
+                       VerticalAlignment="Center"
+                       Margin="0,0,10,0"
+                       Width="100"/>
+
+                                        <TextBox Grid.Column="1"
+                     x:Name="txtInvoiceNumber"
+                     Text="{Binding InvoiceNumber}"
+                     Height="35"
+                     FontSize="14"
+                     Padding="5"/>
+                                    </Grid>
+
+                                    <!-- 2. Адрес -->
+                                    <Grid Grid.Row="4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0"
+                       Text="Адрес доставки:"
+                       VerticalAlignment="Top"
+                       Margin="0,5,10,0"
+                       Width="100"/>
+
+                                        <TextBox Grid.Column="1"
+                     x:Name="txtAddress"
+                     Text="{Binding Address}"
+                     Height="60"
+                     FontSize="14"
+                     Padding="5"
+                     TextWrapping="Wrap"
+                     AcceptsReturn="True"
+                     VerticalScrollBarVisibility="Auto">
+                                            <TextBox.ToolTip>
+                                                <TextBlock Text="По умолчанию: самовывоз со склада Поставщика г. Екатеринбург, ул. Мартовская, д.8: с 9:00 до 18:00 по местному времени в рабочие дни"
+                               TextWrapping="Wrap" Width="300"/>
+                                            </TextBox.ToolTip>
+                                        </TextBox>
+                                    </Grid>
+
+                                    <!-- 3. Дни доставки -->
+                                    <Grid Grid.Row="6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0"
+                       Text="Дней доставки:"
+                       VerticalAlignment="Center"
+                       Margin="0,0,10,0"
+                       Width="100"/>
+
+                                        <TextBox Grid.Column="1"
+                     x:Name="txtDeliveryDays"
+                     Text="{Binding DeliveryDays}"
+                     Height="35"
+                     FontSize="14"
+                     Padding="5"/>
+                                    </Grid>
+
+                                    <!-- 4. Способ оплаты -->
+                                    <Grid Grid.Row="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0"
+                       Text="Способ оплаты:"
+                       VerticalAlignment="Center"
+                       Margin="0,0,10,0"
+                       Width="100"/>
+
+                                        <ComboBox Grid.Column="1"
+                      x:Name="cmbPaymentMethod"
+                      ItemsSource="{Binding PaymentMethods}"
+                      SelectedItem="{Binding SelectedPaymentMethod}"
+                      DisplayMemberPath="Name"
+                      Height="35"
+                      FontSize="14"
+                      Padding="5"/>
+                                    </Grid>
                                 </Grid>
                             </GroupBox>
-
-                         
-
                         </Grid>
                     </ScrollViewer>
+
+                    <!-- ⭐ СТАТУСНАЯ ПАНЕЛЬ (ВЫДЕЛЕННАЯ И ЗАМЕТНАЯ) -->
+                    <Border Grid.Row="2"
+                            Background="#F0F8FF"
+                            BorderBrush="#87CEEB"
+                            BorderThickness="0,1,0,0"
+                            CornerRadius="0,0,4,4"
+                            Padding="20,12"
+                            Height="60">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Иконка статуса -->
+                            <TextBlock Grid.Column="0"
+                                       x:Name="txtStatusIcon"
+                                       Text="⏳"
+                                       FontSize="16"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,10,0"
+                                       Foreground="#4682B4"/>
+
+                            <!-- Текст статуса -->
+                            <TextBlock Grid.Column="1"
+                                       x:Name="txtCompanyStatus"
+                                       Text="Готов к формированию счета"
+                                       FontSize="14"
+                                       FontWeight="Medium"
+                                       VerticalAlignment="Center"
+                                       Foreground="#2F4F4F"
+                                       TextWrapping="Wrap"/>
+                        </Grid>
+                    </Border>
                 </Grid>
             </Border>
 
@@ -522,8 +639,6 @@
                                        FontWeight="Bold"
                                        Foreground="#E2542A"/>
                         </Grid>
-
-                       
                     </Grid>
                 </Border>
             </Grid>
@@ -544,7 +659,7 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Кнопка "Назад" (оранжевая - нажимаемая) -->
+                <!-- Кнопка "Назад" -->
                 <Button x:Name="btnBack"
                         Grid.Column="1"
                         Content="НАЗАД"
@@ -555,8 +670,7 @@
                         FontWeight="Bold"
                         FontSize="14"
                         BorderThickness="0"
-                        Click="btnBack_Click"
-                        >
+                        Click="btnBack_Click">
                     <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Template">
@@ -573,8 +687,8 @@
                         </Style>
                     </Button.Style>
                 </Button>
-                
-                <!-- Кнопка "Завершить" (серая - неактивная/второстепенная) -->
+
+                <!-- Кнопка "Завершить" -->
                 <Button x:Name="btnFinish"
                         Grid.Column="3"
                         Content="ЗАВЕРШИТЬ"
@@ -585,8 +699,7 @@
                         FontWeight="Bold"
                         FontSize="14"
                         BorderThickness="0"
-                        Click="btnFinish_Click"
-                        >
+                        Click="btnFinish_Click">
                     <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Template">
