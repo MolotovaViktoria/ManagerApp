@@ -53,9 +53,9 @@ namespace ManagerApp.Data.GetInfo
                 Console.WriteLine("[BitrixCache] Начало инициализации кэша...");
 
                 // Загружаем основные данные
-                Console.WriteLine("[BitrixCache] Загрузка категорий...");
-                var categories = await _bitrixService.GetСategories();
-                Console.WriteLine($"[BitrixCache] Загружено {categories?.Count ?? 0} категорий");
+                //Console.WriteLine("[BitrixCache] Загрузка категорий...");
+                //var categories = await _bitrixService.GetСategories();
+                //Console.WriteLine($"[BitrixCache] Загружено {categories?.Count ?? 0} категорий");
 
                 Console.WriteLine("[BitrixCache] Загрузка товаров с категориями...");
                 var products = await _bitrixService.GetProductsWithCategoryInfo();
@@ -70,7 +70,7 @@ namespace ManagerApp.Data.GetInfo
                 _lastCacheUpdate = DateTime.Now;
 
                 Console.WriteLine("[BitrixCache] Загрузка простых товаров...");
-                _allProductsSimple = await _bitrixService.GetProducts();
+                //_allProductsSimple = await _bitrixService.GetProducts();
 
                 // Обновляем словари
                 UpdateSearchDictionaries(products);

@@ -3,12 +3,14 @@ using ManagerApp.Data.StructureList;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;  // Для Process
 using System.IO;           // Для File
 using System.Linq;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 namespace ManagerApp.Data.GetInfo
 {
@@ -97,20 +99,20 @@ namespace ManagerApp.Data.GetInfo
         /// <returns>URL для скачивания документа или null в случае ошибки</returns>
         public async Task<string> GenerateInvoiceDocument(
             int invoiceId,
-            int templateId = 32,
+            int templateId_ = 32,
             string format = "docx")
         {
             try
             {
                 Console.WriteLine($"=== ГЕНЕРАЦИЯ ДОКУМЕНТА ДЛЯ СЧЕТА {invoiceId} ===");
-                Console.WriteLine($"Шаблон: {templateId}, Формат: {format}");
+                Console.WriteLine($"Шаблон: {templateId_}, Формат: {format}");
 
                 // Важно: для смарт-счетов используем правильный провайдер данных
                 string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.documentgenerator.document.add";
 
                 var requestData = new
                 {
-                    templateId = templateId,
+                    templateId = templateId_,
                     entityTypeId = 31,          // Смарт-счета (Smart Invoice)
                     entityId = invoiceId,       // ID нашего счета
                     values = new { }            // Дополнительные значения (можно оставить пустым)
@@ -329,7 +331,14 @@ namespace ManagerApp.Data.GetInfo
                         if (documentBytes != null)
                         {
                             // Сохраняем для анализа
-                            string testPath = $@"C:\TEST_INVOICE_{invoiceId}.docx";
+
+                            // Или более надежный способ:
+                            string downloadsPath = Path.Combine(
+                                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                                "Downloads");
+
+                            string testPath = Path.Combine(downloadsPath, $"Счет_{invoiceId}_{DateTime.Now:yyyyMMdd_HHmmss}.docx");
+                            File.WriteAllBytes(testPath, documentBytes);
                             File.WriteAllBytes(testPath, documentBytes);
                             Console.WriteLine($"💾 Документ сохранен: {testPath}");
 
@@ -670,32 +679,6 @@ namespace ManagerApp.Data.GetInfo
             }
         }
 
-        // Добавьте этот приватный метод
-        private string BuildCategoryPath(string categoryId, Dictionary<string, Category> categoryDict)
-        {
-            if (string.IsNullOrEmpty(categoryId) || !categoryDict.ContainsKey(categoryId))
-                return "Без категории";
-
-            var pathParts = new List<string>();
-            var currentId = categoryId;
-            var visited = new HashSet<string>();
-
-            while (!string.IsNullOrEmpty(currentId) && categoryDict.TryGetValue(currentId, out var category))
-            {
-                // Защита от циклических ссылок
-                if (visited.Contains(currentId))
-                    break;
-                visited.Add(currentId);
-
-                pathParts.Insert(0, category.Name);
-                currentId = category.ParentId;
-
-                if (pathParts.Count > 10) // Ограничение глубины
-                    break;
-            }
-
-            return pathParts.Count > 0 ? string.Join(" → ", pathParts) : "Без категории";
-        }
         public void ClearCategoriesCache()
         {
             lock (_categoriesLock)
@@ -1139,59 +1122,185 @@ namespace ManagerApp.Data.GetInfo
                 return new List<ProductWithCategoryInfo>();
             }
         }
+
+
         public async Task<List<ProductWithCategoryInfo>> GetProductsWithCategoryInfo()
         {
             try
             {
-                // Загружаем категории ОДИН РАЗ и создаем словарь
-                var categories = await GetСategories(); // Использует кэш
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Начало загрузки категорий...");
+                var categories = await GetСategories();
                 var categoryDict = categories.ToDictionary(c => c.SelectionId, c => c);
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Загружено категорий: {categories.Count}");
 
-                // Получаем товары
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Начало загрузки товаров...");
                 var allProducts = await GetProducts();
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Загружено товаров: {allProducts.Count}");
 
-                var result = new List<ProductWithCategoryInfo>();
-
-                foreach (var product in allProducts)
+                if (allProducts.Count == 0)
                 {
-                    try
-                    {
-                        string categoryPath = "Без категории";
-
-                        if (!string.IsNullOrEmpty(product.SectionId) &&
-                            categoryDict.TryGetValue(product.SectionId, out var category))
-                        {
-                            // Строим путь ЛОКАЛЬНО, без вызова GetCategoryPath
-                            categoryPath = BuildCategoryPath(category.SelectionId, categoryDict);
-                        }
-
-                        var productInfo = new ProductWithCategoryInfo
-                        {
-                            CategoryName = categoryPath,
-                            ProductName = product.Name ?? "Без названия",
-                            Price = product.Price.HasValue ? product.Price.Value : 0m,
-                            HasPrice = product.Price.HasValue,
-                            SectionId = product.SectionId,
-                            ProductCode = product.Code,
-                            ProductId = product.Id
-                        };
-
-                        result.Add(productInfo);
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Ошибка обработки товара {product?.Id}: {ex.Message}");
-                    }
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Нет товаров для обработки");
+                    return new List<ProductWithCategoryInfo>();
                 }
+
+                // 1. ПРЕДВЫЧИСЛЯЕМ ВСЕ ПУТИ КАТЕГОРИЙ ЗАРАНЕЕ
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Предвычисление путей категорий...");
+                var categoryPathCache = PrecomputeCategoryPaths(categoryDict);
+
+                // 2. ПАРАЛЛЕЛЬНАЯ АСИНХРОННАЯ ОБРАБОТКА БАТЧАМИ
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Параллельная обработка батчами...");
+                var result = await ProcessProductsInBatchesAsync(allProducts, categoryPathCache);
+
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] ===== ОБРАБОТКА ЗАВЕРШЕНА =====");
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Всего обработано: {result.Count} товаров");
 
                 return result;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Ошибка в GetProductsWithCategoryInfo: {ex.Message}");
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] КРИТИЧЕСКАЯ ОШИБКА: {ex.Message}");
+                File.AppendAllText("critical_error_log.txt",
+                    $"[{DateTime.Now:HH:mm:ss}] {ex.Message}\n{ex.StackTrace}\n\n");
                 return new List<ProductWithCategoryInfo>();
             }
         }
+
+        // 1. ПРЕДВЫЧИСЛЕНИЕ ВСЕХ ПУТЕЙ КАТЕГОРИЙ ЗАРАНЕЕ
+        private Dictionary<string, string> PrecomputeCategoryPaths(Dictionary<string, Category> categoryDict)
+        {
+            var cache = new Dictionary<string, string>();
+
+            foreach (var category in categoryDict.Values)
+            {
+                if (!cache.ContainsKey(category.SelectionId))
+                {
+                    cache[category.SelectionId] = BuildCategoryPath(category.SelectionId, categoryDict);
+                }
+            }
+
+            // Добавляем значение по умолчанию для пустых SectionId
+            cache[string.Empty] = "Без категории";
+            cache["null"] = "Без категории";
+
+            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Предвычислено путей категорий: {cache.Count}");
+            return cache;
+        }
+
+        // 2. ОБРАБОТКА БАТЧАМИ С АСИНХРОННОСТЬЮ
+        private async Task<List<ProductWithCategoryInfo>> ProcessProductsInBatchesAsync(
+            List<Product> allProducts,
+            Dictionary<string, string> categoryPathCache)
+        {
+            int totalProducts = allProducts.Count;
+            int processedCount = 0;
+            DateTime startTime = DateTime.Now;
+
+            // Используем ConcurrentBag для потокобезопасности
+            var result = new ConcurrentBag<ProductWithCategoryInfo>();
+
+            // Размер батча - оптимально для процессора
+            int batchSize = Math.Max(1000, Environment.ProcessorCount * 250);
+            int batchCount = (int)Math.Ceiling((double)totalProducts / batchSize);
+
+            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Батчей: {batchCount}, размер батча: {batchSize}");
+            Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Используется процессоров: {Environment.ProcessorCount}");
+
+            // Обрабатываем батчи параллельно
+            var tasks = new List<Task>();
+
+            for (int batchIndex = 0; batchIndex < batchCount; batchIndex++)
+            {
+                int start = batchIndex * batchSize;
+                int end = Math.Min(start + batchSize, totalProducts);
+                var batch = allProducts.Skip(start).Take(end - start).ToList();
+
+                // Запускаем обработку батча асинхронно
+                tasks.Add(Task.Run(() => ProcessBatch(batch, categoryPathCache, result,
+                    ref processedCount, totalProducts, startTime)));
+            }
+
+            // Ждем завершения всех батчей
+            await Task.WhenAll(tasks);
+
+            return result.ToList();
+        }
+
+        // 3. ОБРАБОТКА ОДНОГО БАТЧА
+        private void ProcessBatch(
+            List<Product> batch,
+            Dictionary<string, string> categoryPathCache,
+            ConcurrentBag<ProductWithCategoryInfo> result,
+            ref int processedCount,
+            int totalProducts,
+            DateTime startTime)
+        {
+            foreach (var product in batch)
+            {
+                try
+                {
+                    // СУПЕРБЫСТРЫЙ ПОИСК ПУТИ КАТЕГОРИИ (O(1))
+                    string categoryPath = categoryPathCache.TryGetValue(
+                        product.SectionId ?? string.Empty,
+                        out var path) ? path : "Без категории";
+
+                    var productInfo = new ProductWithCategoryInfo
+                    {
+                        CategoryName = categoryPath,
+                        ProductName = product.Name ?? "Без названия",
+                        Price = product.Price.GetValueOrDefault(),
+                        HasPrice = product.Price.HasValue,
+                        SectionId = product.SectionId,
+                        ProductCode = product.Code,
+                        ProductId = product.Id
+                    };
+
+                    result.Add(productInfo);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Ошибка товара {product?.Id}: {ex.Message}");
+                }
+
+                // ОТСЛЕЖИВАНИЕ ПРОГРЕССА
+                int current = Interlocked.Increment(ref processedCount);
+
+                if (current % 1000 == 0 || current == totalProducts)
+                {
+                    var elapsed = DateTime.Now - startTime;
+                    double percentage = (double)current / totalProducts * 100;
+                    double speed = current / elapsed.TotalSeconds;
+
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Обработано: {current}/{totalProducts} " +
+                                     $"({percentage:F1}%) | " +
+                                     $"Скорость: {speed:F0} товаров/сек");
+                }
+            }
+        }
+
+        // 4. ОПТИМИЗИРОВАННЫЙ BuildCategoryPath
+        private string BuildCategoryPath(string categoryId, Dictionary<string, Category> categoryDict)
+        {
+            if (string.IsNullOrEmpty(categoryId) || !categoryDict.ContainsKey(categoryId))
+                return "Без категории";
+
+            var path = new List<string>();
+            var currentId = categoryId;
+
+            // Кэширование родительских путей
+            while (currentId != null && categoryDict.TryGetValue(currentId, out var category))
+            {
+                path.Insert(0, category.Name ?? "Без названия");
+                currentId = category.ParentId;
+
+                // Защита от циклов
+                if (path.Count > 20) break;
+            }
+
+            return path.Count > 0 ? string.Join(" / ", path) : "Без категории";
+        }
+
+
+
 
         public class InvoiceProduct
         {

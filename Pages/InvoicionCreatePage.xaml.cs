@@ -386,7 +386,7 @@ namespace ManagerApp.Pages
                 UpdateStatus("Генерация документа Word...", "⏳");
 
                 // ГЕНЕРАЦИЯ И СКАЧИВАНИЕ ДОКУМЕНТА
-                string downloadUrl = await _bitrixService.GenerateInvoiceDocument(invoiceId, 2, "docx");
+                string downloadUrl = await _bitrixService.GenerateInvoiceDocument(invoiceId, 32, "docx");
 
                 string successMessage = $"Счет #{invoiceId} создан!\n" +
                                        $"Товаров: {foundProducts.Count}\n" +
@@ -885,9 +885,9 @@ namespace ManagerApp.Pages
 
         private void ShowInvoiceError()
         {
-            UpdateStatus("❌ Ошибка создания счета", "❌");
-            MessageBox.Show("Не удалось создать счет.\nПроверьте консоль для деталей.",
-                "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            //UpdateStatus("❌ Ошибка создания счета", "❌");
+            //MessageBox.Show("Не удалось создать счет.\nПроверьте консоль для деталей.",
+            //    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
         }
 
         private void HandleException(Exception ex)
