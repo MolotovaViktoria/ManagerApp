@@ -385,23 +385,7 @@ namespace ManagerApp.Data.GetInfo
             }
         }
 
-        private static string BuildCategoryPath(string categoryId, Dictionary<string, Category> categoryDict, string parentId)
-        {
-            var pathParts = new List<string>();
-            var currentId = categoryId;
+   
 
-            // Строим путь от текущей категории к корню
-            while (!string.IsNullOrEmpty(currentId) && categoryDict.TryGetValue(currentId, out var category))
-            {
-                pathParts.Insert(0, category.Name);
-                currentId = category.ParentId;
-
-                // Защита от возможного зацикливания
-                if (pathParts.Count > 10)
-                    break;
-            }
-
-            return pathParts.Count > 0 ? string.Join(" → ", pathParts) : "Без категории";
-        }
     }
 }
