@@ -88,7 +88,7 @@
                                     <ColumnDefinition Width="140" x:Name="colTextHome"/>
                                 </Grid.ColumnDefinitions>
 
-                                <Image Source="/Image/add_button.png" 
+                                <Image Source="/Image/zayvka.png" 
                                        Width="32" 
                                        Height="32"
                                        HorizontalAlignment="Center"
@@ -104,6 +104,38 @@
                                            FontWeight="Medium"
                                            Margin="10,0,0,0"
                                            Visibility="Collapsed"/>
+                            </Grid>
+                        </Button>
+                    </Grid>
+
+                    <!-- Кнопка Главная -->
+                    <Grid x:Name="gridHome1" Height="60" Margin="0,0,0,5">
+                        <Button x:Name="btnHome1" 
+                Style="{StaticResource MenuButtonStyle}"
+                Click="btnHome1_Click"
+                HorizontalAlignment="Stretch">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="60"/>
+                                    <ColumnDefinition Width="140" x:Name="colTextHome1"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Image Source="/Image/add_button.png" 
+                       Width="32" 
+                       Height="32"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Bottom"/>
+
+                                <TextBlock x:Name="txtHome1" 
+                           Text="Главная"
+                           Grid.Column="1"
+                           HorizontalAlignment="Left"
+                           VerticalAlignment="Center"
+                           Foreground="White"
+                           FontSize="16"
+                           FontWeight="Medium"
+                           Margin="10,0,0,0"
+                           Visibility="Collapsed"/>
                             </Grid>
                         </Button>
                     </Grid>

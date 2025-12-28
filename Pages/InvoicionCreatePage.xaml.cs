@@ -25,6 +25,7 @@ namespace ManagerApp.Pages
     /// </summary>
     public partial class InvoicionCreatePage : Page, INotifyPropertyChanged
     {
+        DateTime inviteTime;
         // Новые свойства для полей формы
         private string _invoiceNumber;
         public string InvoiceNumber
@@ -228,6 +229,7 @@ namespace ManagerApp.Pages
                 true);
         }
 
+        // Простое добавление своего способа оплаты
         private void InitializePaymentMethods()
         {
             PaymentMethods = new ObservableCollection<PaymentMethod>
@@ -248,6 +250,53 @@ namespace ManagerApp.Pages
 
             if (PaymentMethods.Count > 0)
                 SelectedPaymentMethod = PaymentMethods[0];
+        }
+
+        // Кнопка добавления своего способа оплаты
+        private void btnAddCustomPayment_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Создаем простое окно для ввода способа оплаты
+                var dialog = new CustomPaymentDialog();
+                dialog.Owner = Application.Current.MainWindow;
+                dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+
+                bool? result = dialog.ShowDialog();
+
+                if (result == true && !string.IsNullOrEmpty(dialog.PaymentMethodName))
+                {
+                    string newMethod = dialog.PaymentMethodName.Trim();
+
+                    // Проверяем, нет ли уже такого способа оплаты
+                    if (PaymentMethods.Any(p => p.Name == newMethod || p.Value == newMethod))
+                    {
+                        MessageBox.Show("Такой способ оплаты уже есть в списке!",
+                            "Внимание", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    // Просто добавляем новый способ оплаты в коллекцию
+                    var newPaymentMethod = new PaymentMethod
+                    {
+                        Name = newMethod,
+                        Value = newMethod
+                    };
+
+                    PaymentMethods.Add(newPaymentMethod);
+
+                    // Автоматически выбираем только что добавленный способ
+                    SelectedPaymentMethod = newPaymentMethod;
+
+                    MessageBox.Show($"Добавлен новый способ оплаты: {newMethod}",
+                        "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка: {ex.Message}",
+                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         // Метод для обновления статуса с иконкой
@@ -474,6 +523,15 @@ namespace ManagerApp.Pages
                     return;
                 }
 
+
+                // ПРОВЕРКА ТОВАРОВ
+                if (inviteTime == null)
+                {
+                    MessageBox.Show("Выберите дату!", "Ошибка",
+                        MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
                 // ПОДТВЕРЖДЕНИЕ
                 var confirmResult = MessageBox.Show(
                     $"Создать счет для {SelectedCompany.Title}?\n" +
@@ -670,6 +728,7 @@ namespace ManagerApp.Pages
                 Address = "самовывоз со склада Поставщика г. Екатеринбург, ул. Мартовская, д.8: с 9 ч. 00 мин. до 18 ч. 00 мин. по местному времени в рабочие дни";
 
             return await _bitrixService.CreateSmartInvoice(
+                inviteTime,
                 SelectedCompany.Id,
                 SelectedMyCompany.Id,
                 orderTopic,
@@ -1279,6 +1338,26 @@ namespace ManagerApp.Pages
         {
             PreviewInvoice();
         }
+
+        private void DatePicker_SelectedDateChanged(object sender, SelectionChangedEventArgs e)
+        {
+
+                  if (sender is DatePicker datePicker)
+            {
+                // Проверяем, выбрана ли дата
+                if (datePicker.SelectedDate.HasValue)
+                {
+                    // Получаем дату как DateTime
+                    inviteTime = datePicker.SelectedDate.Value;
+
+
+                }
+                else
+                {
+                    Console.WriteLine("Дата не выбрана (null)");
+                }
+            }
+        }
     }
 
     // Класс для отображения контакта
@@ -1393,5 +1472,124 @@ namespace ManagerApp.Pages
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
+    }
+}
+
+// Очень простое диалоговое окно для ввода способа оплаты
+public class CustomPaymentDialog : Window
+{
+    public string PaymentMethodName { get; private set; }
+
+    public CustomPaymentDialog()
+    {
+        // Настройки окна
+        Title = "Добавить свой способ оплаты";
+        Width = 400;
+        Height = 200;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        ResizeMode = ResizeMode.NoResize;
+
+        // Создаем содержимое
+        var grid = new Grid();
+        grid.Margin = new Thickness(15);
+
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        // Текстовое поле
+        var textBox = new TextBox
+        {
+            Name = "txtPaymentMethod",
+            FontSize = 14,
+            Margin = new Thickness(0, 0, 0, 10),
+            VerticalAlignment = VerticalAlignment.Top,
+            Height = 80,
+            TextWrapping = TextWrapping.Wrap,
+            AcceptsReturn = true,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        };
+
+        // Подсказка
+        var placeholder = new TextBlock
+        {
+            Text = "Введите ваш способ оплаты...",
+            Foreground = Brushes.Gray,
+            FontStyle = FontStyles.Italic,
+            Margin = new Thickness(5, 5, 0, 0),
+            Visibility = Visibility.Visible
+        };
+
+        textBox.TextChanged += (s, e) =>
+        {
+            placeholder.Visibility = string.IsNullOrEmpty(textBox.Text)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        };
+
+        var textBoxContainer = new Grid();
+        textBoxContainer.Children.Add(placeholder);
+        textBoxContainer.Children.Add(textBox);
+
+        Grid.SetRow(textBoxContainer, 0);
+        grid.Children.Add(textBoxContainer);
+
+        // Кнопки
+        var buttonPanel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
+
+        var btnOk = new Button
+        {
+            Content = "Добавить",
+            Width = 100,
+            Height = 35,
+            Margin = new Thickness(0, 0, 10, 0),
+            Background = Brushes.Orange,
+            Foreground = Brushes.White,
+            FontWeight = FontWeights.Bold
+        };
+
+        var btnCancel = new Button
+        {
+            Content = "Отмена",
+            Width = 100,
+            Height = 35,
+            Background = Brushes.LightGray,
+            Foreground = Brushes.Black
+        };
+
+        btnOk.Click += (s, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(textBox.Text))
+            {
+                PaymentMethodName = textBox.Text.Trim();
+                DialogResult = true;
+                Close();
+            }
+            else
+            {
+                MessageBox.Show("Введите способ оплаты!",
+                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        };
+
+        btnCancel.Click += (s, e) =>
+        {
+            DialogResult = false;
+            Close();
+        };
+
+        buttonPanel.Children.Add(btnOk);
+        buttonPanel.Children.Add(btnCancel);
+
+        Grid.SetRow(buttonPanel, 1);
+        grid.Children.Add(buttonPanel);
+
+        Content = grid;
+
+        // Фокус на текстовом поле при загрузке
+        Loaded += (s, e) => textBox.Focus();
     }
 }

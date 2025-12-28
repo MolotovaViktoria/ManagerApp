@@ -3,18 +3,6 @@ using System.Collections.Generic;
 
 namespace ManagerApp.Data.StructureList
 {
-    public class BitrixProductResponse
-    {
-        [JsonProperty("result")]
-        public List<Product> Products { get; set; }
-
-        [JsonProperty("next")]
-        public int? Next { get; set; }
-
-        [JsonProperty("total")]
-        public int Total { get; set; }
-    }
-
     public class Product
     {
         [JsonProperty("ID")]
@@ -32,10 +20,26 @@ namespace ManagerApp.Data.StructureList
         [JsonProperty("PRICE")]
         public decimal? Price { get; set; }
 
-        [JsonProperty("MEASURE")]
-        public string Measure { get; set; } // ДОБАВЬТЕ ЭТО
-    }
+        [JsonProperty("PURCHASING_PRICE")]
+        public decimal? PurchasingPrice { get; set; }
 
+        // Добавьте эти свойства
+        [JsonProperty("purchasingPrice")]
+        public decimal? PurchasingPriceAlt { get; set; }
+
+        [JsonProperty("PURCHASINGPRICE")]
+        public decimal? PurchasingPriceAlt2 { get; set; }
+
+        [JsonProperty("MEASURE")]
+        public string Measure { get; set; }
+
+        // Добавьте этот метод
+        public decimal? GetPurchasingPrice()
+        {
+            return PurchasingPrice ?? PurchasingPriceAlt ?? PurchasingPriceAlt2;
+        }
+    }
+    // В классе ProductWithLowerSection (ManagerApp.Data.StructureList)
     public class ProductWithLowerSection
     {
         public string ProductId { get; set; }
@@ -44,8 +48,22 @@ namespace ManagerApp.Data.StructureList
         public string LowerSectionName { get; set; }
         public string CategoryPath { get; set; }
         public decimal Price { get; set; }
+        public decimal? PurchasingPrice { get; set; } // Добавить
         public string Code { get; set; }
         public string Measure { get; set; }
-        public bool HasPrice { get; set; } // ДОБАВЬТЕ ЭТО
+        public bool HasPrice { get; set; }
+        public bool HasPurchasingPrice { get; set; } // Добавить
+    }
+
+    public class BitrixProductResponse
+    {
+        [JsonProperty("result")]
+        public List<Product> Products { get; set; }
+
+        [JsonProperty("next")]
+        public int? Next { get; set; }
+
+        [JsonProperty("total")]
+        public int Total { get; set; }
     }
 }

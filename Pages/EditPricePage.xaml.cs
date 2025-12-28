@@ -6,6 +6,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -93,11 +94,12 @@ namespace ManagerApp.Pages
             {
                 var product = new ProductPriceViewModel
                 {
-                    BitrixProductId = matchedProduct.BitrixProductId, // ДОБАВЬТЕ ЭТУ СТРОЧКУ
+                    BitrixProductId = matchedProduct.BitrixProductId,
                     OriginalProductName = matchedProduct.OriginalProductName,
                     BitrixProductName = matchedProduct.BitrixProductName,
                     BitrixPrice = matchedProduct.BitrixPrice,
-                    CustomPrice = matchedProduct.BitrixPrice,
+                    PurchasingPrice = matchedProduct.PurchasingPrice, // Загружаем из MatchedProduct
+                    CustomPrice = matchedProduct.CustomPrice > 0 ? matchedProduct.CustomPrice : matchedProduct.BitrixPrice,
                     Quantity = matchedProduct.Quantity > 0 ? matchedProduct.Quantity : 1,
                     Unit = matchedProduct.Unit ?? "шт.",
                     VAT = SettingsHelper.GetVATAsString()
@@ -109,7 +111,109 @@ namespace ManagerApp.Pages
 
             dataGridProducts.ItemsSource = Products;
             UpdateVATDisplay();
+
+            // Запускаем загрузку закупочных цен асинхронно
+            LoadPurchasingPricesBackground();
         }
+
+        private async void LoadPurchasingPricesBackground()
+        {
+            // Проверяем, нужно ли загружать закупочные цены
+            bool needLoad = false;
+
+            await Dispatcher.InvokeAsync(() =>
+            {
+                needLoad = Products.Any(p => p.BitrixProductId > 0 && p.PurchasingPrice == 0);
+            });
+
+            if (needLoad)
+            {
+                await LoadPurchasingPricesAsync();
+            }
+        }
+
+        private async Task LoadPurchasingPricesAsync()
+        {
+            try
+            {
+                // Сначала проверяем, есть ли что загружать
+                bool hasProductsToLoad = await Dispatcher.InvokeAsync(() =>
+                {
+                    return Products.Any(p => p.BitrixProductId > 0);
+                });
+
+                if (!hasProductsToLoad)
+                    return;
+
+                // Показываем индикатор загрузки
+                await Dispatcher.InvokeAsync(() => ShowLoadingIndicator());
+
+                // Собираем ID товаров
+                List<int> productIds = null;
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    productIds = Products
+                        .Where(p => p.BitrixProductId > 0)
+                        .Select(p => p.BitrixProductId)
+                        .Distinct()
+                        .ToList();
+                });
+
+                if (!productIds.Any())
+                    return;
+
+                // Загружаем закупочные цены
+                var purchasingPrices = await BitrixPurchasePriceService.GetPurchasingPricesBatchAsync(productIds);
+
+                // Обновляем данные в UI
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    foreach (var product in Products)
+                    {
+                        if (purchasingPrices.TryGetValue(product.BitrixProductId, out var price))
+                        {
+                            product.PurchasingPrice = price;
+                        }
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    Console.WriteLine($"Ошибка загрузки закупочных цен: {ex.Message}");
+                    // Можно показать сообщение пользователю
+                    MessageBox.Show($"Не удалось загрузить закупочные цены: {ex.Message}",
+                        "Предупреждение", MessageBoxButton.OK, MessageBoxImage.Warning);
+                });
+            }
+            finally
+            {
+                await Dispatcher.InvokeAsync(() => HideLoadingIndicator());
+            }
+        }
+
+        private void ShowLoadingIndicator()
+        {
+            // Простая реализация индикатора загрузки
+            // Можно использовать ProgressBar или другой индикатор
+            Cursor = Cursors.Wait;
+            IsEnabled = false;
+
+            // Если у вас есть ProgressBar, раскомментируйте:
+            // progressBar.Visibility = Visibility.Visible;
+        }
+
+        private void HideLoadingIndicator()
+        {
+            Cursor = Cursors.Arrow;
+            IsEnabled = true;
+
+            // Если у вас есть ProgressBar, раскомментируйте:
+            // progressBar.Visibility = Visibility.Collapsed;
+        }
+
+
 
         private void LoadSampleData()
         {
@@ -244,8 +348,9 @@ namespace ManagerApp.Pages
             {
                 OriginalProductName = p.OriginalProductName,
                 BitrixProductName = p.BitrixProductName,
-                BitrixProductId = p.BitrixProductId, // ДОБАВЬТЕ ЭТО
+                BitrixProductId = p.BitrixProductId,
                 BitrixPrice = p.BitrixPrice,
+                PurchasingPrice = p.PurchasingPrice, // Сохраняем закупочную цену
                 CustomPrice = p.CustomPrice,
                 Quantity = p.Quantity,
                 Unit = p.Unit,

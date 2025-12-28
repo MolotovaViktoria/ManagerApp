@@ -1,5 +1,4 @@
-﻿using ManagerApp.Classes.Read;
-using ManagerApp.Classes.Read.ReadPirture;
+﻿using ManagerApp.Classes.Read.ReadPicture;
 using ManagerApp.Classes.Search;
 using ManagerApp.Data.ScharedData;
 using Microsoft.Win32;
@@ -16,9 +15,6 @@ using System.Windows.Media.Imaging;
 
 namespace ManagerApp.Pages
 {
-    /// <summary>
-    /// Логика взаимодействия для PngPage.xaml
-    /// </summary>
     public partial class PngPage : Page
     {
         private string _currentFilePath = "";
@@ -26,6 +22,7 @@ namespace ManagerApp.Pages
         private HashSet<string> _selectedLineIds = new HashSet<string>();
         private AIProductAnalyzer _aiAnalyzer;
         private AlgorithmicProductAnalyzer _algorithmicAnalyzer;
+        private SimpleOCRProcessor _ocrProcessor;
 
         public class SelectedLineItem
         {
@@ -50,8 +47,28 @@ namespace ManagerApp.Pages
 
         private void InitializeAnalyzers()
         {
-            _aiAnalyzer = new AIProductAnalyzer();
-            _algorithmicAnalyzer = new AlgorithmicProductAnalyzer();
+            try
+            {
+                _ocrProcessor = new SimpleOCRProcessor();
+                _aiAnalyzer = new AIProductAnalyzer();
+                _algorithmicAnalyzer = new AlgorithmicProductAnalyzer();
+
+                if (_ocrProcessor.IsOCRReady())
+                {
+                    statusText.Text = "OCR готов к работе";
+                    statusText.Foreground = Brushes.Green;
+                }
+                else
+                {
+                    statusText.Text = "OCR не готов. Проверьте интернет соединение";
+                    statusText.Foreground = Brushes.Red;
+                }
+            }
+            catch (Exception ex)
+            {
+                statusText.Text = $"Ошибка инициализации: {ex.Message}";
+                statusText.Foreground = Brushes.Red;
+            }
         }
 
         public void LoadFile(string filePath)
@@ -60,16 +77,15 @@ namespace ManagerApp.Pages
             {
                 if (!File.Exists(filePath))
                 {
-                    MessageBox.Show("Файл не найден", "Ошибка",
-                        MessageBoxButton.OK, MessageBoxImage.Error);
+                    ShowError("Файл не найден");
                     return;
                 }
 
                 string extension = Path.GetExtension(filePath)?.ToLower();
-                if (!Classes.Read.FormatLists.ImageFormatList.Contains(extension))
+                if (!IsSupportedFormat(extension))
                 {
-                    MessageBox.Show($"Неподдерживаемый формат изображения: {extension}",
-                        "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                    ShowError($"Неподдерживаемый формат: {extension}\n" +
+                             "Поддерживаемые: PNG, JPG, BMP, TIFF");
                     return;
                 }
 
@@ -83,8 +99,7 @@ namespace ManagerApp.Pages
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка загрузки файла: {ex.Message}",
-                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                ShowError($"Ошибка загрузки: {ex.Message}");
             }
         }
 
@@ -110,8 +125,7 @@ namespace ManagerApp.Pages
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Не удалось загрузить изображение: {ex.Message}",
-                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                ShowError($"Не удалось загрузить изображение: {ex.Message}");
                 ImagePreview.Visibility = Visibility.Collapsed;
             }
         }
@@ -120,56 +134,43 @@ namespace ManagerApp.Pages
         {
             try
             {
-                SetProcessingState(true, "Распознавание текста с изображения...");
-
-                var textLines = await Task.Run(() =>
+                if (!_ocrProcessor.IsOCRReady())
                 {
-                    var ocrProcessor = new ImageOCRProcessor();
+                    ShowError("OCR не готов к работе.\nПроверьте интернет соединение и перезапустите программу.");
+                    return;
+                }
 
-                    if (!ocrProcessor.IsTesseractAvailable())
-                    {
-                        return new List<string>
-                {
-                    "Tesseract OCR не доступен",
-                    "Установите файлы rus.traineddata и eng.traineddata",
-                    $"в папку: {GetTessDataPath()}"
-                };
-                    }
+                SetProcessingState(true, "📷 Распознавание текста...");
 
-                    return ocrProcessor.ProcessImageFile(filePath);
-                });
+                // Распознаем текст с картинки
+                var textLines = await Task.Run(() => _ocrProcessor.ProcessImage(filePath));
 
                 if (textLines == null || textLines.Count == 0)
                 {
-                    MessageBox.Show("Текст на изображении не найден",
-                        "Результат", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ShowInfo("Текст на изображении не найден");
+                    _lines = new List<string>();
+                }
+                else if (textLines.Count == 1 && IsErrorMessage(textLines[0]))
+                {
+                    ShowError(textLines[0]);
                     _lines = new List<string>();
                 }
                 else
                 {
                     _lines = textLines;
-
-                    // Отображаем распознанный текст
                     DisplayText();
+                    ShowInfo($"✅ Найдено {textLines.Count} строк текста");
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка распознавания текста: {ex.Message}",
-                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                ShowError($"Ошибка распознавания: {ex.Message}");
                 _lines = new List<string>();
             }
             finally
             {
                 SetProcessingState(false, "Готово");
             }
-        }
-
-        private string GetTessDataPath()
-        {
-            string appPath = AppDomain.CurrentDomain.BaseDirectory;
-            string projectPath = Path.GetFullPath(Path.Combine(appPath, @"..\..\.."));
-            return Path.Combine(projectPath, "Classes", "tessdata");
         }
 
         private void DisplayText()
@@ -179,7 +180,7 @@ namespace ManagerApp.Pages
             for (int i = 0; i < _lines.Count; i++)
             {
                 string line = _lines[i];
-                if (!string.IsNullOrWhiteSpace(line))
+                if (!string.IsNullOrWhiteSpace(line) && line.Length > 1)
                 {
                     var border = CreateLineBorder(i, line);
                     textItemsControl.Items.Add(border);
@@ -193,14 +194,15 @@ namespace ManagerApp.Pages
             {
                 Tag = lineIndex,
                 Background = GetDefaultLineColor(lineIndex),
-                Padding = new Thickness(8, 4, 8, 4),
+                Padding = new Thickness(8, 6, 8, 6),
                 Cursor = Cursors.Hand,
-                Margin = new Thickness(0, 0, 0, 1)
+                Margin = new Thickness(0, 0, 0, 2),
+                CornerRadius = new CornerRadius(4)
             };
 
             border.Child = new TextBlock
             {
-                Text = lineText,
+                Text = $"{lineIndex + 1}. {lineText}",
                 TextWrapping = TextWrapping.Wrap,
                 FontFamily = new FontFamily("Segoe UI"),
                 FontSize = 13,
@@ -213,6 +215,23 @@ namespace ManagerApp.Pages
                 {
                     ToggleLineSelection(index);
                     e.Handled = true;
+                }
+            };
+
+            border.MouseEnter += (sender, e) =>
+            {
+                if (sender is Border b)
+                {
+                    b.Background = new SolidColorBrush(Color.FromArgb(255, 245, 245, 245));
+                }
+            };
+
+            border.MouseLeave += (sender, e) =>
+            {
+                if (sender is Border b && b.Tag is int index)
+                {
+                    bool isSelected = _selectedLineIds.Contains(GetLineUniqueId(index));
+                    b.Background = isSelected ? GetSelectedColor() : GetDefaultLineColor(index);
                 }
             };
 
@@ -249,6 +268,8 @@ namespace ManagerApp.Pages
                 FileName = fileName,
                 UniqueId = uniqueId
             });
+
+            statusText.Text = $"Выбрано строк: {_selectedLineIds.Count}";
         }
 
         private void RemoveSelection(int lineIndex, string uniqueId)
@@ -262,6 +283,8 @@ namespace ManagerApp.Pages
             {
                 lvSelectedCells.Items.Remove(itemToRemove);
             }
+
+            statusText.Text = $"Выбрано строк: {_selectedLineIds.Count}";
         }
 
         private void UpdateLineAppearance(int lineIndex, bool isSelected)
@@ -270,9 +293,7 @@ namespace ManagerApp.Pages
             {
                 if (item is Border border && border.Tag is int index && index == lineIndex)
                 {
-                    border.Background = isSelected
-                        ? new SolidColorBrush(Color.FromArgb(255, 255, 235, 200))
-                        : GetDefaultLineColor(lineIndex);
+                    border.Background = isSelected ? GetSelectedColor() : GetDefaultLineColor(lineIndex);
                     break;
                 }
             }
@@ -287,7 +308,12 @@ namespace ManagerApp.Pages
         {
             return lineIndex % 2 == 0
                 ? Brushes.White
-                : new SolidColorBrush(Color.FromArgb(255, 249, 249, 249));
+                : new SolidColorBrush(Color.FromArgb(20, 0, 0, 0));
+        }
+
+        private SolidColorBrush GetSelectedColor()
+        {
+            return new SolidColorBrush(Color.FromArgb(255, 255, 235, 200));
         }
 
         private void ClearAllSelections()
@@ -302,39 +328,23 @@ namespace ManagerApp.Pages
                     border.Background = GetDefaultLineColor(index);
                 }
             }
+
+            statusText.Text = "Готово";
         }
 
         private void btnLoadImage_Click(object sender, RoutedEventArgs e)
         {
             var openFileDialog = new OpenFileDialog
             {
-                Filter = CreateImageFilter(),
-                Title = "Выберите изображение"
+                Filter = "Изображения (*.png;*.jpg;*.jpeg;*.bmp;*.tiff;*.tif)|*.png;*.jpg;*.jpeg;*.bmp;*.tiff;*.tif|Все файлы (*.*)|*.*",
+                Title = "Выберите изображение",
+                Multiselect = false
             };
 
             if (openFileDialog.ShowDialog() == true)
             {
                 LoadFile(openFileDialog.FileName);
             }
-        }
-
-        private string CreateImageFilter()
-        {
-            return "Изображения|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tiff;*.tif;*.ico;*.webp;*.jfif|" +
-                   "Все файлы|*.*";
-        }
-
-        private string FormatFileSize(long bytes)
-        {
-            string[] sizes = { "B", "KB", "MB", "GB", "TB" };
-            double len = bytes;
-            int order = 0;
-            while (len >= 1024 && order < sizes.Length - 1)
-            {
-                order++;
-                len = len / 1024;
-            }
-            return $"{len:0.##} {sizes[order]}";
         }
 
         // ==================== АНАЛИЗ ТЕКСТА ====================
@@ -352,7 +362,7 @@ namespace ManagerApp.Pages
             }
             catch (Exception ex)
             {
-                ShowError("AI анализа", ex);
+                ShowError($"AI анализа: {ex.Message}");
             }
         }
 
@@ -369,7 +379,7 @@ namespace ManagerApp.Pages
             }
             catch (Exception ex)
             {
-                ShowError("алгоритмического анализа", ex);
+                ShowError($"алгоритмического анализа: {ex.Message}");
             }
         }
 
@@ -377,8 +387,7 @@ namespace ManagerApp.Pages
         {
             if (_lines.Count == 0)
             {
-                MessageBox.Show("Сначала загрузите изображение и распознайте текст",
-                    "Внимание", MessageBoxButton.OK, MessageBoxImage.Warning);
+                ShowInfo("Сначала загрузите изображение и распознайте текст");
                 return false;
             }
             return true;
@@ -407,13 +416,11 @@ namespace ManagerApp.Pages
                 {
                     AddFoundProductsToList(foundProducts);
 
-                    MessageBox.Show($"{analysisType} завершен. Найдено товаров: {foundProducts.Count}",
-                        "Результат", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ShowInfo($"{analysisType} завершен. Найдено товаров: {foundProducts.Count}");
                 }
                 else
                 {
-                    MessageBox.Show($"{analysisType} не нашел товаров",
-                        "Результат", MessageBoxButton.OK, MessageBoxImage.Information);
+                    ShowInfo($"{analysisType} не нашел товаров");
                 }
             });
         }
@@ -449,14 +456,31 @@ namespace ManagerApp.Pages
 
         private int FindMatchingLine(string product)
         {
+            string productLower = product.ToLower();
+
             for (int i = 0; i < _lines.Count; i++)
             {
-                if (_lines[i].Contains(product) || product.Contains(_lines[i]))
+                string lineLower = _lines[i].ToLower();
+
+                // Ищем частичное совпадение
+                if (lineLower.Contains(productLower) || productLower.Contains(lineLower) ||
+                    CalculateSimilarity(lineLower, productLower) > 0.6)
                 {
                     return i;
                 }
             }
             return -1;
+        }
+
+        private double CalculateSimilarity(string s1, string s2)
+        {
+            // Простая проверка схожести строк
+            if (s1 == s2) return 1.0;
+
+            int commonChars = s1.Intersect(s2).Count();
+            int maxLength = Math.Max(s1.Length, s2.Length);
+
+            return maxLength > 0 ? (double)commonChars / maxLength : 0;
         }
 
         private void UpdateProgress(string message)
@@ -465,7 +489,7 @@ namespace ManagerApp.Pages
             {
                 statusText.Text = message;
                 if (progressBar.Value < 95)
-                    progressBar.Value += 0.5;
+                    progressBar.Value += 1;
             });
         }
 
@@ -475,11 +499,9 @@ namespace ManagerApp.Pages
             {
                 progressPanel.Visibility = isProcessing ? Visibility.Visible : Visibility.Collapsed;
 
-                //btnAI.IsEnabled = !isProcessing;
-                //btnMath.IsEnabled = !isProcessing;
                 btnLoadImage.IsEnabled = !isProcessing;
-                btnClearList.IsEnabled = !isProcessing;
-                btnNext.IsEnabled = !isProcessing;
+                btnClearList.IsEnabled = !isProcessing && _selectedLineIds.Count > 0;
+                btnNext.IsEnabled = !isProcessing && _selectedLineIds.Count > 0;
                 btnBack.IsEnabled = !isProcessing;
 
                 if (!string.IsNullOrEmpty(status))
@@ -488,22 +510,8 @@ namespace ManagerApp.Pages
                 if (!isProcessing)
                 {
                     progressBar.Value = 0;
-                    //btnAI.Content = "Сформировать список товаров с помощью ИИ";
-                    //btnMath.Content = "Сформировать список товаров с помощью алгоритма";
-                }
-                else
-                {
-                    //btnAI.Content = "Идет анализ...";
-                    //btnMath.Content = "Идет анализ...";
                 }
             });
-        }
-
-        private void ShowError(string analysisType, Exception ex)
-        {
-            MessageBox.Show($"Ошибка {analysisType}: {ex.Message}",
-                "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-            SetProcessingState(false, "Ошибка");
         }
 
         // ==================== КНОПКИ УПРАВЛЕНИЯ ====================
@@ -525,38 +533,133 @@ namespace ManagerApp.Pages
             {
                 if (_selectedLineIds.Count == 0)
                 {
-                    MessageBox.Show("Сначала выберите строки для сопоставления",
-                        "Внимание", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    ShowInfo("Сначала выберите строки для сопоставления");
                     return;
                 }
 
                 var selectedProducts = lvSelectedCells.Items.Cast<SelectedLineItem>()
                     .Where(item => !string.IsNullOrWhiteSpace(item.Text))
-                    .Select(item =>
-                    {
-                        string text = item.Text.Trim();
-                        return text.Length > 150 ? text.Substring(0, 150) + "..." : text;
-                    })
+                    .Select(item => item.Text.Trim())
                     .ToList();
 
                 if (selectedProducts.Count == 0)
                 {
-                    MessageBox.Show("Нет выбранных строк с текстом",
-                        "Внимание", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    ShowInfo("Нет выбранных строк с текстом");
                     return;
                 }
 
-                ProductSelectionManager.SetProducts(selectedProducts);
+                // Переход на страницу сравнения
+                NavigateToComparisonPage(selectedProducts);
+            }
+            catch (Exception ex)
+            {
+                ShowError($"Ошибка при переходе: {ex.Message}");
+            }
+        }
 
-                var comparisonPage = new ComparisonProduct(selectedProducts);
-                NavigationService.Navigate(comparisonPage);
+        private void NavigateToComparisonPage(List<string> selectedProducts)
+        {
+            try
+            {
+                // Сохраняем выбранные товары
+                if (typeof(ProductSelectionManager).IsClass)
+                {
+                    var method = typeof(ProductSelectionManager).GetMethod("SetProducts");
+                    if (method != null)
+                    {
+                        method.Invoke(null, new object[] { selectedProducts });
+                    }
+                }
+
+                // Создаем и переходим на страницу сравнения
+                var comparisonPageType = Type.GetType("ManagerApp.Pages.ComparisonProduct");
+                if (comparisonPageType != null)
+                {
+                    var comparisonPage = Activator.CreateInstance(comparisonPageType, selectedProducts);
+                    NavigationService.Navigate(comparisonPage);
+                }
+                else
+                {
+                    // Если страница сравнения не существует, показываем результат
+                    ShowInfo($"Выбрано {selectedProducts.Count} товаров:\n" +
+                            string.Join("\n", selectedProducts.Take(5)));
+                    if (selectedProducts.Count > 5)
+                        ShowInfo("... и еще " + (selectedProducts.Count - 5) + " товаров");
+                }
 
                 ClearAllSelections();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка при переходе: {ex.Message}",
-                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                ShowError($"Ошибка навигации: {ex.Message}");
+            }
+        }
+
+        private void btnOCRHelp_Click(object sender, RoutedEventArgs e)
+        {
+            if (_ocrProcessor != null)
+            {
+                _ocrProcessor.ShowHelp();
+            }
+        }
+
+        // ==================== ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ====================
+
+        private bool IsSupportedFormat(string extension)
+        {
+            string[] supported = { ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif", ".gif" };
+            return supported.Contains(extension);
+        }
+
+        private bool IsErrorMessage(string text)
+        {
+            string[] errorKeywords = { "ошибка", "error", "не найден", "не готов", "неподдерживаемый" };
+            return errorKeywords.Any(keyword => text.ToLower().Contains(keyword));
+        }
+
+        private string FormatFileSize(long bytes)
+        {
+            string[] sizes = { "B", "KB", "MB", "GB" };
+            double len = bytes;
+            int order = 0;
+            while (len >= 1024 && order < sizes.Length - 1)
+            {
+                order++;
+                len = len / 1024;
+            }
+            return $"{len:0.##} {sizes[order]}";
+        }
+
+        private void ShowInfo(string message)
+        {
+            MessageBox.Show(message, "Информация",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            statusText.Text = message;
+        }
+
+        private void ShowError(string message)
+        {
+            MessageBox.Show(message, "Ошибка",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+            statusText.Text = message;
+            statusText.Foreground = Brushes.Red;
+        }
+
+        private void Page_Loaded(object sender, RoutedEventArgs e)
+        {
+            // Обновляем статус OCR при загрузке страницы
+            if (_ocrProcessor != null)
+            {
+                if (_ocrProcessor.IsOCRReady())
+                {
+                    statusText.Text = "✅ OCR готов к работе";
+                    statusText.Foreground = Brushes.Green;
+                }
+                else
+                {
+                    statusText.Text = "⚠️ OCR требует настройки. Нажмите 'Помощь OCR'";
+                    statusText.Foreground = Brushes.Orange;
+                }
             }
         }
     }

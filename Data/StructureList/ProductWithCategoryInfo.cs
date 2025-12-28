@@ -6,14 +6,18 @@ using System.Threading.Tasks;
 
 namespace ManagerApp.Data.StructureList
 {
+    // В классе ProductWithCategoryInfo (если существует)
     public class ProductWithCategoryInfo
     {
-        public string CategoryName { get; set; }        // 1- название категории
-        public string ProductName { get; set; }         // 2- товар (название)см 
-        public decimal Price { get; set; }              // 3- цена
-        public bool HasPrice { get; set; }              // Флаг наличия цены
-        public string SectionId { get; set; }           // ID категории (для ссылок)
-        public string ProductCode { get; set; }         // Код товара
-        public string ProductId { get; set; }           // ID товара
+        public string ProductId { get; set; }
+        public string ProductName { get; set; }
+        public string SectionId { get; set; }
+        public string CategoryName { get; set; }
+        public decimal Price { get; set; }
+        public decimal? PurchasingPrice { get; set; } // Добавить
+        public string ProductCode { get; set; }
+        public string Measure { get; set; } // Добавить
+        public bool HasPrice { get; set; }
+        public bool HasPurchasingPrice { get; set; } // Добавить
     }
 }

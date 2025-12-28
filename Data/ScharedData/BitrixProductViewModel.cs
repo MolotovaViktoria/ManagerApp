@@ -18,7 +18,16 @@ namespace ManagerApp.Data.ScharedData
         private decimal _price;
         private bool _hasPrice;
         private string _sectionId;
-
+        private decimal _purchasingPrice;
+        private bool _hasPurchasingPrice;
+        private string _purchasingCurrency;
+        public decimal? PurchasingPrice { get; set; } // Добавить
+        public bool HasPurchasingPrice { get; set; } // Добавить
+                                                     // Для привязки в XAML
+        public string PurchasingPriceDisplay =>
+            HasPurchasingPrice && PurchasingPrice.HasValue
+                ? PurchasingPrice.Value.ToString("##0.00 ₽")
+                : "Нет цены";
         public string ProductId
         {
             get => _productId;
@@ -112,6 +121,56 @@ namespace ManagerApp.Data.ScharedData
             }
         }
 
+        //// НОВОЕ ПОЛЕ: Закупочная цена
+        //public decimal PurchasingPrice
+        //{
+        //    get => _purchasingPrice;
+        //    set
+        //    {
+        //        if (_purchasingPrice != value)
+        //        {
+        //            _purchasingPrice = value;
+        //            OnPropertyChanged();
+        //            OnPropertyChanged(nameof(HasPurchasingPrice));
+        //        }
+        //    }
+        //}
+
+        //// НОВОЕ ПОЛЕ: Флаг наличия закупочной цены
+        //public bool HasPurchasingPrice
+        //{
+        //    get => _purchasingPrice > 0;
+        //    set
+        //    {
+        //        if (_hasPurchasingPrice != value)
+        //        {
+        //            _hasPurchasingPrice = value;
+        //            OnPropertyChanged();
+        //        }
+        //    }
+        //}
+
+        // НОВОЕ ПОЛЕ: Валюта закупочной цены
+        public string PurchasingCurrency
+        {
+            get => _purchasingCurrency;
+            set
+            {
+                if (_purchasingCurrency != value)
+                {
+                    _purchasingCurrency = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        // НОВОЕ СВОЙСТВО: Цена для отображения (сначала обычная, потом закупочная)
+        public decimal DisplayPrice => (decimal)(HasPrice ? Price :
+                                       (HasPurchasingPrice ? PurchasingPrice : 0));
+
+        // НОВОЕ СВОЙСТВО: Флаг наличия любой цены
+        public bool HasAnyPrice => HasPrice || HasPurchasingPrice;
+
         public string SectionId
         {
             get => _sectionId;
@@ -121,9 +180,12 @@ namespace ManagerApp.Data.ScharedData
                 {
                     _sectionId = value;
                     OnPropertyChanged();
+                    OnPropertyChanged(nameof(HasSectionId));
                 }
             }
         }
+
+        public bool HasSectionId => !string.IsNullOrEmpty(SectionId);
 
         // Свойство для отображения (можно использовать в XAML)
         public string DisplayCategory =>
@@ -132,6 +194,32 @@ namespace ManagerApp.Data.ScharedData
         // Свойство для отображения полной информации о категории
         public string CategoryTooltip =>
             !string.IsNullOrEmpty(FullCategoryPath) ? FullCategoryPath : CategoryName;
+
+        // Свойство для отображения информации о ценах
+        public string PriceTooltip
+        {
+            get
+            {
+                var sb = new StringBuilder();
+
+                if (HasPrice)
+                {
+                    sb.AppendLine($"Цена: {Price:##0.00} ₽");
+                }
+
+                if (HasPurchasingPrice)
+                {
+                    sb.AppendLine($"Закупочная: {PurchasingPrice:##0.00} ₽");
+                }
+
+                if (!HasPrice && !HasPurchasingPrice)
+                {
+                    sb.Append("Нет цен");
+                }
+
+                return sb.ToString();
+            }
+        }
 
         // Для сравнения товаров по ID
         public bool Equals(BitrixProductViewModel other)

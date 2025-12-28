@@ -18,5 +18,6 @@ namespace ManagerApp.Data.ScharedData
         public string VAT { get; set; }
         public decimal PriceWithVAT { get; set; }
         public decimal TotalWithVAT { get; set; }
+        public decimal PurchasingPrice { get; set; } // ДОБАВЬТЕ ЭТУ СТРОЧКУ
     }
 }

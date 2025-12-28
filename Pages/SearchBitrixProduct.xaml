@@ -213,25 +213,7 @@
                             <DataGridTextColumn Header="Нижний раздел" 
                         Binding="{Binding LowerSectionName}"
                         Width="150"/>
-                            <DataGridTextColumn Header="Цена" 
-                                                Binding="{Binding Price, StringFormat=\{0:##0.00\} ₽}"
-                                                Width="120">
-                                <DataGridTextColumn.ElementStyle>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="HorizontalAlignment" Value="Right"/>
-                                        <Setter Property="FontWeight" Value="Bold"/>
-                                        <Setter Property="Foreground" Value="#E2542A"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding HasPrice}" Value="False">
-                                                <Setter Property="Text" Value="Нет цены"/>
-                                                <Setter Property="Foreground" Value="Gray"/>
-                                                <Setter Property="FontWeight" Value="Normal"/>
-                                                <Setter Property="HorizontalAlignment" Value="Center"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </DataGridTextColumn.ElementStyle>
-                            </DataGridTextColumn>
+                          
                             <DataGridTemplateColumn Width="100" Header="Выбор">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>

@@ -17,7 +17,6 @@
 
         <!-- Панель шагов -->
         <Grid Grid.Row="0" 
-              
               Background="#F5F5F5"
               Height="70"
               VerticalAlignment="Center"
@@ -35,7 +34,6 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Пустое пространство слева -->
                 <Grid Grid.Column="0"/>
 
                 <!-- Шаг 1: Загрузка заявки -->
@@ -57,7 +55,6 @@
                     </Viewbox>
                 </Border>
 
-                <!-- Промежуток -->
                 <Grid Grid.Column="2"/>
 
                 <!-- Шаг 2: Сопоставление товаров (активный) -->
@@ -78,7 +75,6 @@
                     </Viewbox>
                 </Border>
 
-                <!-- Промежуток -->
                 <Grid Grid.Column="4"/>
 
                 <!-- Шаг 3: Редактирование цены -->
@@ -100,7 +96,6 @@
                     </Viewbox>
                 </Border>
 
-                <!-- Промежуток -->
                 <Grid Grid.Column="6"/>
 
                 <!-- Шаг 4: Формирование счета -->
@@ -122,7 +117,6 @@
                     </Viewbox>
                 </Border>
 
-                <!-- Пустое пространство справа -->
                 <Grid Grid.Column="8"/>
             </Grid>
         </Grid>
@@ -137,6 +131,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
@@ -145,16 +140,143 @@
                         Background="#F8F8F8"
                         BorderBrush="#E0E0E0"
                         BorderThickness="0,0,0,1"
-                        Padding="20,15">
-                    <TextBlock Text="СОПОСТАВЛЕНИЕ ТОВАРОВ"
-                               FontSize="18"
-                               FontWeight="Bold"
-                               Foreground="#333333"
-                               HorizontalAlignment="Center"/>
+                        Padding="15">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Text="СОПОСТАВЛЕНИЕ ТОВАРОВ"
+                                   FontSize="18"
+                                   FontWeight="Bold"
+                                   Foreground="#333333"/>
+
+                        <!-- Панель управления товарами -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                          
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Панель быстрого добавления -->
+                <Border Grid.Row="1"
+                        Background="#F9F9F9"
+                        BorderBrush="#E0E0E0"
+                        BorderThickness="0,0,0,1"
+                        Padding="15,12">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0"
+                                   Text="Добавить товар:"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"
+                                   Foreground="#333333"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,10,0"/>
+
+                        <TextBox x:Name="txtNewProduct"
+         Grid.Column="1"
+         Margin="0,0,10,0"
+         Padding="10,8"
+         FontSize="14"
+         VerticalContentAlignment="Center"
+         BorderBrush="#CCCCCC"
+         BorderThickness="1"
+         VerticalAlignment="Center"
+         KeyUp="TxtNewProduct_KeyUp"
+         TextChanged="TxtNewProduct_TextChanged">
+                            <!-- Добавить эту строку -->
+                            <TextBox.Style>
+                                <Style TargetType="TextBox">
+                                    <Setter Property="Border.CornerRadius" Value="4"/>
+                                    <Setter Property="Background" Value="White"/>
+                                </Style>
+                            </TextBox.Style>
+                        </TextBox>
+
+                        <Button x:Name="btnQuickAdd"
+                                Grid.Column="2"
+                                Content="Добавить"
+                                Width="100"
+                                Height="36"
+                                Background="#4CAF50"
+                                Foreground="White"
+                                FontWeight="Bold"
+                                FontSize="13"
+                                Click="BtnQuickAdd_Click"
+                                Cursor="Hand"
+                                Margin="0,0,10,0">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}"
+                                                        CornerRadius="4">
+                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                      VerticalAlignment="Center"/>
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="#45A049"/>
+                                        </Trigger>
+                                        <Trigger Property="IsEnabled" Value="False">
+                                            <Setter Property="Background" Value="#CCCCCC"/>
+                                            <Setter Property="Foreground" Value="#888888"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+
+                        <Button x:Name="btnClearAll"
+                                Grid.Column="3"
+                                Content="Очистить все"
+                                Width="110"
+                                Height="36"
+                                Background="#F44336"
+                                Foreground="White"
+                                FontWeight="Bold"
+                                FontSize="13"
+                                Click="BtnClearAll_Click"
+                                Cursor="Hand"
+                                ToolTip="Удалить все товары из списка">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}"
+                                                        CornerRadius="4">
+                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                                      VerticalAlignment="Center"/>
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                    <Style.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="#D32F2F"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </Grid>
                 </Border>
 
                 <!-- Заголовки колонок -->
-                <Border Grid.Row="1"
+                <Border Grid.Row="2"
                         Background="#F0F0F0"
                         BorderBrush="#E0E0E0"
                         BorderThickness="0,0,0,1"
@@ -164,9 +286,9 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- Заголовок колонки 1 -->
                         <TextBlock Grid.Column="0"
                                    Text="ТОВАР ИЗ ЗАЯВКИ"
                                    FontSize="14"
@@ -175,7 +297,6 @@
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"/>
 
-                        <!-- Заголовок колонки 2 -->
                         <TextBlock Grid.Column="1"
                                    Text="ВЫБОР ТОВАРА ИЗ BITRIX"
                                    FontSize="14"
@@ -184,7 +305,6 @@
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"/>
 
-                        <!-- Заголовок колонки 3 -->
                         <TextBlock Grid.Column="2"
                                    Text="ДЕЙСТВИЕ"
                                    FontSize="14"
@@ -193,13 +313,23 @@
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"
                                    Width="80"/>
+
+                        <TextBlock Grid.Column="3"
+                                   Text="УДАЛИТЬ"
+                                   FontSize="14"
+                                   FontWeight="Bold"
+                                   Foreground="#333333"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Width="100"/>
                     </Grid>
                 </Border>
 
                 <!-- Таблица товаров -->
-                <ScrollViewer Grid.Row="2"
+                <ScrollViewer Grid.Row="3"
                               VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Auto">
+                              HorizontalScrollBarVisibility="Disabled"
+                              Padding="0">
                     <ItemsControl x:Name="itemsControlProducts"
                                   ItemsSource="{Binding ProductItems}"
                                   Margin="0">
@@ -207,11 +337,13 @@
                             <DataTemplate>
                                 <Border BorderBrush="#E0E0E0"
                                         BorderThickness="0,0,0,1"
-                                        Padding="20,15">
+                                        Padding="20,12"
+                                        Background="White">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
 
@@ -224,85 +356,97 @@
                                                        TextWrapping="Wrap"
                                                        HorizontalAlignment="Center"
                                                        VerticalAlignment="Center"
-                                                       FontSize="14"/>
+                                                       FontSize="14"
+                                                       Foreground="#333333"/>
                                         </Border>
 
                                         <!-- Колонка 2: Выбор товара из Bitrix -->
                                         <ComboBox Grid.Column="1"
-          Margin="10,0"
-          ItemsSource="{Binding BitrixProducts}"
-          DisplayMemberPath="ProductName"
-          SelectedItem="{Binding SelectedBitrixProduct, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-          IsEditable="True"
-          HorizontalAlignment="Stretch"
-          VerticalAlignment="Center"
-          FontSize="14"
-          Height="40"
-          Padding="10,0"
-          DropDownOpened="ComboBox_DropDownOpened"
-          KeyUp="ComboBox_KeyUp">
-
+                                                  Margin="10,0"
+                                                  ItemsSource="{Binding BitrixProducts}"
+                                                  DisplayMemberPath="ProductName"
+                                                  SelectedItem="{Binding SelectedBitrixProduct, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  IsEditable="True"
+                                                  HorizontalAlignment="Stretch"
+                                                  VerticalAlignment="Center"
+                                                  FontSize="14"
+                                                  Height="38"
+                                                  Padding="10,0"
+                                                  BorderBrush="#CCCCCC"
+                                                  DropDownOpened="ComboBox_DropDownOpened"
+                                                  KeyUp="ComboBox_KeyUp">
+                                            <ComboBox.Style>
+                                                <Style TargetType="ComboBox">
+                                                    <Setter Property="Border.CornerRadius" Value="4"/>
+                                                </Style>
+                                            </ComboBox.Style>
                                             <ComboBox.ItemTemplate>
                                                 <DataTemplate>
                                                     <StackPanel Orientation="Vertical" 
-                        Margin="2"
-                        HorizontalAlignment="Center">
+                                                                Margin="2"
+                                                                HorizontalAlignment="Center">
                                                         <TextBlock Text="{Binding ProductName}"
-                           FontWeight="SemiBold"
-                           TextWrapping="Wrap"
-                           HorizontalAlignment="Center"/>
+                                                                   FontWeight="SemiBold"
+                                                                   TextWrapping="Wrap"
+                                                                   HorizontalAlignment="Center"/>
                                                         <StackPanel Orientation="Horizontal" 
-                            HorizontalAlignment="Center">
+                                                                    HorizontalAlignment="Center">
                                                             <TextBlock Text="{Binding CategoryName}"
-                               FontSize="11"
-                               Foreground="Gray"/>
+                                                                       FontSize="11"
+                                                                       Foreground="Gray"/>
                                                             <TextBlock Text=" • "
-                               FontSize="11"
-                               Foreground="Gray"/>
+                                                                       FontSize="11"
+                                                                       Foreground="Gray"/>
                                                             <TextBlock Text="{Binding Price, StringFormat='Цена: {0:#,##0.00} ₽'}"
-                               FontSize="11"
-                             />
+                                                                       FontSize="11"/>
                                                         </StackPanel>
                                                     </StackPanel>
                                                 </DataTemplate>
                                             </ComboBox.ItemTemplate>
-
-                                            <!-- Подсказка при наведении на выбранный товар -->
-                                            <ComboBox.ToolTip>
-                                                <ToolTip>
-                                                    <StackPanel>
-                                                        <TextBlock Text="{Binding SelectedBitrixProduct.ProductName}" 
-                           FontWeight="Bold"/>
-                                                        <TextBlock Text="{Binding SelectedBitrixProduct.CategoryName}" 
-                           Foreground="Gray"/>                                                                                                                      
-                                                        <TextBlock>
-                    <Run Text="Цена: "/>
-                    <Run Text="{Binding SelectedBitrixProduct.Price, StringFormat='Цена: {0:#,##0.00} ₽'}"
-                       />
-                                                        </TextBlock>
-                                                    </StackPanel>
-                                                </ToolTip>
-                                            </ComboBox.ToolTip>
                                         </ComboBox>
 
-                                        <!-- Колонка 3: Кнопка добавления -->
+                                        <!-- Колонка 3: Кнопка расширенного поиска -->
                                         <Button Grid.Column="2"
-        Width="60"
-        Height="60"
-        Background="Transparent"
-        BorderThickness="0"
-        Command="{Binding AddCommand}"
-        CommandParameter="{Binding}" 
-                                            ToolTip="Добавить сопоставление"
-        HorizontalAlignment="Center"
-        VerticalAlignment="Center">
+                                                Width="50"
+                                                Height="50"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Command="{Binding AddCommand}"
+                                                CommandParameter="{Binding}" 
+                                                ToolTip="Открыть расширенный поиск"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Cursor="Hand">
                                             <Grid>
                                                 <Image Source="/Image/changeButton.png" 
-               Width="32"
-               Height="32"
-               HorizontalAlignment="Center"
-               VerticalAlignment="Center"
-               RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                       Width="28"
+                                                       Height="28"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                            </Grid>
+                                        </Button>
+
+                                        <!-- Колонка 4: Кнопка удаления товара -->
+                                        <Button Grid.Column="3"
+                                                Width="40"
+                                                Height="40"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Command="{Binding RemoveCommand}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="Удалить товар"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Cursor="Hand">
+                                            <Grid>
+                                                <Ellipse Width="32" Height="32" Fill="#FF5252"/>
+                                                <TextBlock Text="×" 
+                                                           FontSize="20" 
+                                                           FontWeight="Bold" 
+                                                           Foreground="White"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"/>
                                             </Grid>
                                         </Button>
                                     </Grid>

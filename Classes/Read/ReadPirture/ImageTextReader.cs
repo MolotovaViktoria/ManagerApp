@@ -1,579 +1,330 @@
-﻿using DocumentFormat.OpenXml.Wordprocessing;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Text;
 using Tesseract;
 
-namespace ManagerApp.Classes.Read.ReadPirture
+namespace ManagerApp.Classes.Read.ReadPicture
 {
     public class ImageTextReader
     {
-        private string _tessDataPath;
+        private string _tessDataPath; // Путь к файлам Tesseract
 
-        public ImageTextReader(string tessDataPath = null)
+        public ImageTextReader()
         {
-            // Исправленный путь к tessdata
-            _tessDataPath = tessDataPath ?? @"C:\Users\vimol\Desktop\managerApp\ManagerApp\Classes\tessdata";
+            // 1. Находим или создаем папку для файлов Tesseract
+            _tessDataPath = GetTessDataPath();
+            Console.WriteLine($"Папка с файлами Tesseract: {_tessDataPath}");
 
-            Console.WriteLine($"Tesseract data path: {_tessDataPath}");
+            // 2. Создаем папку, если ее нет
+            CreateFolderIfNotExists(_tessDataPath);
 
-            if (!Directory.Exists(_tessDataPath))
-            {
-                throw new DirectoryNotFoundException(
-                    $"Папка tessdata не найдена по пути: {_tessDataPath}\n" +
-                    "Создайте папку 'tessdata' в корне проекта и добавьте файлы rus.traineddata и eng.traineddata");
-            }
-
-            // Проверяем наличие языковых файлов
-            CheckLanguageFiles();
-
-            // Проверяем версию файлов
-            CheckTessDataQuality();
+            // 3. Проверяем и загружаем файлы языков
+            CheckAndDownloadLanguageFiles();
         }
 
-        private void CheckLanguageFiles()
+        // Метод для получения правильного пути к файлам
+        private string GetTessDataPath()
         {
-            var requiredLanguages = new[] { "rus" };
-            var missingFiles = new List<string>();
+            // Путь 1: Папка рядом с программой
+            string programFolder = AppDomain.CurrentDomain.BaseDirectory;
+            string path1 = Path.Combine(programFolder, "tessdata");
 
-            foreach (var lang in requiredLanguages)
+            // Путь 2: Папка Image рядом с программой
+            string path2 = Path.Combine(programFolder, "Image");
+
+            // Путь 3: В документах пользователя
+            string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            string path3 = Path.Combine(documents, "ManagerApp", "tessdata");
+
+            // Проверяем, где есть файлы
+            if (HasTessDataFiles(path1)) return path1;
+            if (HasTessDataFiles(path2)) return path2;
+            if (HasTessDataFiles(path3)) return path3;
+
+            // Если нигде нет файлов, используем первый путь
+            return path1;
+        }
+
+        // Проверяем, есть ли файлы Tesseract в папке
+        private bool HasTessDataFiles(string folderPath)
+        {
+            if (!Directory.Exists(folderPath)) return false;
+
+            // Ищем файлы с расширением .traineddata
+            string[] files = Directory.GetFiles(folderPath, "*.traineddata");
+            return files.Length > 0;
+        }
+
+        // Создаем папку, если ее нет
+        private void CreateFolderIfNotExists(string path)
+        {
+            if (!Directory.Exists(path))
             {
-                string filePath = Path.Combine(_tessDataPath, $"{lang}.traineddata");
+                Directory.CreateDirectory(path);
+                Console.WriteLine($"Создана папка: {path}");
+            }
+        }
+
+        // Проверяем и загружаем файлы языков
+        private void CheckAndDownloadLanguageFiles()
+        {
+            // Какие языки нам нужны
+            string[] neededLanguages = { "rus", "eng" };
+
+            foreach (string language in neededLanguages)
+            {
+                string filePath = Path.Combine(_tessDataPath, $"{language}.traineddata");
+
+                // Если файла нет, скачиваем его
                 if (!File.Exists(filePath))
                 {
-                    missingFiles.Add($"{lang}.traineddata");
+                    Console.WriteLine($"Файл {language}.traineddata не найден. Скачиваем...");
+                    DownloadLanguageFile(language, filePath);
                 }
                 else
                 {
-                    long fileSize = new FileInfo(filePath).Length;
-                    Console.WriteLine($"Найден языковой файл: {Path.GetFileName(filePath)} (Size: {FormatFileSize(fileSize)})");
-
-                    // Предупреждение если файл слишком маленький
-                    if (fileSize < 5 * 1024 * 1024) // меньше 5MB
+                    // Проверяем размер файла
+                    FileInfo info = new FileInfo(filePath);
+                    if (info.Length < 2 * 1024 * 1024) // Меньше 2 МБ
                     {
-                        Console.WriteLine($"ВНИМАНИЕ: Файл {lang}.traineddata слишком мал ({FormatFileSize(fileSize)}). " +
-                                          "Скачайте улучшенную версию с https://github.com/tesseract-ocr/tessdata_best");
+                        Console.WriteLine($"Файл {language}.traineddata слишком маленький. Скачиваем заново...");
+                        DownloadLanguageFile(language, filePath);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Файл {language}.traineddata найден ({info.Length / 1024 / 1024} МБ)");
                     }
                 }
             }
+        }
 
-            if (missingFiles.Any())
+        // Скачиваем файл языка
+        private void DownloadLanguageFile(string language, string savePath)
+        {
+            try
             {
-                throw new FileNotFoundException(
-                    $"Отсутствуют языковые файлы Tesseract: {string.Join(", ", missingFiles)}\n" +
-                    $"Путь к tessdata: {_tessDataPath}\n" +
-                    $"Скачайте файлы с: https://github.com/tesseract-ocr/tessdata_best\n" +
-                    $"И поместите их в папку: {_tessDataPath}");
+                // URL для скачивания
+                string url = $"https://github.com/tesseract-ocr/tessdata/raw/main/{language}.traineddata";
+
+                Console.WriteLine($"Скачиваем с: {url}");
+
+                using (WebClient client = new WebClient())
+                {
+                    // Устанавливаем User-Agent, чтобы GitHub не блокировал
+                    client.Headers.Add("User-Agent", "ManagerApp/1.0");
+
+                    // Скачиваем файл
+                    client.DownloadFile(url, savePath);
+                }
+
+                Console.WriteLine($"Файл скачан: {savePath}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при скачивании: {ex.Message}");
+                throw new Exception($"Не удалось скачать файл {language}.traineddata. Проверьте интернет соединение.");
             }
         }
 
-        private void CheckTessDataQuality()
-        {
-            Console.WriteLine("=== СОВЕТЫ ДЛЯ УЛУЧШЕНИЯ КАЧЕСТВА OCR ===");
-            Console.WriteLine("1. Скачайте улучшенные файлы tessdata_best с GitHub");
-            Console.WriteLine("2. Убедитесь, что изображения имеют минимум 300 DPI");
-            Console.WriteLine("3. Используйте черно-белые изображения с контрастом");
-            Console.WriteLine("4. Обрежьте лишние поля вокруг текста");
-            Console.WriteLine("===========================================");
-        }
-
+        // Основной метод для чтения текста с картинки
         public List<string> ReadTextFromImage(string imagePath, string language = "rus")
-
         {
-            var resultLines = new List<string>();
+            List<string> result = new List<string>();
 
             try
             {
-                Console.WriteLine($"\n=== НАЧАЛО РАСПОЗНАВАНИЯ: {Path.GetFileName(imagePath)} ===");
+                Console.WriteLine($"Читаем текст с: {Path.GetFileName(imagePath)}");
 
-                if (!File.Exists(imagePath))
+                // 1. Предварительная обработка картинки
+                string processedImage = PrepareImage(imagePath);
+
+                // 2. Распознавание текста
+                string text = RecognizeText(processedImage, language);
+
+                // 3. Обработка результата
+                result = CleanText(text);
+
+                // 4. Удаляем временный файл
+                if (processedImage != imagePath && File.Exists(processedImage))
                 {
-                    throw new FileNotFoundException($"Файл не найден: {imagePath}");
-                }
-
-                string processedImagePath = PreprocessImageForOCR(imagePath);
-                bool isProcessed = processedImagePath != imagePath;
-
-                try
-                {
-                    var ocrResult = PerformOCR(processedImagePath, language, isProcessed);
-
-                    // ТОЛЬКО постобработка, без добавления служебной информации
-                    resultLines = PostProcessOCRResults(ocrResult);
-                }
-                finally
-                {
-                    if (isProcessed && File.Exists(processedImagePath))
-                    {
-                        try { File.Delete(processedImagePath); } catch { }
-                    }
+                    File.Delete(processedImage);
                 }
             }
             catch (Exception ex)
             {
-                // Только простое сообщение об ошибке
-                resultLines.Add($"Ошибка: {ex.Message}");
+                Console.WriteLine($"Ошибка: {ex.Message}");
+                result.Add($"Ошибка: {ex.Message}");
             }
 
-            return resultLines;
+            return result;
         }
-        private OcrResult PerformOCR(string imagePath, string language, bool isProcessed)
+
+        // Подготовка картинки для распознавания
+        private string PrepareImage(string imagePath)
         {
-            // Пробуем разные режимы сегментации
-            var results = new List<OcrResult>();
-
-            // Основной режим - LSTM (лучше всего для русского)
-            results.Add(ProcessWithSettings(imagePath, language, EngineMode.LstmOnly, PageSegMode.Auto));
-
-            // Дополнительные режимы для сложных случаев
-            if (results[0].Confidence < 60)
+            // Простая проверка: если картинка слишком маленькая, обрабатываем
+            using (Bitmap image = new Bitmap(imagePath))
             {
-                results.Add(ProcessWithSettings(imagePath, language, EngineMode.TesseractAndLstm, PageSegMode.SingleBlock));
-                results.Add(ProcessWithSettings(imagePath, language, EngineMode.Default, PageSegMode.SingleColumn));
-            }
-
-            // Выбираем лучший результат
-            return results.OrderByDescending(r => r.Confidence).First();
-        }
-
-        private OcrResult PerformOCRAlternative(string imagePath, string language)
-        {
-            // Альтернативные настройки для сложных случаев
-            return ProcessWithSettings(imagePath, language, EngineMode.TesseractOnly, PageSegMode.SingleWord);
-        }
-
-        private OcrResult ProcessWithSettings(string imagePath, string language, EngineMode engineMode, PageSegMode pageSegMode)
-        {
-            using (var engine = new TesseractEngine(_tessDataPath, language, engineMode))
-            {
-                // Оптимальные настройки для русского и английского
-                engine.SetVariable("tessedit_pageseg_mode", ((int)pageSegMode).ToString());
-                engine.SetVariable("preserve_interword_spaces", "1");
-                engine.SetVariable("user_defined_dpi", "300");
-                engine.SetVariable("textord_min_linesize", "2.5");
-
-                // Для различения кириллицы и латиницы
-                engine.SetVariable("tessedit_char_blacklist", "|\\/~`");
-
-                // Если уверенность низкая - пробуем без whitelist
-                engine.SetVariable("tessedit_char_whitelist",
-                    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" +
-                    "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя" +
-                    "0123456789 .,;:!?\"'()[]{}<>-–—+=*/\\@#$%^&«»„“”‘’…");
-
-                using (var img = Pix.LoadFromFile(imagePath))
+                if (image.Width < 100 || image.Height < 100)
                 {
-                    using (var page = engine.Process(img))
+                    // Создаем временный файл
+                    string tempPath = Path.GetTempFileName() + ".png";
+
+                    // Увеличиваем размер и улучшаем качество
+                    using (Bitmap processed = ImproveImageQuality(image))
                     {
-                        float confidence = page.GetMeanConfidence();
+                        processed.Save(tempPath, System.Drawing.Imaging.ImageFormat.Png);
+                        return tempPath;
+                    }
+                }
+            }
+
+            return imagePath; // Картинка хорошая, не обрабатываем
+        }
+
+        // Улучшаем качество картинки
+        private Bitmap ImproveImageQuality(Bitmap original)
+        {
+            // 1. Увеличиваем разрешение
+            Bitmap result = new Bitmap(original.Width * 2, original.Height * 2);
+
+            using (Graphics g = Graphics.FromImage(result))
+            {
+                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                g.DrawImage(original, 0, 0, result.Width, result.Height);
+            }
+
+            // 2. Делаем черно-белой
+            result = MakeBlackAndWhite(result);
+
+            return result;
+        }
+
+        // Преобразуем картинку в черно-белую
+        private Bitmap MakeBlackAndWhite(Bitmap original)
+        {
+            Bitmap result = new Bitmap(original.Width, original.Height);
+
+            for (int x = 0; x < original.Width; x++)
+            {
+                for (int y = 0; y < original.Height; y++)
+                {
+                    Color pixel = original.GetPixel(x, y);
+
+                    // Вычисляем яркость
+                    int brightness = (pixel.R + pixel.G + pixel.B) / 3;
+
+                    // Если яркость больше 128 - белый, иначе черный
+                    if (brightness > 128)
+                        result.SetPixel(x, y, Color.White);
+                    else
+                        result.SetPixel(x, y, Color.Black);
+                }
+            }
+
+            return result;
+        }
+
+        // Распознаем текст с картинки
+        private string RecognizeText(string imagePath, string language)
+        {
+            using (TesseractEngine engine = new TesseractEngine(_tessDataPath, language, EngineMode.Default))
+            {
+                using (Pix image = Pix.LoadFromFile(imagePath))
+                {
+                    using (Page page = engine.Process(image))
+                    {
                         string text = page.GetText();
+                        float confidence = page.GetMeanConfidence();
 
-                        Console.WriteLine($"Режим: {engineMode}/{pageSegMode}, Уверенность: {confidence:F1}%");
+                        Console.WriteLine($"Уверенность распознавания: {confidence:P0}");
 
-                        if (confidence > 50 && !string.IsNullOrWhiteSpace(text))
-                        {
-                            Console.WriteLine($"Текст ({text.Length} символов): {text.Substring(0, Math.Min(100, text.Length))}...");
-                        }
-
-                        return new OcrResult
-                        {
-                            Text = text ?? "",
-                            Confidence = confidence,
-                            EngineMode = engineMode,
-                            PageSegMode = pageSegMode
-                        };
+                        return text;
                     }
                 }
             }
         }
 
-        private List<string> PostProcessOCRResults(OcrResult ocrResult)
+        // Очищаем и форматируем текст
+        private List<string> CleanText(string text)
         {
-            if (string.IsNullOrWhiteSpace(ocrResult.Text))
-                return new List<string>();
+            if (string.IsNullOrWhiteSpace(text))
+                return new List<string> { "Текст не найден" };
 
-            // Основная постобработка - только текст
-            string processedText = PostProcessText(ocrResult.Text);
+            List<string> lines = new List<string>();
 
-            // Разделение на строки с фильтрацией - НЕ добавляем служебные сообщения
-            var lines = processedText
-                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(line => line.Trim())
-                .Where(line => !string.IsNullOrWhiteSpace(line) && line.Length > 1)
-                .ToList();
+            // Разделяем на строки
+            string[] rawLines = text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
 
-            // УБЕРИТЕ этот блок - не добавляем сообщения об уверенности
-            // if (ocrResult.Confidence < 60 && lines.Count > 0)
-            // {
-            //     lines.Insert(0, $"⚠️ Низкая уверенность распознавания: {ocrResult.Confidence:F1}%");
-            // }
+            foreach (string line in rawLines)
+            {
+                string cleaned = line.Trim();
+
+                // Убираем слишком короткие строки (меньше 2 символов)
+                if (cleaned.Length >= 2)
+                {
+                    // Исправляем распространенные ошибки
+                    cleaned = FixCommonErrors(cleaned);
+                    lines.Add(cleaned);
+                }
+            }
 
             return lines;
         }
 
-        private string PostProcessText(string text)
+        // Исправляем частые ошибки распознавания
+        private string FixCommonErrors(string text)
         {
-            if (string.IsNullOrEmpty(text))
-                return text;
+            string result = text;
 
-            // 1. Заменяем часто путаемые символы
-            var result = new StringBuilder(text);
-
-            // Словарь замен для русско-английской путаницы
-            var replacements = new Dictionary<string, string>
+            // Заменяем английские буквы на русские в русском контексте
+            Dictionary<string, string> replacements = new Dictionary<string, string>
             {
                 { "o", "о" }, { "O", "О" }, { "c", "с" }, { "C", "С" },
                 { "p", "р" }, { "P", "Р" }, { "y", "у" }, { "Y", "У" },
-                { "x", "х" }, { "X", "Х" }, { "a", "а" }, { "A", "А" },
-                { "e", "е" }, { "E", "Е" }, { "B", "В" }, { "H", "Н" },
-                { "K", "К" }, { "M", "М" }, { "T", "Т" }
+                { "a", "а" }, { "A", "А" }, { "e", "е" }, { "E", "Е" }
             };
 
-            // 2. Исправляем очевидные ошибки
-            string processed = text
-                .Replace("|", "I").Replace("[", "I").Replace("]", "I")
-                .Replace("1", "I").Replace("0", "O").Replace("l", "I")
-                .Replace("  ", " ").Replace("   ", " ") // Убираем лишние пробелы
-                .Trim();
-
-            // 3. Автоматическая замена символов в русском контексте
             foreach (var replacement in replacements)
             {
-                if (processed.Contains(replacement.Key))
-                {
-                    // Заменяем только если контекст преимущественно русский
-                    int englishIdx = processed.IndexOf(replacement.Key);
-                    if (englishIdx >= 0)
-                    {
-                        // Проверяем окрестность символа
-                        string context = GetContext(processed, englishIdx, 3);
-                        if (IsMostlyRussian(context))
-                        {
-                            processed = processed.Replace(replacement.Key, replacement.Value);
-                        }
-                    }
-                }
+                result = result.Replace(replacement.Key, replacement.Value);
             }
 
-            // 4. Исправляем соединенные слова
-            processed = FixMergedWords(processed);
-
-            return processed;
-        }
-        
-        private string GetContext(string text, int position, int radius)
-        {
-            int start = Math.Max(0, position - radius);
-            int end = Math.Min(text.Length - 1, position + radius);
-            return text.Substring(start, end - start + 1);
-        }
-
-        private bool IsMostlyRussian(string text)
-        {
-            if (string.IsNullOrEmpty(text)) return false;
-
-            int russianCount = text.Count(c => (c >= 'А' && c <= 'я') || c == 'Ё' || c == 'ё');
-            int englishCount = text.Count(c => (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'));
-
-            return russianCount > englishCount;
-        }
-
-        private string FixMergedWords(string text)
-        {
-            // Простая эвристика: если слово слишком длинное и содержит буквы разного регистра,
-            // возможно это два слова, слипшиеся вместе
-            var words = text.Split(' ');
-            var fixedWords = new List<string>();
-
-            foreach (var word in words)
-            {
-                if (word.Length > 10)
-                {
-                    // Ищем границу между строчной и прописной буквой
-                    for (int i = 1; i < word.Length - 3; i++)
-                    {
-                        if (char.IsLower(word[i]) && char.IsUpper(word[i + 1]))
-                        {
-                            string fixedWord = word.Insert(i + 1, " ");
-                            fixedWords.Add(fixedWord);
-                            break;
-                        }
-                    }
-
-                    if (fixedWords.Count == 0 || fixedWords.Last() != word)
-                    {
-                        fixedWords.Add(word);
-                    }
-                }
-                else
-                {
-                    fixedWords.Add(word);
-                }
-            }
-
-            return string.Join(" ", fixedWords);
-        }
-
-        // НОВЫЙ УЛУЧШЕННЫЙ МЕТОД ПРЕДОБРАБОТКИ
-        public string PreprocessImageForOCR(string inputPath, string outputPath = null)
-        {
-            if (outputPath == null)
-            {
-                outputPath = Path.Combine(Path.GetTempPath(), $"ocr_preprocessed_{Guid.NewGuid():N}.png");
-            }
-
-            try
-            {
-                Console.WriteLine($"Предобработка изображения...");
-
-                using (var original = new Bitmap(inputPath))
-                {
-                    // 1. Увеличиваем DPI до 300
-                    original.SetResolution(300, 300);
-
-                    // 2. Определяем, нужно ли предобрабатывать
-                    bool needsPreprocessing = CheckIfNeedsPreprocessing(original);
-
-                    if (!needsPreprocessing)
-                    {
-                        Console.WriteLine("Изображение не требует предобработки");
-                        return inputPath;
-                    }
-
-                    // 3. Конвертируем в черно-белое с адаптивным порогом
-                    var bwBitmap = ConvertToBlackAndWhiteAdaptive(original);
-
-                    // 4. Убираем шум
-                    var denoised = RemoveNoise(bwBitmap);
-
-                    // 5. Увеличиваем контраст
-                    var contrasted = EnhanceContrast(denoised, 2.0f);
-
-                    // 6. Увеличиваем резкость
-                    var sharpened = SharpenImage(contrasted);
-
-                    // 7. Сохраняем в PNG
-                    sharpened.Save(outputPath, System.Drawing.Imaging.ImageFormat.Png);
-
-                    Console.WriteLine($"Изображение предобработано: {outputPath}");
-                    return outputPath;
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Ошибка при предобработке: {ex.Message}");
-                return inputPath;
-            }
-        }
-
-        private bool CheckIfNeedsPreprocessing(Bitmap image)
-        {
-            // Простая проверка: если изображение уже черно-белое или имеет низкий контраст
-            int colorPixelCount = 0;
-            int totalPixels = image.Width * image.Height;
-
-            for (int y = 0; y < Math.Min(100, image.Height); y += 10)
-            {
-                for (int x = 0; x < Math.Min(100, image.Width); x += 10)
-                {
-                    System.Drawing.Color color = image.GetPixel(x, y);
-                    // Проверяем, является ли пиксель цветным (не оттенком серого)
-                    if (Math.Abs(color.R - color.G) > 10 || Math.Abs(color.R - color.B) > 10)
-                    {
-                        colorPixelCount++;
-                    }
-                }
-            }
-
-            return colorPixelCount > 10 || totalPixels < 100000; // Маленькие изображения всегда обрабатываем
-        }
-
-        private Bitmap ConvertToBlackAndWhiteAdaptive(Bitmap original)
-        {
-            var result = new Bitmap(original.Width, original.Height);
-
-            // Вычисляем среднюю яркость для адаптивного порога
-            long totalBrightness = 0;
-            int sampleCount = 0;
-
-            for (int y = 0; y < original.Height; y += 10)
-            {
-                for (int x = 0; x < original.Width; x += 10)
-                {
-                    System.Drawing.Color color = original.GetPixel(x, y);
-                    totalBrightness += (int)(color.R * 0.299 + color.G * 0.587 + color.B * 0.114);
-                    sampleCount++;
-                }
-            }
-
-            int threshold = sampleCount > 0 ? (int)(totalBrightness / sampleCount) : 128;
-            threshold = Math.Max(100, Math.Min(180, threshold)); // Ограничиваем диапазон
-
-            Console.WriteLine($"Адаптивный порог: {threshold}");
-
-            // Применяем пороговое преобразование
-            for (int y = 0; y < original.Height; y++)
-            {
-                for (int x = 0; x < original.Width; x++)
-                {
-                    System.Drawing.Color color = original.GetPixel(x, y);
-                    int brightness = (int)(color.R * 0.299 + color.G * 0.587 + color.B * 0.114);
-                    System.Drawing.Color newColor = brightness > threshold ? System.Drawing.Color.White : System.Drawing.Color.Black;
-                    result.SetPixel(x, y, newColor);
-                }
-            }
+            // Убираем лишние пробелы
+            while (result.Contains("  "))
+                result = result.Replace("  ", " ");
 
             return result;
         }
 
-        private Bitmap RemoveNoise(Bitmap image)
-        {
-            var result = new Bitmap(image.Width, image.Height);
-
-            for (int y = 1; y < image.Height - 1; y++)
-            {
-                for (int x = 1; x < image.Width - 1; x++)
-                {
-                    int blackCount = 0;
-                    int whiteCount = 0;
-
-                    // Проверяем окрестность 3x3
-                    for (int dy = -1; dy <= 1; dy++)
-                    {
-                        for (int dx = -1; dx <= 1; dx++)
-                        {
-                            System.Drawing.Color neighbor = image.GetPixel(x + dx, y + dy);
-                            if (neighbor.R < 128) // Черный
-                                blackCount++;
-                            else
-                                whiteCount++;
-                        }
-                    }
-
-                    // Если пиксель одинокий (окружен противоположными пикселями), исправляем
-                    System.Drawing.Color current = image.GetPixel(x, y);
-                    if (current.R < 128 && blackCount <= 2) // Одинокий черный пиксель
-                    {
-                        result.SetPixel(x, y, System.Drawing.Color.White);
-                    }
-                    else if (current.R >= 128 && whiteCount <= 2) // Одинокий белый пиксель
-                    {
-                        result.SetPixel(x, y, System.Drawing.Color.Black);
-                    }
-                    else
-                    {
-                        result.SetPixel(x, y, current);
-                    }
-                }
-            }
-
-            return result;
-        }
-
-        private Bitmap EnhanceContrast(Bitmap image, float factor)
-        {
-            var result = new Bitmap(image.Width, image.Height);
-
-            for (int y = 0; y < image.Height; y++)
-            {
-                for (int x = 0; x < image.Width; x++)
-                {
-                    System.Drawing.Color color = image.GetPixel(x, y);
-                    int value = color.R; // В ч/б все каналы одинаковые
-
-                    // Усиливаем контраст
-                    int newValue = (int)((value - 128) * factor + 128);
-                    newValue = Math.Max(0, Math.Min(255, newValue));
-
-                    result.SetPixel(x, y, System.Drawing.Color.FromArgb(newValue, newValue, newValue));
-                }
-            }
-
-            return result;
-        }
-
-        private Bitmap SharpenImage(Bitmap image)
-        {
-            var result = new Bitmap(image.Width, image.Height);
-
-            // Простая матрица резкости 3x3
-            int[,] kernel = { { 0, -1, 0 }, { -1, 5, -1 }, { 0, -1, 0 } };
-            int kernelSize = 3;
-            int kernelRadius = kernelSize / 2;
-
-            for (int y = kernelRadius; y < image.Height - kernelRadius; y++)
-            {
-                for (int x = kernelRadius; x < image.Width - kernelRadius; x++)
-                {
-                    int sum = 0;
-
-                    for (int ky = -kernelRadius; ky <= kernelRadius; ky++)
-                    {
-                        for (int kx = -kernelRadius; kx <= kernelRadius; kx++)
-                        {
-                            System.Drawing.Color pixel = image.GetPixel(x + kx, y + ky);
-                            int value = pixel.R;
-                            sum += value * kernel[ky + kernelRadius, kx + kernelRadius];
-                        }
-                    }
-
-                    sum = Math.Max(0, Math.Min(255, sum));
-                    result.SetPixel(x, y, System.Drawing.Color.FromArgb(sum, sum, sum));
-                }
-            }
-
-            return result;
-        }
-
+        // Получаем список доступных языков
         public List<string> GetAvailableLanguages()
         {
-            var languages = new List<string>();
+            List<string> languages = new List<string>();
 
-            try
+            if (Directory.Exists(_tessDataPath))
             {
-                if (Directory.Exists(_tessDataPath))
+                string[] files = Directory.GetFiles(_tessDataPath, "*.traineddata");
+
+                foreach (string file in files)
                 {
-                    var languageFiles = Directory.GetFiles(_tessDataPath, "*.traineddata");
-
-                    foreach (var file in languageFiles)
-                    {
-                        string language = Path.GetFileNameWithoutExtension(file);
-                        languages.Add(language);
-                        Console.WriteLine($"Найден язык: {language}");
-                    }
+                    string language = Path.GetFileNameWithoutExtension(file);
+                    languages.Add(language);
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Ошибка при получении списка языков: {ex.Message}");
             }
 
             return languages;
         }
 
-        private string FormatFileSize(long bytes)
+        // Проверяем, готов ли Tesseract к работе
+        public bool IsReady()
         {
-            string[] sizes = { "B", "KB", "MB", "GB" };
-            double len = bytes;
-            int order = 0;
-            while (len >= 1024 && order < sizes.Length - 1)
-            {
-                order++;
-                len = len / 1024;
-            }
-            return $"{len:0.##} {sizes[order]}";
-        }
-
-        private class OcrResult
-        {
-            public string Text { get; set; }
-            public float Confidence { get; set; }
-            public EngineMode EngineMode { get; set; }
-            public PageSegMode PageSegMode { get; set; }
+            string rusFile = Path.Combine(_tessDataPath, "rus.traineddata");
+            return File.Exists(rusFile) && new FileInfo(rusFile).Length > 1024 * 1024;
         }
     }
 }

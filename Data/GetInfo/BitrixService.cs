@@ -219,8 +219,8 @@ namespace ManagerApp.Data.GetInfo
 
 
         public async Task<int> CreateSmartInvoice(
-
-            int clientCompanyId,
+                           DateTime invoiceDate,
+        int clientCompanyId,
             int myCompanyId,
             string orderTopic,
             List<InvoiceProduct> products,
@@ -230,6 +230,7 @@ namespace ManagerApp.Data.GetInfo
             string sposob_oplata,
             int responsibleId,      // НЕОБЯЗАТЕЛЬНЫЕ параметры
             string statusId = "DT31_1:NEW",  // в конце
+  // ← ДОБАВЬТЕ ЭТОТ ПАРАМЕТР
             DateTime? payBeforeDate = null)
         {
             try
@@ -256,8 +257,8 @@ namespace ManagerApp.Data.GetInfo
                         STAGE_ID = statusId,
 
                         // ДАТЫ
-                        BEGINDATE = DateTime.Now.ToString("yyyy-MM-dd"),
-                        CLOSEDATE = (payBeforeDate ?? DateTime.Now.AddDays(30)).ToString("yyyy-MM-dd"),
+                        BEGINDATE = invoiceDate,
+                        CLOSEDATE = CalculateBusinessDays(invoiceDate, 3).ToString("yyyy-MM-dd"),
 
                         // ПОЛЯ ДЛЯ ГЕНЕРАТОРА ДОКУМЕНТОВ (эти поля передаются в шаблон)
                         // 1. Поле XML_ID - Внешний код
@@ -267,7 +268,8 @@ namespace ManagerApp.Data.GetInfo
 
                         COMMENTS = day_dostavka,
 
-                        // 3. Поле SOURCE_DESCRIPTION - Описание источника
+                        // 3. Поле SOURCE_DESCRIPTION - Описание
+                        // источника
                         SOURCE_DESCRIPTION = sposob_oplata
 ,
                         // 4. Имя и Фамилия ответственного
@@ -403,8 +405,30 @@ namespace ManagerApp.Data.GetInfo
             }
         }
 
-       
 
+        private DateTime CalculateBusinessDays(DateTime startDate, int businessDays)
+        {
+            int direction = businessDays < 0 ? -1 : 1;
+            businessDays = Math.Abs(businessDays);
+
+            DateTime currentDate = startDate;
+
+            while (businessDays > 0)
+            {
+                currentDate = currentDate.AddDays(direction);
+
+                // Пропускаем выходные
+                if (currentDate.DayOfWeek == DayOfWeek.Saturday ||
+                    currentDate.DayOfWeek == DayOfWeek.Sunday)
+                {
+                    continue;
+                }
+
+                businessDays--;
+            }
+
+            return currentDate;
+        }
 
 
         // Вспомогательный метод для проверки сохраненных данных
@@ -1027,7 +1051,7 @@ namespace ManagerApp.Data.GetInfo
 
             string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.company.add";
 
-            // Подготавливаем данные для создания компании
+            // Подготавливаем данные для создания компании БЕЗ OWNER_ID
             var requestData = new
             {
                 fields = new
@@ -1036,7 +1060,9 @@ namespace ManagerApp.Data.GetInfo
                     PHONE = !string.IsNullOrWhiteSpace(phone) ?
                            new[] { new { VALUE = phone.Trim(), VALUE_TYPE = "WORK" } } :
                            null,
-                    ADDRESS = !string.IsNullOrWhiteSpace(address) ? address.Trim() : null
+                    ADDRESS = !string.IsNullOrWhiteSpace(address) ? address.Trim() : null,
+                    // НЕ УКАЗЫВАЕМ OWNER_ID - Bitrix назначит автоматически
+                    // НЕ УКАЗЫВАЕМ ASSIGNED_BY_ID - будет использован текущий пользователь
                 },
                 @params = new
                 {
@@ -1046,12 +1072,24 @@ namespace ManagerApp.Data.GetInfo
 
             try
             {
-                string jsonRequest = JsonConvert.SerializeObject(requestData);
+                // Используем настройки игнорирования null-значений
+                string jsonRequest = JsonConvert.SerializeObject(requestData,
+                    new JsonSerializerSettings
+                    {
+                        NullValueHandling = NullValueHandling.Ignore
+                    });
+
+                Console.WriteLine("=== ДАННЫЕ ДЛЯ СОЗДАНИЯ КОМПАНИИ ===");
+                Console.WriteLine(jsonRequest);
+                Console.WriteLine("===================================");
+
                 var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
 
                 // Делаем POST-запрос
                 var response = await _httpClient.PostAsync(webhookUrl, content);
                 string jsonResponse = await response.Content.ReadAsStringAsync();
+
+                Console.WriteLine($"Ответ от Bitrix: {jsonResponse}");
 
                 // Парсим ответ
                 var result = JsonConvert.DeserializeObject<BitrixAddResponse>(jsonResponse);
@@ -1059,16 +1097,71 @@ namespace ManagerApp.Data.GetInfo
                 // Проверяем на ошибки
                 if (!string.IsNullOrEmpty(result?.Error))
                 {
+                    // Проверяем специфическую ошибку про OWNER
+                    if (result.Error.Contains("невозможно указать себя в свойстве Owner"))
+                    {
+                        Console.WriteLine("⚠️ Обнаружена ошибка OWNER. Пробуем создать без параметров...");
+                        return await CreateCompanyMinimal(title, phone, address);
+                    }
+
                     Console.WriteLine($"Ошибка создания компании: {result.Error}");
                     return 0;
                 }
 
                 // Возвращаем ID созданной компании
-                return result?.Result ?? 0;
+                int companyId = result?.Result ?? 0;
+                if (companyId > 0)
+                {
+                    Console.WriteLine($"✅ Компания '{title}' создана с ID: {companyId}");
+                }
+
+                return companyId;
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Исключение при создании компании: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"Inner Exception: {ex.InnerException.Message}");
+                }
+                return 0;
+            }
+        }
+
+        // Альтернативный метод для создания компании с минимальными полями
+        private async Task<int> CreateCompanyMinimal(string title, string phone = null, string address = null)
+        {
+            try
+            {
+                string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.company.add";
+
+                // САМЫЙ МИНИМАЛЬНЫЙ запрос - только название
+                var minimalRequest = new
+                {
+                    fields = new
+                    {
+                        TITLE = title.Trim()
+                    }
+                    // Не передаем даже @params
+                };
+
+                string jsonRequest = JsonConvert.SerializeObject(minimalRequest);
+                Console.WriteLine("=== МИНИМАЛЬНЫЕ ДАННЫЕ ===");
+                Console.WriteLine(jsonRequest);
+                Console.WriteLine("==========================");
+
+                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+                var response = await _httpClient.PostAsync(webhookUrl, content);
+                string jsonResponse = await response.Content.ReadAsStringAsync();
+
+                Console.WriteLine($"Минимальный ответ: {jsonResponse}");
+
+                var result = JsonConvert.DeserializeObject<BitrixAddResponse>(jsonResponse);
+                return result?.Result ?? 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка в минимальном методе: {ex.Message}");
                 return 0;
             }
         }

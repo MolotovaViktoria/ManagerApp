@@ -326,7 +326,7 @@
                             </DataGridTextColumn>
 
                             <!-- Колонка 3: Цена из Bitrix -->
-                            <DataGridTextColumn Header="ЦЕНА ИЗ BITRIX"
+                            <DataGridTextColumn Header="РОЗНИЧНАЯ ЦЕНА"
                                                 Binding="{Binding BitrixPrice, StringFormat='{}{0:#,##0.00} ₽'}"
                                                 Width="140"
                                                 IsReadOnly="True">
@@ -351,6 +351,39 @@
                                     </Style>
                                 </DataGridTextColumn.ElementStyle>
                             </DataGridTextColumn>
+
+                            <!-- Колонка 4: Закупочная цена -->
+                            <DataGridTextColumn Header="ЗАКУПОЧНАЯ ЦЕНА"
+                    Binding="{Binding PurchasingPrice, StringFormat='{}{0:#,##0.00} ₽'}"
+                    Width="140"
+                    IsReadOnly="True">
+                                <DataGridTextColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="Background" Value="#F8F8F8"/>
+                                        <Setter Property="Foreground" Value="#333333"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                        <Setter Property="FontSize" Value="12"/>
+                                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                        <Setter Property="BorderBrush" Value="#E0E0E0"/>
+                                        <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                                        <Setter Property="Padding" Value="10,5"/>
+                                    </Style>
+                                </DataGridTextColumn.HeaderStyle>
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="VerticalAlignment" Value="Center"/>
+                                        <Setter Property="HorizontalAlignment" Value="Center"/>
+                                        <Setter Property="Padding" Value="10,5"/>
+                                        <Setter Property="FontSize" Value="13"/>
+                                        <Setter Property="Foreground" Value="#1976D2"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+
+                            <!-- Остальные колонки сдвигаются на 1 позицию -->
+                            <!-- Колонка 5: Ввод своей цены (была 4) -->
+                            <!-- Колонка 6: Количество (была 5) -->
+                            <!-- и т.д. -->
 
                             <!-- Колонка 4: Ввод своей цены -->
                             <DataGridTemplateColumn Header="СВОЯ ЦЕНА"

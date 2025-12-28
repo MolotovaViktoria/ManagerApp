@@ -128,10 +128,10 @@ namespace ManagerApp.Pages
             MainFrame.Navigate(settingsPage);
         }
 
-
-
-
-
-       
+        private void btnHome1_Click(object sender, RoutedEventArgs e)
+        {
+            ComparisonProduct comparisonProduct = new ComparisonProduct();
+            MainFrame.Navigate(comparisonProduct);
+        }
     }
 }

@@ -6,22 +6,24 @@ using ManagerApp.Data.StructureList;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media;
 
 namespace ManagerApp.Pages
 {
-    public partial class ComparisonProduct : Page
+    public partial class ComparisonProduct : Page, INotifyPropertyChanged
     {
-        // Свойство для привязки данных
         public ObservableCollection<ProductItemViewModel> ProductItems { get; set; }
         private BitrixProductMatcher _productMatcher;
+        private bool _isLoading = false;
+        private Dictionary<string, List<Data.ScharedData.BitrixProductViewModel>> _searchCache = new Dictionary<string, List<Data.ScharedData.BitrixProductViewModel>>();
 
-        // Конструктор без параметров (использует сохраненные данные)
         public ComparisonProduct()
         {
             InitializeComponent();
@@ -29,20 +31,496 @@ namespace ManagerApp.Pages
             ProductItems = new ObservableCollection<ProductItemViewModel>();
             DataContext = this;
 
-            // Загружаем сохраненные товары
-            //LoadProductsFromManager();
+            LoadProductsFromManager();
         }
 
-        // Конструктор с параметром (для прямого вызова)
         public ComparisonProduct(List<string> products) : this()
         {
-            // Сохраняем переданные товары
             if (products != null && products.Count > 0)
             {
                 ProductSelectionManager.SetProducts(products);
-                LoadProductsFromManager();
             }
         }
+
+        #region Обработчики кнопок
+
+        private async void BtnQuickAdd_Click(object sender, RoutedEventArgs e)
+        {
+            await AddProductFromTextBoxAsync();
+        }
+
+        private void BtnClearAll_Click(object sender, RoutedEventArgs e)
+        {
+            ClearAllProducts();
+        }
+
+        private async void TxtNewProduct_KeyUp(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter && !string.IsNullOrWhiteSpace(txtNewProduct.Text))
+            {
+                await AddProductFromTextBoxAsync();
+            }
+        }
+
+        private void TxtNewProduct_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            btnQuickAdd.IsEnabled = !string.IsNullOrWhiteSpace(txtNewProduct.Text);
+        }
+
+        #endregion
+
+        #region Методы добавления/удаления товаров
+
+        private async Task AddProductFromTextBoxAsync()
+        {
+            string productName = txtNewProduct.Text.Trim();
+            if (!string.IsNullOrEmpty(productName))
+            {
+                txtNewProduct.Text = string.Empty;
+                txtNewProduct.Focus();
+
+                await AddProductItemAsync(productName);
+            }
+        }
+
+        private async Task AddProductItemAsync(string productName)
+        {
+            if (ProductItems.Any(p => p.OriginalProduct.Equals(productName, StringComparison.OrdinalIgnoreCase)))
+            {
+                MessageBox.Show($"Товар '{productName}' уже существует в списке",
+                              "Внимание",
+                              MessageBoxButton.OK,
+                              MessageBoxImage.Warning);
+                return;
+            }
+
+            var item = new ProductItemViewModel
+            {
+                OriginalProduct = productName,
+                BitrixProducts = new ObservableCollection<Data.ScharedData.BitrixProductViewModel>(),
+                SelectedBitrixProduct = null
+            };
+
+            item.AddCommand = new RelayCommand(AddProduct);
+            item.RemoveCommand = new RelayCommand(RemoveProductItem);
+
+            ProductItems.Add(item);
+
+            var currentProducts = ProductSelectionManager.GetProducts() ?? new List<string>();
+            if (!currentProducts.Contains(productName, StringComparer.OrdinalIgnoreCase))
+            {
+                currentProducts.Add(productName);
+                ProductSelectionManager.SetProducts(currentProducts);
+            }
+
+            await SmartSearchProductsAsync(item, productName);
+        }
+
+        private void RemoveProductItem(object parameter)
+        {
+            if (parameter is ProductItemViewModel item)
+            {
+                var result = MessageBox.Show($"Удалить товар '{item.OriginalProduct}'?",
+                                           "Подтверждение удаления",
+                                           MessageBoxButton.YesNo,
+                                           MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    ProductItems.Remove(item);
+
+                    var currentProducts = ProductSelectionManager.GetProducts()?.ToList() ?? new List<string>();
+                    currentProducts.RemoveAll(p => p.Equals(item.OriginalProduct, StringComparison.OrdinalIgnoreCase));
+                    ProductSelectionManager.SetProducts(currentProducts);
+
+                    MessageBox.Show($"Товар '{item.OriginalProduct}' удален",
+                                  "Успешно",
+                                  MessageBoxButton.OK,
+                                  MessageBoxImage.Information);
+                }
+            }
+        }
+
+        private void ClearAllProducts()
+        {
+            if (!ProductItems.Any())
+            {
+                MessageBox.Show("Список товаров пуст",
+                              "Информация",
+                              MessageBoxButton.OK,
+                              MessageBoxImage.Information);
+                return;
+            }
+
+            var result = MessageBox.Show($"Вы уверены, что хотите удалить все товары ({ProductItems.Count} шт.)?",
+                                       "Подтверждение удаления",
+                                       MessageBoxButton.YesNo,
+                                       MessageBoxImage.Warning);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                ProductItems.Clear();
+                ProductSelectionManager.ClearProducts();
+                _searchCache.Clear();
+
+                MessageBox.Show("Все товары удалены",
+                              "Готово",
+                              MessageBoxButton.OK,
+                              MessageBoxImage.Information);
+            }
+        }
+
+        #endregion
+
+        #region УЛУЧШЕННЫЙ ПОИСК ТОВАРОВ
+
+        private async void LoadProductsFromManager()
+        {
+            _isLoading = true;
+
+            try
+            {
+                var products = ProductSelectionManager.GetProducts();
+
+                if (products == null || products.Count == 0)
+                {
+                    LoadSampleData();
+                }
+                else
+                {
+                    ProductItems.Clear();
+
+                    foreach (var product in products.Distinct(StringComparer.OrdinalIgnoreCase))
+                    {
+                        var item = new ProductItemViewModel
+                        {
+                            OriginalProduct = product,
+                            BitrixProducts = new ObservableCollection<Data.ScharedData.BitrixProductViewModel>(),
+                            SelectedBitrixProduct = null
+                        };
+
+                        item.AddCommand = new RelayCommand(AddProduct);
+                        item.RemoveCommand = new RelayCommand(RemoveProductItem);
+
+                        ProductItems.Add(item);
+                    }
+
+                    await SmartSearchForAllProductsAsync();
+                }
+            }
+            finally
+            {
+                _isLoading = false;
+            }
+        }
+
+        private void LoadSampleData()
+        {
+            var sampleProducts = new List<string>();
+
+            foreach (var product in sampleProducts)
+            {
+                var item = new ProductItemViewModel
+                {
+                    OriginalProduct = product,
+                    BitrixProducts = new ObservableCollection<Data.ScharedData.BitrixProductViewModel>(),
+                    SelectedBitrixProduct = null
+                };
+
+                item.AddCommand = new RelayCommand(AddProduct);
+                item.RemoveCommand = new RelayCommand(RemoveProductItem);
+
+                ProductItems.Add(item);
+            }
+        }
+
+        private async Task SmartSearchForAllProductsAsync()
+        {
+            if (!ProductItems.Any()) return;
+
+            try
+            {
+                var searchTasks = new List<Task>();
+
+                foreach (var item in ProductItems)
+                {
+                    if (string.IsNullOrWhiteSpace(item.OriginalProduct)) continue;
+
+                    searchTasks.Add(SmartSearchProductsAsync(item, item.OriginalProduct));
+                }
+
+                await Task.WhenAll(searchTasks);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при автопоиске: {ex.Message}");
+            }
+        }
+
+        private async Task SmartSearchProductsAsync(ProductItemViewModel item, string searchText)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(searchText))
+                {
+                    return;
+                }
+
+                string cacheKey = searchText.ToLower().Trim();
+
+                if (_searchCache.TryGetValue(cacheKey, out var cachedResults))
+                {
+                    await UpdateProductsListAsync(item, cachedResults);
+                    return;
+                }
+
+                var allResults = new List<Data.ScharedData.BitrixProductViewModel>();
+                // Основной поиск
+                var searchResults = await _productMatcher.FindSimilarProductsAsync(searchText, maxResults: 10);
+                // Преобразуем ProductWithCategoryInfo в BitrixProductViewModel
+                var convertedResults = searchResults.Select(p => new Data.ScharedData.BitrixProductViewModel
+                {
+                    ProductId = p.ProductId,
+                    ProductName = p.ProductName,
+                    CategoryName = p.CategoryName,
+                    Price = p.Price,
+                    HasPrice = p.HasPrice,
+                    SectionId = p.SectionId
+                }).ToList();
+
+                allResults.AddRange(convertedResults);
+
+                // Если мало результатов, ищем по словам
+                if (allResults.Count < 3)
+                {
+                    var words = searchText.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var word in words.Where(w => w.Length > 2))
+                    {
+                        var wordResults = await _productMatcher.FindSimilarProductsAsync(word, maxResults: 5);
+                        var convertedWordResults = wordResults.Select(p => new Data.ScharedData.BitrixProductViewModel
+                        {
+                            ProductId = p.ProductId,
+                            ProductName = p.ProductName,
+                            CategoryName = p.CategoryName,
+                            Price = p.Price,
+                            HasPrice = p.HasPrice,
+                            SectionId = p.SectionId
+                        }).ToList();
+
+                        allResults.AddRange(convertedWordResults.Where(r => !allResults.Any(er => er.ProductId == r.ProductId)));
+                    }
+                }
+
+                var rankedResults = RankProducts(allResults, searchText)
+                    .Take(10)
+                    .ToList();
+
+                if (rankedResults.Any())
+                {
+                    _searchCache[cacheKey] = rankedResults;
+                }
+
+                await UpdateProductsListAsync(item, rankedResults);
+
+                await TryAutoSelectBestMatchAsync(item, rankedResults, searchText);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при умном поиске: {ex.Message}");
+            }
+        }
+
+        private List<Data.ScharedData.BitrixProductViewModel> RankProducts(List<Data.ScharedData.BitrixProductViewModel> products, string searchQuery)
+        {
+            if (!products.Any()) return products;
+
+            var searchQueryLower = searchQuery.ToLower().Trim();
+            var words = searchQueryLower.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+
+            return products
+                .Select(p => new
+                {
+                    Product = p,
+                    Score = CalculateRelevanceScore(p, searchQueryLower, words)
+                })
+                .Where(x => x.Score > 0)
+                .OrderByDescending(x => x.Score)
+                .Select(x => x.Product)
+                .ToList();
+        }
+
+        private double CalculateRelevanceScore(Data.ScharedData.BitrixProductViewModel product, string searchQuery, string[] searchWords)
+        {
+            double score = 0;
+
+            if (product == null || string.IsNullOrEmpty(product.ProductName)) return 0;
+
+            string productNameLower = product.ProductName.ToLower();
+
+            // 1. Точное совпадение
+            if (productNameLower == searchQuery)
+                score += 100;
+
+            // 2. Содержит весь поисковый запрос
+            if (productNameLower.Contains(searchQuery))
+                score += 80;
+
+            // 3. Совпадение всех слов
+            if (searchWords.All(word => productNameLower.Contains(word)))
+                score += 60;
+
+            // 4. Совпадение большинства слов
+            int matchingWords = searchWords.Count(word => productNameLower.Contains(word));
+            if (matchingWords > 0)
+                score += matchingWords * 15;
+
+            // 5. Начинается с поискового запроса
+            if (productNameLower.StartsWith(searchQuery))
+                score += 30;
+
+            // 6. Учитываем наличие цены
+            if (product.HasPrice && product.Price > 0)
+                score += 10;
+
+            return Math.Max(0, score);
+        }
+
+        private async Task UpdateProductsListAsync(ProductItemViewModel item, List<Data.ScharedData.BitrixProductViewModel> products)
+        {
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                item.BitrixProducts.Clear();
+
+                if (products == null || !products.Any())
+                {
+                    item.BitrixProducts.Add(new Data.ScharedData.BitrixProductViewModel
+                    {
+                        ProductId = "0",
+                        ProductName = "❌ Товар не найден",
+                        CategoryName = "Нажмите кнопку поиска для ручного подбора",
+                        HasPrice = false
+                    });
+                    return;
+                }
+
+                foreach (var product in products)
+                {
+                    item.BitrixProducts.Add(new Data.ScharedData.BitrixProductViewModel
+                    {
+                        ProductId = product.ProductId,
+                        ProductName = FormatProductNameForDisplay(product),
+                        CategoryName = product.CategoryName,
+                        Price = product.Price,
+                        HasPrice = product.HasPrice,
+                        SectionId = product.SectionId
+                    });
+                }
+            });
+        }
+
+        private string FormatProductNameForDisplay(Data.ScharedData.BitrixProductViewModel product)
+        {
+            var sb = new StringBuilder();
+
+            sb.Append(product.ProductName);
+
+            if (!string.IsNullOrEmpty(product.CategoryName))
+                sb.Append($" ({product.CategoryName})");
+
+            if (product.HasPrice && product.Price > 0)
+                sb.Append($" - {product.Price:#,##0.00} ₽");
+
+            return sb.ToString();
+        }
+
+        private async Task TryAutoSelectBestMatchAsync(ProductItemViewModel item, List<Data.ScharedData.BitrixProductViewModel> results, string searchText)
+        {
+            if (!results.Any() || item.SelectedBitrixProduct != null)
+                return;
+
+            var bestMatch = results.FirstOrDefault();
+
+            if (bestMatch != null && IsGoodAutoMatch(bestMatch, searchText))
+            {
+                await Task.Delay(300);
+
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    var displayProduct = item.BitrixProducts.FirstOrDefault(p => p.ProductId == bestMatch.ProductId);
+                    if (displayProduct != null)
+                    {
+                        item.SelectedBitrixProduct = displayProduct;
+                        Console.WriteLine($"✅ Автоматически выбрано: '{item.OriginalProduct}' → '{bestMatch.ProductName}'");
+                    }
+                });
+            }
+        }
+
+        private bool IsGoodAutoMatch(Data.ScharedData.BitrixProductViewModel product, string searchText)
+        {
+            if (product == null || string.IsNullOrEmpty(product.ProductName))
+                return false;
+
+            string productNameLower = product.ProductName.ToLower();
+            string searchLower = searchText.ToLower();
+
+            // 1. Точное совпадение
+            if (productNameLower == searchLower)
+                return true;
+
+            // 2. Содержит весь поисковый запрос
+            if (productNameLower.Contains(searchLower))
+                return true;
+
+            // 3. Все слова из запроса присутствуют
+            var searchWords = searchLower.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (searchWords.All(word => productNameLower.Contains(word)))
+                return true;
+
+            // 4. Высокая релевантность
+            var score = CalculateRelevanceScore(product, searchLower, searchWords);
+            return score >= 80;
+        }
+
+        private async void ComboBox_DropDownOpened(object sender, EventArgs e)
+        {
+            var comboBox = sender as ComboBox;
+            if (comboBox?.DataContext is ProductItemViewModel item)
+            {
+                if (item.BitrixProducts.Any(p => p.ProductId != "0"))
+                    return;
+
+                await SmartSearchProductsAsync(item, item.OriginalProduct);
+            }
+        }
+
+        private async void ComboBox_KeyUp(object sender, KeyEventArgs e)
+        {
+            var comboBox = sender as ComboBox;
+            if (comboBox?.DataContext is ProductItemViewModel item)
+            {
+                if (e.Key == Key.Enter || e.Key == Key.Escape || e.Key == Key.Tab)
+                    return;
+
+                await Task.Delay(500);
+
+                string searchText = comboBox.Text?.Trim();
+                if (string.IsNullOrWhiteSpace(searchText) || searchText.Length < 2)
+                    return;
+
+                if (item.SelectedBitrixProduct != null &&
+                    !item.SelectedBitrixProduct.ProductName.Contains(searchText))
+                {
+                    item.SelectedBitrixProduct = null;
+                }
+
+                await SmartSearchProductsAsync(item, searchText);
+            }
+        }
+
+        #endregion
+
+        #region Существующие методы
 
         private void btnBack_Click(object sender, RoutedEventArgs e)
         {
@@ -52,187 +530,43 @@ namespace ManagerApp.Pages
             }
         }
 
-        private void LoadSampleData()
-        {
-            // Тестовые данные для дизайнера
-            var sampleProducts = new List<string>
-            {
-                "Кабель ВВГ 3х2,5",
-                "Труба ПНД 32мм",
-                "Розетка компьютерная RJ45",
-                "Автомат выключатель 16А"
-            };
-
-            foreach (var product in sampleProducts)
-            {
-                var item = new ProductItemViewModel
-                {
-                    OriginalProduct = product,
-                    BitrixProducts = new ObservableCollection<BitrixProductViewModel>(),
-                    SelectedBitrixProduct = null,
-                    AddCommand = new RelayCommand(AddProduct)
-                };
-
-                ProductItems.Add(item);
-            }
-        }
-
-        // Обработчик открытия комбобокса
-        private async void ComboBox_DropDownOpened(object sender, EventArgs e)
-        {
-            var comboBox = sender as ComboBox;
-            if (comboBox?.DataContext is ProductItemViewModel item)
-            {
-                // Проверяем, не загружены ли уже товары
-                if (item.BitrixProducts.Any())
-                    return;
-
-                await SearchProductsForComboBox(item, item.OriginalProduct);
-            }
-        }
-
-     
-        // ДОБАВЬТЕ ЭТОТ МЕТОД В ComparisonProduct.cs
-        private async Task TestSearchImmediately()
-        {
-            Console.WriteLine("=== ТЕСТ ПРЯМОГО ПОИСКА ===");
-
-            if (!ProductItems.Any())
-            {
-                Console.WriteLine("Список товаров пустой!");
-                return;
-            }
-
-            var firstItem = ProductItems.First();
-            Console.WriteLine($"Тестируем поиск для: {firstItem.OriginalProduct}");
-
-            await SearchProductsForComboBox(firstItem, firstItem.OriginalProduct);
-
-            // Проверяем результат
-            if (firstItem.BitrixProducts.Any())
-            {
-                Console.WriteLine($"УСПЕХ! Найдено товаров: {firstItem.BitrixProducts.Count}");
-                foreach (var product in firstItem.BitrixProducts)
-                {
-                    Console.WriteLine($"- {product.ProductName}");
-                }
-            }
-            else
-            {
-                Console.WriteLine("ПРОВАЛ! Товары не найдены");
-            }
-        }
-
-        // ВЫЗОВИТЕ ЭТОТ МЕТОД ПОСЛЕ ЗАГРУЗКИ ТОВАРОВ:
-        private void LoadProductsFromManager()
-        {
-            var products = ProductSelectionManager.GetProducts();
-
-            if (products == null || products.Count == 0)
-            {
-                // Если нет сохраненных товаров, загружаем тестовые
-                LoadSampleData();
-            }
-            else
-            {
-                foreach (var product in products)
-                {
-                    var item = new ProductItemViewModel
-                    {
-                        OriginalProduct = product,
-                        BitrixProducts = new ObservableCollection<BitrixProductViewModel>(),
-                        SelectedBitrixProduct = null,
-                        AddCommand = new RelayCommand(AddProduct)
-                    };
-
-                    ProductItems.Add(item);
-                }
-            }
-
-            // ТЕСТ: Запустите тестовый поиск
-            _ = TestSearchImmediately(); // async void вызов
-        }
-
-        // Обработчик изменения текста в комбобоксе через подписку на TextBox
-        private async void TextBox_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            var textBox = sender as TextBox;
-            if (textBox == null) return;
-
-            // Находим родительский ComboBox
-            var comboBox = FindParent<ComboBox>(textBox);
-            if (comboBox?.DataContext is ProductItemViewModel item)
-            {
-                string searchText = textBox.Text?.Trim();
-
-                // Если текст пустой или слишком короткий, закрываем выпадающий список
-                if (string.IsNullOrWhiteSpace(searchText) || searchText.Length < 2)
-                {
-                    comboBox.IsDropDownOpen = false;
-                    return;
-                }
-
-                // Задержка перед поиском (дебаунс)
-                await Task.Delay(300);
-
-                // Если текст изменился снова, не выполняем поиск
-                if (textBox.Text?.Trim() != searchText)
-                    return;
-
-                await SearchProductsForComboBox(item, searchText);
-
-                // Открываем выпадающий список если есть результаты
-                if (item.BitrixProducts.Any())
-                {
-                    comboBox.IsDropDownOpen = true;
-                }
-            }
-        }
-
-        // Вспомогательный метод для поиска родительского элемента
-        private static T FindParent<T>(DependencyObject child) where T : DependencyObject
-        {
-            while (child != null)
-            {
-                if (child is T parent)
-                    return parent;
-                child = VisualTreeHelper.GetParent(child);
-            }
-            return null;
-        }
-
         private void AddProduct(object parameter)
         {
             if (parameter is ProductItemViewModel item)
             {
-                // Сохраняем текущий товар в статическом менеджере
                 ProductDataManager.SetOriginalProduct(item.OriginalProduct);
 
-                // Открываем модальное окно поиска
                 var searchWindow = new SearchBitrixProduct();
                 searchWindow.Owner = Window.GetWindow(this);
                 searchWindow.WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
-                // Показываем окно как модальное
                 bool? result = searchWindow.ShowDialog();
 
                 if (result == true)
                 {
-                    // Получаем выбранный товар из менеджера
                     var selectedProduct = ProductDataManager.GetSelectedProduct(item.OriginalProduct);
 
                     if (selectedProduct != null)
                     {
-                        // Обновляем выбранный товар
-                        item.SelectedBitrixProduct = selectedProduct;
+                        var productToSelect = item.BitrixProducts.FirstOrDefault(p =>
+                            p.ProductId == selectedProduct.ProductId);
 
-                        // Добавляем в список BitrixProducts, если его там нет
-                        if (!item.BitrixProducts.Any(p => p.ProductId == selectedProduct.ProductId))
+                        if (productToSelect == null)
                         {
-                            item.BitrixProducts.Add(selectedProduct);
+                            productToSelect = new Data.ScharedData.BitrixProductViewModel
+                            {
+                                ProductId = selectedProduct.ProductId,
+                                ProductName = FormatProductNameForDisplay(selectedProduct),
+                                CategoryName = selectedProduct.CategoryName,
+                                Price = selectedProduct.Price,
+                                HasPrice = selectedProduct.HasPrice,
+                                SectionId = selectedProduct.SectionId
+                            };
+                            item.BitrixProducts.Insert(0, productToSelect);
                         }
 
-                        // Показываем сообщение
+                        item.SelectedBitrixProduct = productToSelect;
+
                         MessageBox.Show($"Добавлено сопоставление:\n" +
                                       $"Заявка: {item.OriginalProduct}\n" +
                                       $"Bitrix: {selectedProduct.ProductName}\n" +
@@ -241,19 +575,25 @@ namespace ManagerApp.Pages
                                       MessageBoxButton.OK,
                                       MessageBoxImage.Information);
 
-                        // Обновляем привязку данных
                         item.OnPropertyChanged(nameof(item.SelectedBitrixProduct));
                     }
                 }
             }
         }
 
-        // Обработчики кнопок навигации
-
-
         private void btnNext_Click(object sender, RoutedEventArgs e)
         {
-            // Проверяем, что все товары сопоставлены
+            // Проверка 1: Есть ли вообще товары в списке
+            if (!ProductItems.Any())
+            {
+                MessageBox.Show("Список товаров пуст. Добавьте хотя бы один товар для сопоставления.",
+                              "Нет товаров",
+                              MessageBoxButton.OK,
+                              MessageBoxImage.Warning);
+                return;
+            }
+
+            // Проверка 2: Есть ли неподобранные товары
             var unmatchedProducts = ProductItems.Where(p => p.SelectedBitrixProduct == null).ToList();
 
             if (unmatchedProducts.Any())
@@ -261,133 +601,142 @@ namespace ManagerApp.Pages
                 string unmatchedList = string.Join("\n", unmatchedProducts.Select(p => $"• {p.OriginalProduct}"));
 
                 MessageBox.Show($"Есть неподобранные товары: {unmatchedProducts.Count}\n\n" +
-                              $"Неподобранные товары:\n{unmatchedList}\n\n" +
-                              "Пожалуйста, сопоставьте все товары перед продолжением.",
-                              "Внимание",
-                              MessageBoxButton.OK,
-                              MessageBoxImage.Warning);
+                               $"Неподобранные товары:\n{unmatchedList}\n\n" +
+                               "Пожалуйста, сопоставьте все товары перед продолжением.",
+                               "Внимание",
+                               MessageBoxButton.OK,
+                               MessageBoxImage.Warning);
                 return;
             }
 
-            // Собираем список сопоставленных товаров
-            var matchedProducts = new List<MatchedProduct>();
+            // Проверка 3: Все ли товары имеют валидное сопоставление
             foreach (var item in ProductItems)
             {
-                if (item.SelectedBitrixProduct != null)
+                if (item.SelectedBitrixProduct == null)
                 {
-                    var matchedProduct = new MatchedProduct
-                    {
-                        BitrixProductId = Convert.ToInt32(item.SelectedBitrixProduct.ProductId), // ДОБАВЬТЕ!
-                        OriginalProductName = item.OriginalProduct,
-                        BitrixProductName = item.SelectedBitrixProduct.ProductName,
-                        BitrixPrice = item.SelectedBitrixProduct.Price,
-                        CustomPrice = item.SelectedBitrixProduct.Price,
-                        Quantity = 1,
-                        Unit = "шт.",
-                        VAT = SettingsHelper.GetVATAsString()
-                    };
-                    matchedProducts.Add(matchedProduct);
+                    MessageBox.Show($"Товар '{item.OriginalProduct}' не сопоставлен.",
+                                  "Ошибка",
+                                  MessageBoxButton.OK,
+                                  MessageBoxImage.Error);
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(item.SelectedBitrixProduct.ProductId) ||
+                    item.SelectedBitrixProduct.ProductId == "0")
+                {
+                    MessageBox.Show($"Товар '{item.OriginalProduct}' имеет некорректное сопоставление.",
+                                  "Ошибка",
+                                  MessageBoxButton.OK,
+                                  MessageBoxImage.Error);
+                    return;
                 }
             }
 
-            // Сохраняем сопоставленные товары в менеджере
-            PriceDataManager.SetMatchedProducts(matchedProducts);
+            // Все проверки пройдены - формируем список
+            var matchedProducts = new List<MatchedProduct>();
 
-            // Переходим на страницу редактирования цен
+            foreach (var item in ProductItems)
+            {
+                var matchedProduct = new MatchedProduct
+                {
+                    BitrixProductId = Convert.ToInt32(item.SelectedBitrixProduct.ProductId),
+                    OriginalProductName = item.OriginalProduct,
+                    BitrixProductName = item.SelectedBitrixProduct.ProductName,
+                    BitrixPrice = item.SelectedBitrixProduct.Price,
+                    CustomPrice = item.SelectedBitrixProduct.Price,
+                    Quantity = 1,
+                    Unit = "шт.",
+                    VAT = SettingsHelper.GetVATAsString()
+                };
+                matchedProducts.Add(matchedProduct);
+            }
+
+            PriceDataManager.SetMatchedProducts(matchedProducts);
             var editPricePage = new EditPricePage(matchedProducts);
             NavigationService.Navigate(editPricePage);
         }
 
-        // Команда для кнопки
-        private class RelayCommand : ICommand
+        #endregion
+
+        #region INotifyPropertyChanged
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
-            private readonly Action<object> _execute;
-            private readonly Predicate<object> _canExecute;
-
-            public RelayCommand(Action<object> execute) : this(execute, null) { }
-
-            public RelayCommand(Action<object> execute, Predicate<object> canExecute)
-            {
-                _execute = execute ?? throw new ArgumentNullException(nameof(execute));
-                _canExecute = canExecute;
-            }
-
-            public bool CanExecute(object parameter) => _canExecute?.Invoke(parameter) ?? true;
-
-            public void Execute(object parameter) => _execute(parameter);
-
-            public event EventHandler CanExecuteChanged
-            {
-                add { CommandManager.RequerySuggested += value; }
-                remove { CommandManager.RequerySuggested -= value; }
-            }
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
-        // Обработчик нажатия клавиш в комбобоксе
-        private async void ComboBox_KeyUp(object sender, KeyEventArgs e)
+        private void txtNewProduct_TextChanged_1(object sender, TextChangedEventArgs e)
         {
-            var comboBox = sender as ComboBox;
-            if (comboBox?.DataContext is ProductItemViewModel item)
-            {
-                // Ждем небольшое время после ввода
-                await Task.Delay(500);
-
-                // Получаем текущий текст
-                string searchText = comboBox.Text?.Trim();
-
-                // Игнорируем короткие запросы
-                if (string.IsNullOrWhiteSpace(searchText) || searchText.Length < 2)
-                    return;
-
-                // Выполняем поиск
-                await SearchProductsForComboBox(item, searchText);
-            }
+            // Пустая реализация
         }
 
-
-        // Асинхронный поиск товаров для комбобокса
-        private async Task SearchProductsForComboBox(ProductItemViewModel item, string searchText)
-        {
-            try
-            {
-                Console.WriteLine($"=== ПОИСК ДЛЯ КОМБОБОКСА: '{searchText}' ===");
-
-                // Используем основной метод поиска
-                var similarProducts = await _productMatcher.FindSimilarProductsAsync(searchText, maxResults: 5);
-
-                Console.WriteLine($"Найдено: {similarProducts.Count} товаров");
-
-                // Очищаем и добавляем
-                item.BitrixProducts.Clear();
-
-                foreach (var product in similarProducts)
-                {
-                    item.BitrixProducts.Add(new BitrixProductViewModel
-                    {
-                        ProductId = product.ProductId,
-                        ProductName = product.ProductName,
-                        CategoryName = product.CategoryName,
-                        Price = product.Price,
-                        HasPrice = product.HasPrice,
-                        SectionId = product.SectionId
-                    });
-                }
-
-                if (item.BitrixProducts.Any())
-                {
-                    Console.WriteLine($"✅ Загружено в комбобокс: {item.BitrixProducts.Count}");
-                }
-                else
-                {
-                    Console.WriteLine($"⚠️ Ничего не найдено");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"❌ Ошибка: {ex.Message}");
-            }
-        }                                                                    
-
-
+        #endregion
     }
+
+    #region Вспомогательные классы
+
+    public class ProductItemViewModel : INotifyPropertyChanged
+    {
+        private string _originalProduct;
+        private Data.ScharedData.BitrixProductViewModel _selectedBitrixProduct;
+
+        public string OriginalProduct
+        {
+            get => _originalProduct;
+            set
+            {
+                _originalProduct = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public ObservableCollection<Data.ScharedData.BitrixProductViewModel> BitrixProducts { get; set; }
+
+        public Data.ScharedData.BitrixProductViewModel SelectedBitrixProduct
+        {
+            get => _selectedBitrixProduct;
+            set
+            {
+                _selectedBitrixProduct = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public ICommand AddCommand { get; set; }
+        public ICommand RemoveCommand { get; set; }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        public virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    public class RelayCommand : ICommand
+    {
+        private readonly Action<object> _execute;
+        private readonly Predicate<object> _canExecute;
+
+        public RelayCommand(Action<object> execute) : this(execute, null) { }
+
+        public RelayCommand(Action<object> execute, Predicate<object> canExecute)
+        {
+            _execute = execute ?? throw new ArgumentNullException(nameof(execute));
+            _canExecute = canExecute;
+        }
+
+        public bool CanExecute(object parameter) => _canExecute?.Invoke(parameter) ?? true;
+
+        public void Execute(object parameter) => _execute(parameter);
+
+        public event EventHandler CanExecuteChanged
+        {
+            add { CommandManager.RequerySuggested += value; }
+            remove { CommandManager.RequerySuggested -= value; }
+        }
+    }
+
+    #endregion
 }

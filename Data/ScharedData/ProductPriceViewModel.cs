@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Globalization;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -9,49 +11,34 @@ namespace ManagerApp.Data.ScharedData
 {
     public class ProductPriceViewModel : INotifyPropertyChanged
     {
-        // Добавьте это свойство:
-        private int _bitrixProductId;
-        public int BitrixProductId
-        {
-            get => _bitrixProductId;
-            set
-            {
-                _bitrixProductId = value;
-                OnPropertyChanged(nameof(BitrixProductId));
-            }
-        }
+        public int BitrixProductId { get; set; }
 
         private string _originalProductName;
         public string OriginalProductName
         {
             get => _originalProductName;
-            set
-            {
-                _originalProductName = value;
-                OnPropertyChanged(nameof(OriginalProductName));
-            }
+            set { _originalProductName = value; OnPropertyChanged(); }
         }
 
         private string _bitrixProductName;
         public string BitrixProductName
         {
             get => _bitrixProductName;
-            set
-            {
-                _bitrixProductName = value;
-                OnPropertyChanged(nameof(BitrixProductName));
-            }
+            set { _bitrixProductName = value; OnPropertyChanged(); }
         }
 
         private decimal _bitrixPrice;
         public decimal BitrixPrice
         {
             get => _bitrixPrice;
-            set
-            {
-                _bitrixPrice = value;
-                OnPropertyChanged(nameof(BitrixPrice));
-            }
+            set { _bitrixPrice = value; OnPropertyChanged(); }
+        }
+
+        private decimal _purchasingPrice;
+        public decimal PurchasingPrice
+        {
+            get => _purchasingPrice;
+            set { _purchasingPrice = value; OnPropertyChanged(); }
         }
 
         private decimal _customPrice;
@@ -61,7 +48,7 @@ namespace ManagerApp.Data.ScharedData
             set
             {
                 _customPrice = value;
-                OnPropertyChanged(nameof(CustomPrice));
+                OnPropertyChanged();
                 CalculatePrices();
             }
         }
@@ -72,8 +59,8 @@ namespace ManagerApp.Data.ScharedData
             get => _quantity;
             set
             {
-                _quantity = value;
-                OnPropertyChanged(nameof(Quantity));
+                _quantity = value > 0 ? value : 1;
+                OnPropertyChanged();
                 CalculatePrices();
             }
         }
@@ -82,21 +69,17 @@ namespace ManagerApp.Data.ScharedData
         public string Unit
         {
             get => _unit;
-            set
-            {
-                _unit = value;
-                OnPropertyChanged(nameof(Unit));
-            }
+            set { _unit = value; OnPropertyChanged(); }
         }
 
-        private string _vat;
+        private string _vat = "20";
         public string VAT
         {
             get => _vat;
             set
             {
                 _vat = value;
-                OnPropertyChanged(nameof(VAT));
+                OnPropertyChanged();
                 CalculatePrices();
             }
         }
@@ -105,48 +88,34 @@ namespace ManagerApp.Data.ScharedData
         public decimal PriceWithVAT
         {
             get => _priceWithVAT;
-            set
-            {
-                _priceWithVAT = value;
-                OnPropertyChanged(nameof(PriceWithVAT));
-            }
+            set { _priceWithVAT = value; OnPropertyChanged(); }
         }
 
         private decimal _totalWithVAT;
         public decimal TotalWithVAT
         {
             get => _totalWithVAT;
-            set
-            {
-                _totalWithVAT = value;
-                OnPropertyChanged(nameof(TotalWithVAT));
-            }
+            set { _totalWithVAT = value; OnPropertyChanged(); }
         }
 
         private void CalculatePrices()
         {
-            if (decimal.TryParse(VAT?.Replace("%", ""), out decimal vatPercent))
+            if (decimal.TryParse(VAT?.Replace("%", ""), NumberStyles.Any, CultureInfo.InvariantCulture, out var vatPercent))
             {
-                // Преобразуем проценты в коэффициент (20% -> 0.20)
-                decimal vatCoefficient = vatPercent / 100m;
-
-                // Цена с НДС = цена без НДС * (1 + НДС)
-                PriceWithVAT = CustomPrice * (1 + vatCoefficient);
-
-                // Сумма с НДС = цена с НДС * количество
+                vatPercent = vatPercent / 100;
+                PriceWithVAT = CustomPrice * (1 + vatPercent);
                 TotalWithVAT = PriceWithVAT * Quantity;
             }
             else
             {
-                // Если не удалось распарсить НДС, используем значение по умолчанию
-                PriceWithVAT = CustomPrice * (1 + 0.20m); // 20% по умолчанию
-                TotalWithVAT = PriceWithVAT * Quantity;
+                PriceWithVAT = CustomPrice;
+                TotalWithVAT = CustomPrice * Quantity;
             }
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
 
-        protected virtual void OnPropertyChanged(string propertyName)
+        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
