@@ -1,4 +1,5 @@
-﻿using ManagerApp.Classes.Setting;
+﻿using ManagerApp.Classes.Read.ReadPicture;
+using ManagerApp.Classes.Setting;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -7,6 +8,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -17,24 +19,15 @@ namespace ManagerApp.Pages
     public partial class Setting : Page, INotifyPropertyChanged
     {
         private const string SettingsFileName = "settings.txt";
+        private const string OCRSettingsFileName = "fileresurse.txt"; // Добавьте эту константу
         private const string DefaultVAT = "20";
 
         private string _vat = DefaultVAT;
         private ObservableCollection<BitrixUser> _employees = new ObservableCollection<BitrixUser>();
         private BitrixUser _selectedEmployee;
+        private string _ocrPath = "";
 
-        public string VAT
-        {
-            get { return _vat; }
-            set
-            {
-                if (_vat != value)
-                {
-                    _vat = value;
-                    OnPropertyChanged(nameof(VAT));
-                }
-            }
-        }
+
 
         public ObservableCollection<BitrixUser> Employees
         {
@@ -71,19 +64,83 @@ namespace ManagerApp.Pages
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
-
         public Setting()
         {
             InitializeComponent();
             DataContext = this;
+            LoadOCRPathFromFile(); // Загружаем путь при создании
         }
 
-        private void Page_Loaded(object sender, RoutedEventArgs e)
+
+
+
+       
+        //private void Page_Loaded(object sender, RoutedEventArgs e)
+        //{
+        //    LoadVATFromFile();
+        //    LoadEmployees();
+        //    CheckOCRFile(); // Проверяем OCR файл при загрузке
+        //}
+        private void btnFixOCR_Click(object sender, RoutedEventArgs e)
         {
-            LoadVATFromFile();
-            LoadEmployees();
-        }
+            try
+            {
+                string exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                string exeDir = Path.GetDirectoryName(exePath);
+                string targetFile = Path.Combine(exeDir, "rus.traineddata");
 
+                // 1. Проверяем есть ли файл уже в папке с программой
+                if (File.Exists(targetFile))
+                {
+                    MessageBox.Show(
+                        $"Файл уже есть в папке программы:\n{targetFile}\n\n" +
+                        $"Перезапустите программу.",
+                        "Файл найден",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    return;
+                }
+
+                // 2. Ищем файл в AppData
+                string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string[] files = Directory.GetFiles(localAppData, "rus.traineddata", SearchOption.AllDirectories);
+
+                if (files.Length > 0)
+                {
+                    string sourceFile = files[0];
+
+                    // Копируем
+                    File.Copy(sourceFile, targetFile, false);
+
+                    MessageBox.Show(
+                        $"✅ Файл скопирован!\n\n" +
+                        $"Из: {sourceFile}\n" +
+                        $"В: {targetFile}\n\n" +
+                        $"Теперь OCR будет работать!",
+                        "Успех",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+
+                    // Обновляем статус
+                    //CheckOCRFile();
+                }
+                else
+                {
+                    MessageBox.Show(
+                        $"Файл не найден в AppData.\n\n" +
+                        $"1. Скачайте файл по кнопке 'Скачать'\n" +
+                        $"2. Или положите в папку: {targetFile}",
+                        "Файл не найден",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
         private void LoadVATFromFile()
         {
             try
@@ -196,8 +253,245 @@ namespace ManagerApp.Pages
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+        private void Page_Loaded(object sender, RoutedEventArgs e)
+        {
+            LoadVATFromFile();
+            LoadEmployees();
 
-        // Статический метод для получения НДС из любого места в коде
+            // Загружаем сохраненный путь OCR из fileresurse.txt
+            LoadOCRPathFromFile();
+        }
+
+        public string VAT
+        {
+            get { return _vat; }
+            set
+            {
+                if (_vat != value)
+                {
+                    _vat = value;
+                    OnPropertyChanged(nameof(VAT));
+                }
+            }
+        }
+
+        private void LoadOCRPathFromFile()
+        {
+            try
+            {
+                if (File.Exists(OCRSettingsFileName))
+                {
+                    var lines = File.ReadAllLines(OCRSettingsFileName);
+                    foreach (var line in lines)
+                    {
+                        if (line.StartsWith("OCRPATH="))
+                        {
+                            var path = line.Substring(8).Trim();
+                            if (!string.IsNullOrEmpty(path))
+                            {
+                                OCRPath = path;
+
+                                // Если путь существует, сразу применяем его
+                                if (Directory.Exists(path))
+                                {
+                                    ApplyOCRPath(path);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка загрузки пути OCR: {ex.Message}", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+        // Обновите метод LoadOCRPathFromFile:
+        private void SaveOCRPathToFile(string path)
+        {
+            try
+            {
+                var lines = new List<string>();
+
+                if (File.Exists(OCRSettingsFileName))
+                {
+                    lines = File.ReadAllLines(OCRSettingsFileName).ToList();
+                }
+
+                // Удаляем старую запись OCRPATH если есть
+                lines.RemoveAll(line => line.StartsWith("OCRPATH="));
+
+                // Добавляем новую запись
+                lines.Add($"OCRPATH={path}");
+
+                File.WriteAllLines(OCRSettingsFileName, lines);
+                OCRPath = path;
+
+                MessageBox.Show($"Путь к OCR сохранен в файл: {OCRSettingsFileName}", "Сохранено",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка сохранения пути OCR: {ex.Message}", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // Обновите метод SaveOCRPathToFile:
+        private void ApplyOCRPath(string path)
+        {
+            try
+            {
+                // Проверяем наличие файла rus.traineddata в указанном пути
+                string tessdataPath = path;
+                string[] possibleFiles = {
+                Path.Combine(path, "rus.traineddata"),
+                Path.Combine(path, "tessdata", "rus.traineddata")
+            };
+
+                bool fileFound = false;
+                string foundFile = "";
+
+                foreach (var file in possibleFiles)
+                {
+                    if (File.Exists(file))
+                    {
+                        fileFound = true;
+                        foundFile = file;
+                        tessdataPath = Path.GetDirectoryName(file);
+                        break;
+                    }
+                }
+
+                if (fileFound)
+                {
+                    // Устанавливаем путь через статический метод SimpleOCRProcessor
+                    bool success = SimpleOCRProcessor.SetCustomPath(tessdataPath);
+
+                    if (success)
+                    {
+                        MessageBox.Show($"Путь к OCR успешно применен!\nФайл найден: {foundFile}", "Успех",
+                            MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    else
+                    {
+                        MessageBox.Show($"Не удалось установить путь OCR", "Ошибка",
+                            MessageBoxButton.OK, MessageBoxImage.Warning);
+                    }
+                }
+                else
+                {
+                    MessageBox.Show($"Файл rus.traineddata не найден в указанном пути!\nПроверьте правильность пути.", "Ошибка",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка применения пути OCR: {ex.Message}", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+
+        // Добавьте метод для сохранения в settings.txt (для обратной совместимости)
+        private void SaveOCRPathToSettingsFile(string path)
+        {
+            try
+            {
+                var lines = new List<string>();
+
+                if (File.Exists(SettingsFileName))
+                {
+                    lines = File.ReadAllLines(SettingsFileName).ToList();
+                }
+
+                // Удаляем старую запись OCRPATH если есть
+                lines.RemoveAll(line => line.StartsWith("OCRPATH="));
+
+                // Добавляем новую запись
+                lines.Add($"OCRPATH={path}");
+
+                File.WriteAllLines(SettingsFileName, lines);
+            }
+            catch (Exception ex)
+            {
+                // Не блокируем основной поток если ошибка в дополнительном файле
+                Console.WriteLine($"Ошибка сохранения OCR пути в settings.txt: {ex.Message}");
+            }
+        }
+
+        // Обновите метод ApplyOCRPath (добавьте вызов SaveOCRPathToFile):
+
+
+        // Обновите метод btnSave_Click:
+        private void btnSave_Click(object sender, RoutedEventArgs e)
+        {
+            SaveVATToFile();
+
+            // Сохраняем путь OCR если он указан
+            if (!string.IsNullOrEmpty(OCRPath))
+            {
+                if (Directory.Exists(OCRPath))
+                {
+                    SaveOCRPathToFile(OCRPath);
+                    ApplyOCRPath(OCRPath);
+                }
+                else
+                {
+                    MessageBoxResult result = MessageBox.Show(
+                        $"Указанный путь не существует:\n{OCRPath}\n\n" +
+                        $"Все равно сохранить путь в файл {OCRSettingsFileName}?",
+                        "Путь не существует",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        SaveOCRPathToFile(OCRPath);
+                    }
+                }
+            }
+
+            MessageBox.Show("Настройки успешно сохранены!", "Успех",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        // Добавьте статический метод для получения пути OCR из других частей программы:
+        public static string GetOCRPath()
+        {
+            try
+            {
+                string[] filesToCheck = { "fileresurse.txt", "settings.txt" };
+
+                foreach (var fileName in filesToCheck)
+                {
+                    if (File.Exists(fileName))
+                    {
+                        var lines = File.ReadAllLines(fileName);
+                        foreach (var line in lines)
+                        {
+                            if (line.StartsWith("OCRPATH="))
+                            {
+                                var path = line.Substring(8).Trim();
+                                if (!string.IsNullOrEmpty(path))
+                                {
+                                    return path;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Игнорируем ошибки
+            }
+
+            return null;
+        }
+
+        // Обновите статический метод GetVAT для работы только с VAT:
         public static decimal GetVAT()
         {
             try
@@ -225,6 +519,7 @@ namespace ManagerApp.Pages
 
             return 0.20m; // 20% по умолчанию
         }
+
 
         private void txtVAT_PreviewTextInput(object sender, TextCompositionEventArgs e)
         {
@@ -277,18 +572,391 @@ namespace ManagerApp.Pages
             }
         }
 
-        private void btnSave_Click(object sender, RoutedEventArgs e)
-        {
-            SaveVATToFile();
-            MessageBox.Show("Настройки успешно сохранены!", "Успех",
-                MessageBoxButton.OK, MessageBoxImage.Information);
-        }
-
+      
         private void btnClose_Click(object sender, RoutedEventArgs e)
         {
             if (NavigationService.CanGoBack)
             {
                 NavigationService.GoBack();
+            }
+        }
+
+
+
+        //private void CheckOCRFile()
+        //{
+        //    try
+        //    {
+        //        Console.WriteLine("\n=== ПРОВЕРКА OCR ФАЙЛА (ТОТ ЖЕ ПУТЬ ЧТО И В ImageTextReader) ===");
+
+        //        // Получаем тот же самый путь что используется в ImageTextReader
+        //        string exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+        //        string exeDir = Path.GetDirectoryName(exePath);
+
+        //        // ТОЧНО ТЕ ЖЕ ПУТИ что в ImageTextReader.FindRussianFile()!
+        //        string[] possiblePaths = {
+        //    Path.Combine(exeDir, "rus.traineddata"),
+        //    Path.Combine(exeDir, "tessdata", "rus.traineddata"),
+        //    Path.Combine(exeDir, "Image", "rus.traineddata")
+        //};
+
+        //        Console.WriteLine($"Проверяем пути:");
+        //        foreach (var path in possiblePaths)
+        //        {
+        //            Console.WriteLine($"  - {path}");
+        //        }
+
+        //        bool found = false;
+        //        string foundPath = "";
+
+        //        foreach (var path in possiblePaths)
+        //        {
+        //            if (File.Exists(path))
+        //            {
+        //                found = true;
+        //                foundPath = path;
+        //                break;
+        //            }
+        //        }
+
+        //        if (found)
+        //        {
+        //            FileInfo info = new FileInfo(foundPath);
+        //            txtOCRStatus.Text = $"✅ Файл найден:\n{foundPath}\nРазмер: {info.Length / 1024 / 1024} МБ";
+        //            //txtOCRStatus.Foreground = Brushes.Green;
+
+        //            // Сохраняем путь в общие настройки
+        //            OCRSettings.SetPath(Path.GetDirectoryName(foundPath));
+        //        }
+        //        else
+        //        {
+        //            txtOCRStatus.Text = $"❌ Файл не найден\nРазместите rus.traineddata в:\n{exeDir}\\rus.traineddata";
+        //            //txtOCRStatus.Foreground = Brushes.Red;
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        txtOCRStatus.Text = $"Ошибка проверки: {ex.Message}";
+        //        //txtOCRStatus.Foreground = Brushes.Orange;
+        //    }
+        //}
+        //private void btnUseThisPath_Click(object sender, RoutedEventArgs e)
+        //{
+        //    try
+        //    {
+        //        // Получаем путь из найденного файла
+        //        string exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+        //        string exeDir = Path.GetDirectoryName(exePath);
+
+        //        string[] possiblePaths = {
+        //    Path.Combine(exeDir, "rus.traineddata"),
+        //    Path.Combine(exeDir, "tessdata", "rus.traineddata"),
+        //    Path.Combine(exeDir, "Image", "rus.traineddata")
+        //};
+
+        //        foreach (var path in possiblePaths)
+        //        {
+        //            if (File.Exists(path))
+        //            {
+        //                string folder = Path.GetDirectoryName(path);
+
+        //                // Сохраняем путь
+        //                OCRSettings.SetPath(folder);
+
+        //                MessageBox.Show(
+        //                    $"Путь сохранен: {folder}\n\n" +
+        //                    $"Перезапустите программу для применения.",
+        //                    "Успех",
+        //                    MessageBoxButton.OK,
+        //                    MessageBoxImage.Information);
+
+        //                CheckOCRFile();
+        //                return;
+        //            }
+        //        }
+
+        //        MessageBox.Show("Сначала найдите файл с помощью кнопки 'Проверить'",
+        //            "Файл не найден",
+        //            MessageBoxButton.OK,
+        //            MessageBoxImage.Warning);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка",
+        //            MessageBoxButton.OK, MessageBoxImage.Error);
+        //    }
+        //}
+        //private void btnCheckOCR_Click(object sender, RoutedEventArgs e)
+        //{
+        //    CheckOCRFile();
+        //}
+
+        //private async void btnDownloadOCR_Click(object sender, RoutedEventArgs e)
+        //{
+        //    try
+        //    {
+        //        MessageBoxResult result = MessageBox.Show(
+        //            "Скачать языковой файл rus.traineddata (≈40 МБ)?\n" +
+        //            "После скачивания файл будет помещен в папку с программой.",
+        //            "Скачивание файла OCR",
+        //            MessageBoxButton.YesNo,
+        //            MessageBoxImage.Question);
+
+        //        if (result != MessageBoxResult.Yes)
+        //            return;
+
+        //        // Показываем прогресс
+        //        btnDownloadOCR.Content = "Скачивание...";
+        //        btnDownloadOCR.IsEnabled = false;
+
+        //        // Создаем папку если нет
+        //        string exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+        //        string targetDir = Path.Combine(exeDir, "tessdata");
+        //        Directory.CreateDirectory(targetDir);
+
+        //        string targetFile = Path.Combine(targetDir, "rus.traineddata");
+        //        string downloadUrl = "https://github.com/tesseract-ocr/tessdata/raw/main/rus.traineddata";
+
+        //        // Скачиваем файл
+        //        using (var client = new System.Net.WebClient())
+        //        {
+        //            // Обработка прогресса
+        //            client.DownloadProgressChanged += (s, args) =>
+        //            {
+        //                Dispatcher.Invoke(() =>
+        //                {
+        //                    btnDownloadOCR.Content = $"Скачивание... {args.ProgressPercentage}%";
+        //                });
+        //            };
+
+        //            await client.DownloadFileTaskAsync(new Uri(downloadUrl), targetFile);
+        //        }
+
+        //        MessageBox.Show($"Файл успешно скачан!\n{targetFile}\nПерезапустите программу для применения.",
+        //            "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+
+        //        CheckOCRFile();
+        //    }
+        //    catch (System.Net.WebException)
+        //    {
+        //        MessageBox.Show("Ошибка подключения к интернету.\nСкачайте файл вручную:\n" +
+        //                       "https://github.com/tesseract-ocr/tessdata/raw/main/rus.traineddata\n" +
+        //                       "и разместите в папке с программой.",
+        //            "Ошибка загрузки", MessageBoxButton.OK, MessageBoxImage.Error);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка",
+        //            MessageBoxButton.OK, MessageBoxImage.Error);
+        //    }
+        //    finally
+        //    {
+        //        btnDownloadOCR.Content = "Скачать";
+        //        btnDownloadOCR.IsEnabled = true;
+        //    }
+        //}
+        // В начале класса добавьте поля и свойство:
+
+        private string _ocrFileName = "fileresurse.txt";
+
+        public string OCRPath
+        {
+            get { return _ocrPath; }
+            set
+            {
+                if (_ocrPath != value)
+                {
+                    _ocrPath = value;
+                    OnPropertyChanged(nameof(OCRPath));
+                }
+            }
+        }
+
+        // В конструкторе добавьте инициализацию:
+
+
+
+
+   
+
+    
+
+        // Добавьте обработчики кнопок:
+        private void btnBrowseOCR_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Используем OpenFileDialog с трюком для выбора папки
+                var dialog = new Microsoft.Win32.OpenFileDialog
+                {
+                    ValidateNames = false,
+                    CheckFileExists = false,
+                    CheckPathExists = true,
+                    FileName = "Выберите папку",
+                    Title = "Выберите папку с файлом rus.traineddata"
+                };
+
+                if (dialog.ShowDialog() == true)
+                {
+                    // Получаем путь к папке из выбранного файла
+                    string selectedPath = Path.GetDirectoryName(dialog.FileName);
+
+                    if (!string.IsNullOrEmpty(selectedPath))
+                    {
+                        OCRPath = selectedPath;
+
+                        // Проверяем наличие файла
+                        string[] possibleFiles = {
+                    Path.Combine(OCRPath, "rus.traineddata"),
+                    Path.Combine(OCRPath, "tessdata", "rus.traineddata")
+                };
+
+                        bool fileFound = false;
+                        foreach (var file in possibleFiles)
+                        {
+                            if (File.Exists(file))
+                            {
+                                fileFound = true;
+                                break;
+                            }
+                        }
+
+                        if (!fileFound)
+                        {
+                            MessageBoxResult result = MessageBox.Show(
+                                $"В выбранной папке не найден файл rus.traineddata.\n\n" +
+                                $"Выберите папку tessdata или папку содержащую rus.traineddata.\n\n" +
+                                $"Все равно сохранить этот путь?",
+                                "Файл не найден",
+                                MessageBoxButton.YesNo,
+                                MessageBoxImage.Warning);
+
+                            if (result != MessageBoxResult.Yes)
+                            {
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка выбора папки: {ex.Message}", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+        
+
+        private void btnTestOCRPath_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(OCRPath))
+            {
+                MessageBox.Show("Сначала укажите путь к папке с OCR файлами", "Внимание",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (!Directory.Exists(OCRPath))
+            {
+                MessageBox.Show($"Указанная папка не существует:\n{OCRPath}", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            // Проверяем наличие файла
+            string[] possibleFiles = {
+        Path.Combine(OCRPath, "rus.traineddata"),
+        Path.Combine(OCRPath, "tessdata", "rus.traineddata")
+    };
+
+            bool fileFound = false;
+            string foundFile = "";
+
+            foreach (var file in possibleFiles)
+            {
+                if (File.Exists(file))
+                {
+                    fileFound = true;
+                    foundFile = file;
+                    break;
+                }
+            }
+
+            if (fileFound)
+            {
+                FileInfo info = new FileInfo(foundFile);
+                MessageBox.Show($"✅ Файл найден!\n\n" +
+                               $"Путь: {foundFile}\n" +
+                               $"Размер: {info.Length / 1024 / 1024} МБ\n" +
+                               $"Дата изменения: {info.LastWriteTime}",
+                               "Проверка успешна",
+                               MessageBoxButton.OK,
+                               MessageBoxImage.Information);
+            }
+            else
+            {
+                MessageBox.Show($"❌ Файл rus.traineddata не найден!\n\n" +
+                               $"Искали в:\n" +
+                               $"{possibleFiles[0]}\n" +
+                               $"{possibleFiles[1]}\n\n" +
+                               $"Убедитесь что файл находится в одной из этих папок.",
+                               "Файл не найден",
+                               MessageBoxButton.OK,
+                               MessageBoxImage.Error);
+            }
+        }
+
+        // Обновите метод btnSave_Click:
+      
+        private void btnSelectOCRFile_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var openFileDialog = new Microsoft.Win32.OpenFileDialog
+                {
+                    Filter = "Языковые файлы Tesseract (*.traineddata)|*.traineddata|Все файлы (*.*)|*.*",
+                    Title = "Выберите файл rus.traineddata",
+                    Multiselect = false
+                };
+
+                if (openFileDialog.ShowDialog() == true)
+                {
+                    // Спрашиваем куда сохранить
+                    MessageBoxResult result = MessageBox.Show(
+                        "Куда сохранить файл?\n\n" +
+                        "Да - в папку с программой (рекомендуется)\n" +
+                        "Нет - оставить в выбранном месте",
+                        "Сохранение файла",
+                        MessageBoxButton.YesNoCancel,
+                        MessageBoxImage.Question);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        // Копируем в папку с программой
+                        string exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+                        string targetDir = Path.Combine(exeDir, "tessdata");
+                        Directory.CreateDirectory(targetDir);
+
+                        string targetFile = Path.Combine(targetDir, "rus.traineddata");
+                        File.Copy(openFileDialog.FileName, targetFile, true);
+
+                        MessageBox.Show($"Файл скопирован в:\n{targetFile}\nПерезапустите программу.",
+                            "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    else if (result == MessageBoxResult.No)
+                    {
+                        MessageBox.Show($"Файл выбран:\n{openFileDialog.FileName}\n" +
+                                       "Убедитесь что программа имеет доступ к этому файлу.",
+                            "Файл выбран", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+
+                    //CheckOCRFile();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка: {ex.Message}", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }

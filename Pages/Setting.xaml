@@ -194,6 +194,130 @@
                         </Grid>
                     </Border>
 
+                    <!-- Настройка пути OCR -->
+                    <Border BorderBrush="#E0E0E0"
+        BorderThickness="0,0,0,1"
+        Padding="0,0,0,25"
+        Margin="0,0,0,20">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0"
+                   Text="ПУТЬ К ЯЗЫКОВОМУ ПАКЕТУ OCR"
+                   FontSize="16"
+                   FontWeight="SemiBold"
+                   Foreground="#333333"
+                   Margin="0,0,0,15"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0"
+                   Text="Укажите путь к файлу rus.traineddata для работы с OCR"
+                   FontSize="14"
+                   Foreground="#666666"
+                   TextWrapping="Wrap"
+                   Margin="0,0,20,0"/>
+
+                            <StackPanel Grid.Row="0" Grid.Column="1" Grid.RowSpan="2"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Width="400">
+
+                                <!-- Поле для отображения пути -->
+                                <TextBox x:Name="txtOCRPath"
+                     Height="45"
+                     FontSize="14"
+                     VerticalContentAlignment="Center"
+                     IsReadOnly="True"
+                     Text="{Binding OCRPath, Mode=OneWay}"
+                     Margin="0,0,0,10">
+                                    <TextBox.Style>
+                                        <Style TargetType="TextBox">
+                                            <Setter Property="BorderBrush" Value="#E0E0E0"/>
+                                            <Setter Property="BorderThickness" Value="1"/>
+                                            <Setter Property="Padding" Value="10,0"/>
+                                            <Setter Property="Background" Value="#F8F8F8"/>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="#F0F0F0"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBox.Style>
+                                </TextBox>
+
+                                <!-- Кнопки для работы с путем -->
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Button x:Name="btnBrowseOCR"
+                        Content="ОБЗОР..."
+                        Width="100"
+                        Height="35"
+                        Background="#F0F0F0"
+                        Foreground="#333333"
+                        FontWeight="SemiBold"
+                        FontSize="12"
+                        BorderThickness="1"
+                        BorderBrush="#E0E0E0"
+                        Margin="0,0,10,0"
+                        Click="btnBrowseOCR_Click">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                CornerRadius="3">
+                                                                <ContentPresenter HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center"/>
+                                                            </Border>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+
+                                    <Button x:Name="btnTestOCRPath"
+                        Content="ПРОВЕРИТЬ"
+                        Width="100"
+                        Height="35"
+                        Background="#F0F0F0"
+                        Foreground="#333333"
+                        FontWeight="SemiBold"
+                        FontSize="12"
+                        BorderThickness="1"
+                        BorderBrush="#E0E0E0"
+                        Click="btnTestOCRPath_Click">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                CornerRadius="3">
+                                                                <ContentPresenter HorizontalAlignment="Center"
+                                                              VerticalAlignment="Center"/>
+                                                            </Border>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
                     <!-- Информационный блок -->
                     <Border Background="#F8F8F8"
                             BorderBrush="#E0E0E0"

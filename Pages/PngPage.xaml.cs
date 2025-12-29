@@ -36,12 +36,27 @@ namespace ManagerApp.Pages
 
         public PngPage(string filePath = null)
         {
-            InitializeComponent();
-            InitializeAnalyzers();
+            try
+            {
+                InitializeComponent();
+                InitializeAnalyzers();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка инициализации: {ex.Message}", "Ошибка",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
 
             if (!string.IsNullOrEmpty(filePath))
             {
-                LoadFile(filePath);
+                try
+                {
+                    LoadFile(filePath);
+                }
+                catch (Exception ex)
+                {
+                    ShowError($"Ошибка загрузки файла: {ex.Message}");
+                }
             }
         }
 
@@ -49,25 +64,118 @@ namespace ManagerApp.Pages
         {
             try
             {
+                // 1. Сначала пытаемся создать OCR
                 _ocrProcessor = new SimpleOCRProcessor();
-                _aiAnalyzer = new AIProductAnalyzer();
-                _algorithmicAnalyzer = new AlgorithmicProductAnalyzer();
 
+                // 2. Проверяем готовность
                 if (_ocrProcessor.IsOCRReady())
                 {
-                    statusText.Text = "OCR готов к работе";
+                    statusText.Text = "✅ OCR готов к работе";
                     statusText.Foreground = Brushes.Green;
+                    Console.WriteLine("✅ OCR успешно инициализирован");
                 }
                 else
                 {
-                    statusText.Text = "OCR не готов. Проверьте интернет соединение";
+                    // Получаем сообщение об ошибке (если есть такой метод)
+                    string errorMsg = "Tesseract не готов. ";
+
+                    // Пытаемся получить более детальное сообщение
+                    try
+                    {
+                        // Если есть метод GetErrorMessage
+                        var method = _ocrProcessor.GetType().GetMethod("GetErrorMessage");
+                        if (method != null)
+                        {
+                            string detailedError = (string)method.Invoke(_ocrProcessor, null);
+                            if (!string.IsNullOrEmpty(detailedError))
+                            {
+                                errorMsg += detailedError;
+                            }
+                        }
+                    }
+                    catch { }
+
+                    statusText.Text = errorMsg;
                     statusText.Foreground = Brushes.Red;
+                    Console.WriteLine($"❌ {errorMsg}");
+
+                    // Дополнительная диагностика
+                    PerformQuickDiagnostics();
                 }
+
+                // 3. Инициализируем другие анализаторы
+                _aiAnalyzer = new AIProductAnalyzer();
+                _algorithmicAnalyzer = new AlgorithmicProductAnalyzer();
             }
             catch (Exception ex)
             {
                 statusText.Text = $"Ошибка инициализации: {ex.Message}";
                 statusText.Foreground = Brushes.Red;
+                Console.WriteLine($"💥 ОШИБКА В InitializeAnalyzers: {ex.Message}");
+            }
+        }
+        private void btnReinitializeOCR_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Console.WriteLine("\n=== ПОВТОРНАЯ ИНИЦИАЛИЗАЦИЯ OCR ===");
+
+                // Пробуем переинициализировать
+                _ocrProcessor = new SimpleOCRProcessor();
+
+                if (_ocrProcessor.IsOCRReady())
+                {
+                    statusText.Text = "✅ OCR переинициализирован и готов к работе";
+                    statusText.Foreground = Brushes.Green;
+                    MessageBox.Show("OCR успешно переинициализирован!", "Успех",
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    statusText.Text = "❌ OCR все еще не готов";
+                    statusText.Foreground = Brushes.Red;
+                    MessageBox.Show("OCR не удалось инициализировать.\n" +
+                                  "Убедитесь что файл rus.traineddata находится в папке с программой.",
+                                  "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                statusText.Text = $"Ошибка переинициализации: {ex.Message}";
+                statusText.Foreground = Brushes.Red;
+            }
+        }
+        private void PerformQuickDiagnostics()
+        {
+            Console.WriteLine("\n=== БЫСТРАЯ ДИАГНОСТИКА ===");
+
+            // 1. Где находится программа
+            string exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            string exeDir = Path.GetDirectoryName(exePath);
+            Console.WriteLine($"Программа запущена из: {exeDir}");
+
+            // 2. Проверяем наличие файла
+            string[] checkPaths = {
+        Path.Combine(exeDir, "rus.traineddata"),
+        Path.Combine(exeDir, "Image", "rus.traineddata"),
+        "rus.traineddata"
+    };
+
+            bool found = false;
+            foreach (string path in checkPaths)
+            {
+                if (File.Exists(path))
+                {
+                    FileInfo info = new FileInfo(path);
+                    Console.WriteLine($"✅ Файл найден: {path} ({info.Length / 1024 / 1024} MB)");
+                    found = true;
+                }
+            }
+
+            if (!found)
+            {
+                Console.WriteLine("❌ Файл rus.traineddata НЕ НАЙДЕН!");
+                Console.WriteLine("Положите файл в папку с программой.");
             }
         }
 
@@ -133,10 +241,29 @@ namespace ManagerApp.Pages
         private async void RecognizeTextFromImage(string filePath)
         {
             try
-            {
+            { // ЗАМЕНИТЕ ЭТОТ КОД:
                 if (!_ocrProcessor.IsOCRReady())
                 {
-                    ShowError("OCR не готов к работе.\nПроверьте интернет соединение и перезапустите программу.");
+                    // Вместо ошибки - пробуем переинициализировать
+                    bool retry = MessageBox.Show(
+                        "OCR не готов. Попробовать скачать необходимые файлы?",
+                        "Проблема с OCR",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question) == MessageBoxResult.Yes;
+
+                    if (retry)
+                    {
+                        _ocrProcessor.Reinitialize();
+                        if (_ocrProcessor.IsOCRReady())
+                        {
+                            // Продолжаем распознавание
+                            await Task.Delay(1000);
+                            RecognizeTextFromImage(filePath);
+                            return;
+                        }
+                    }
+
+                    ShowInfo("OCR не готов. Выберите другое изображение или перезапустите программу.");
                     return;
                 }
 

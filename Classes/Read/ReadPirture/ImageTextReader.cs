@@ -3,328 +3,440 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Net;
+using System.Reflection;
 using System.Text;
 using Tesseract;
 
 namespace ManagerApp.Classes.Read.ReadPicture
 {
+
     public class ImageTextReader
     {
-        private string _tessDataPath; // Путь к файлам Tesseract
+        private string _tessDataPath;
+        private bool _isInitialized = false;
+        private const string OCROptionsFile = "fileresurse.txt";
 
         public ImageTextReader()
         {
-            // 1. Находим или создаем папку для файлов Tesseract
-            _tessDataPath = GetTessDataPath();
-            Console.WriteLine($"Папка с файлами Tesseract: {_tessDataPath}");
-
-            // 2. Создаем папку, если ее нет
-            CreateFolderIfNotExists(_tessDataPath);
-
-            // 3. Проверяем и загружаем файлы языков
-            CheckAndDownloadLanguageFiles();
-        }
-
-        // Метод для получения правильного пути к файлам
-        private string GetTessDataPath()
-        {
-            // Путь 1: Папка рядом с программой
-            string programFolder = AppDomain.CurrentDomain.BaseDirectory;
-            string path1 = Path.Combine(programFolder, "tessdata");
-
-            // Путь 2: Папка Image рядом с программой
-            string path2 = Path.Combine(programFolder, "Image");
-
-            // Путь 3: В документах пользователя
-            string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-            string path3 = Path.Combine(documents, "ManagerApp", "tessdata");
-
-            // Проверяем, где есть файлы
-            if (HasTessDataFiles(path1)) return path1;
-            if (HasTessDataFiles(path2)) return path2;
-            if (HasTessDataFiles(path3)) return path3;
-
-            // Если нигде нет файлов, используем первый путь
-            return path1;
-        }
-
-        // Проверяем, есть ли файлы Tesseract в папке
-        private bool HasTessDataFiles(string folderPath)
-        {
-            if (!Directory.Exists(folderPath)) return false;
-
-            // Ищем файлы с расширением .traineddata
-            string[] files = Directory.GetFiles(folderPath, "*.traineddata");
-            return files.Length > 0;
-        }
-
-        // Создаем папку, если ее нет
-        private void CreateFolderIfNotExists(string path)
-        {
-            if (!Directory.Exists(path))
+            try
             {
-                Directory.CreateDirectory(path);
-                Console.WriteLine($"Создана папка: {path}");
-            }
-        }
+                Console.WriteLine("=== ИНИЦИАЛИЗАЦИЯ TESSERACT ===");
 
-        // Проверяем и загружаем файлы языков
-        private void CheckAndDownloadLanguageFiles()
-        {
-            // Какие языки нам нужны
-            string[] neededLanguages = { "rus", "eng" };
-
-            foreach (string language in neededLanguages)
-            {
-                string filePath = Path.Combine(_tessDataPath, $"{language}.traineddata");
-
-                // Если файла нет, скачиваем его
-                if (!File.Exists(filePath))
+                // 1. Пробуем загрузить путь из файла fileresurse.txt
+                string savedPath = LoadPathFromFile();
+                if (!string.IsNullOrEmpty(savedPath))
                 {
-                    Console.WriteLine($"Файл {language}.traineddata не найден. Скачиваем...");
-                    DownloadLanguageFile(language, filePath);
+                    _tessDataPath = savedPath;
+                    Console.WriteLine($"✅ Используется путь из fileresurse.txt: {_tessDataPath}");
+
+                    // Проверяем существование файла
+                    string russianFile = Path.Combine(_tessDataPath, "rus.traineddata");
+                    if (!File.Exists(russianFile))
+                    {
+                        // Если файл не найден по сохраненному пути, ищем в стандартных местах
+                        Console.WriteLine($"❌ Файл не найден по сохраненному пути, ищу в стандартных местах...");
+                        _tessDataPath = FindRussianFile();
+                    }
                 }
                 else
                 {
-                    // Проверяем размер файла
-                    FileInfo info = new FileInfo(filePath);
-                    if (info.Length < 2 * 1024 * 1024) // Меньше 2 МБ
-                    {
-                        Console.WriteLine($"Файл {language}.traineddata слишком маленький. Скачиваем заново...");
-                        DownloadLanguageFile(language, filePath);
-                    }
-                    else
-                    {
-                        Console.WriteLine($"Файл {language}.traineddata найден ({info.Length / 1024 / 1024} МБ)");
-                    }
-                }
-            }
-        }
-
-        // Скачиваем файл языка
-        private void DownloadLanguageFile(string language, string savePath)
-        {
-            try
-            {
-                // URL для скачивания
-                string url = $"https://github.com/tesseract-ocr/tessdata/raw/main/{language}.traineddata";
-
-                Console.WriteLine($"Скачиваем с: {url}");
-
-                using (WebClient client = new WebClient())
-                {
-                    // Устанавливаем User-Agent, чтобы GitHub не блокировал
-                    client.Headers.Add("User-Agent", "ManagerApp/1.0");
-
-                    // Скачиваем файл
-                    client.DownloadFile(url, savePath);
+                    // 2. Если путь не сохранен, ищем файл в стандартных местах
+                    _tessDataPath = FindRussianFile();
                 }
 
-                Console.WriteLine($"Файл скачан: {savePath}");
+                // Сохраняем найденный путь для будущего использования
+                SavePathToFile(_tessDataPath);
+
+                _isInitialized = true;
+                Console.WriteLine($"✅ Найден путь к данным: {_tessDataPath}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Ошибка при скачивании: {ex.Message}");
-                throw new Exception($"Не удалось скачать файл {language}.traineddata. Проверьте интернет соединение.");
+                Console.WriteLine($"❌ ОШИБКА: {ex.Message}");
+                _isInitialized = false;
             }
         }
 
-        // Основной метод для чтения текста с картинки
-        public List<string> ReadTextFromImage(string imagePath, string language = "rus")
+        // Метод для загрузки пути из файла fileresurse.txt
+        private string LoadPathFromFile()
         {
-            List<string> result = new List<string>();
-
             try
             {
-                Console.WriteLine($"Читаем текст с: {Path.GetFileName(imagePath)}");
-
-                // 1. Предварительная обработка картинки
-                string processedImage = PrepareImage(imagePath);
-
-                // 2. Распознавание текста
-                string text = RecognizeText(processedImage, language);
-
-                // 3. Обработка результата
-                result = CleanText(text);
-
-                // 4. Удаляем временный файл
-                if (processedImage != imagePath && File.Exists(processedImage))
+                if (File.Exists(OCROptionsFile))
                 {
-                    File.Delete(processedImage);
+                    var lines = File.ReadAllLines(OCROptionsFile);
+                    foreach (var line in lines)
+                    {
+                        if (line.StartsWith("OCRPATH="))
+                        {
+                            var path = line.Substring(8).Trim();
+                            if (!string.IsNullOrEmpty(path) && Directory.Exists(path))
+                            {
+                                Console.WriteLine($"📁 Найден сохраненный путь: {path}");
+                                return path;
+                            }
+                        }
+                    }
+                    Console.WriteLine("Файл fileresurse.txt есть, но путь OCRPATH не найден или невалиден");
+                }
+                else
+                {
+                    Console.WriteLine("Файл fileresurse.txt не найден");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Ошибка: {ex.Message}");
-                result.Add($"Ошибка: {ex.Message}");
+                Console.WriteLine($"Ошибка чтения файла {OCROptionsFile}: {ex.Message}");
             }
 
-            return result;
+            return null;
         }
 
-        // Подготовка картинки для распознавания
-        private string PrepareImage(string imagePath)
+        // Метод для сохранения пути в файл
+        private void SavePathToFile(string path)
         {
-            // Простая проверка: если картинка слишком маленькая, обрабатываем
-            using (Bitmap image = new Bitmap(imagePath))
+            try
             {
-                if (image.Width < 100 || image.Height < 100)
-                {
-                    // Создаем временный файл
-                    string tempPath = Path.GetTempFileName() + ".png";
+                var lines = new List<string>();
 
-                    // Увеличиваем размер и улучшаем качество
-                    using (Bitmap processed = ImproveImageQuality(image))
+                if (File.Exists(OCROptionsFile))
+                {
+                    lines = File.ReadAllLines(OCROptionsFile).ToList();
+
+                    // Удаляем старую запись OCRPATH если есть
+                    lines.RemoveAll(line => line.StartsWith("OCRPATH="));
+                }
+
+                // Добавляем новую запись
+                lines.Add($"OCRPATH={path}");
+
+                File.WriteAllLines(OCROptionsFile, lines);
+                Console.WriteLine($"💾 Путь сохранен в {OCROptionsFile}: {path}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка сохранения пути в файл: {ex.Message}");
+            }
+        }
+
+        // Метод для ручного указания пути (из настроек)
+        public static bool SetTessDataPath(string path)
+        {
+            try
+            {
+                if (Directory.Exists(path))
+                {
+                    // Проверяем есть ли файл в этой папке
+                    string[] possibleFiles = {
+                    Path.Combine(path, "rus.traineddata"),
+                    Path.Combine(path, "tessdata", "rus.traineddata")
+                };
+
+                    bool fileFound = false;
+                    string foundFile = "";
+
+                    foreach (var file in possibleFiles)
                     {
-                        processed.Save(tempPath, System.Drawing.Imaging.ImageFormat.Png);
-                        return tempPath;
+                        if (File.Exists(file))
+                        {
+                            fileFound = true;
+                            foundFile = file;
+                            break;
+                        }
+                    }
+
+                    if (fileFound)
+                    {
+                        // Сохраняем путь в файл
+                        SavePathToFileStatic(Path.GetDirectoryName(foundFile));
+                        return true;
+                    }
+                }
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        // Статический метод для сохранения пути
+        private static void SavePathToFileStatic(string path)
+        {
+            try
+            {
+                const string fileName = "fileresurse.txt";
+                var lines = new List<string>();
+
+                if (File.Exists(fileName))
+                {
+                    lines = File.ReadAllLines(fileName).ToList();
+                    lines.RemoveAll(line => line.StartsWith("OCRPATH="));
+                }
+
+                lines.Add($"OCRPATH={path}");
+                File.WriteAllLines(fileName, lines);
+
+                Console.WriteLine($"✅ Путь сохранен в {fileName}: {path}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Ошибка сохранения пути: {ex.Message}");
+            }
+        }
+
+        // Остальные методы остаются без изменений...
+        private string FindRussianFile()
+        {
+            string exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            string exeDir = Path.GetDirectoryName(exePath);
+
+            Console.WriteLine($"=== ПОИСК ФАЙЛА (ЕДИНЫЙ ДЛЯ ВСЕЙ ПРОГРАММЫ) ===");
+            Console.WriteLine($"EXE путь: {exePath}");
+
+            // ТОЛЬКО 3 основных места - такие же как в настройках!
+            List<string> searchPaths = new List<string>
+        {
+            // 1. Рядом с EXE (самый простой)
+            Path.Combine(exeDir, "rus.traineddata"),
+            
+            // 2. В папке tessdata рядом с EXE
+            Path.Combine(exeDir, "tessdata", "rus.traineddata"),
+            
+            // 3. В папке Image рядом с EXE
+            Path.Combine(exeDir, "Image", "rus.traineddata"),
+        };
+
+            foreach (string path in searchPaths)
+            {
+                Console.WriteLine($"  Проверяю: {path}");
+                if (File.Exists(path))
+                {
+                    FileInfo info = new FileInfo(path);
+                    Console.WriteLine($"✅ НАЙДЕН: {path} ({info.Length / 1024 / 1024} MB)");
+
+                    // Возвращаем папку, где лежит файл
+                    return Path.GetDirectoryName(path);
+                }
+            }
+
+            throw new FileNotFoundException(
+                $"Файл rus.traineddata не найден!\n\n" +
+                $"Положите файл в одну из папок:\n" +
+                $"1. {exeDir}\\rus.traineddata\n" +
+                $"2. {exeDir}\\tessdata\\rus.traineddata\n" +
+                $"3. {exeDir}\\Image\\rus.traineddata");
+        }
+
+
+
+
+
+
+        //// Метод для ручного указания пути
+        //public static bool SetTessDataPath(string path)
+        //{
+        //    try
+        //    {
+        //        if (Directory.Exists(path))
+        //        {
+        //            // Проверяем есть ли файл в этой папке
+        //            string russianFile = Path.Combine(path, "rus.traineddata");
+        //            if (File.Exists(russianFile))
+        //            {
+        //                CustomTessDataPath = path;
+        //                return true;
+        //            }
+        //        }
+        //        return false;
+        //    }
+        //    catch
+        //    {
+        //        return false;
+        //    }
+        //}
+
+        // ДОБАВЬТЕ ЭТИ МЕТОДЫ:
+
+        public bool IsReady()
+        {
+            try
+            {
+                if (!_isInitialized)
+                {
+                    Console.WriteLine("❌ Tesseract не инициализирован");
+                    return false;
+                }
+
+                string russianFile = Path.Combine(_tessDataPath, "rus.traineddata");
+                if (string.IsNullOrEmpty(_tessDataPath))
+                {
+                    russianFile = "rus.traineddata";
+                }
+
+                if (!File.Exists(russianFile))
+                {
+                    Console.WriteLine($"❌ Файл не найден: {russianFile}");
+                    return false;
+                }
+
+                // Простая проверка движка
+                using (var engine = new TesseractEngine(_tessDataPath, "rus", EngineMode.Default))
+                {
+                    Console.WriteLine("✅ Tesseract работает");
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Ошибка проверки готовности: {ex.Message}");
+                return false;
+            }
+        }
+
+        // ОСНОВНОЙ МЕТОД - максимально упрощенный
+        public List<string> ReadTextFromImage(string imagePath)
+        {
+            var result = new List<string>();
+
+            try
+            {
+                Console.WriteLine($"\n=== ЧТЕНИЕ ИЗОБРАЖЕНИЯ ===");
+                Console.WriteLine($"Изображение: {imagePath}");
+
+                // 1. Проверяем изображение
+                if (!File.Exists(imagePath))
+                {
+                    result.Add($"Файл не найден: {imagePath}");
+                    return result;
+                }
+
+                // 2. Проверяем языковой файл
+                string russianFile = Path.Combine(_tessDataPath, "rus.traineddata");
+                if (!File.Exists(russianFile))
+                {
+                    result.Add("Ошибка: Файл rus.traineddata не найден!");
+                    Console.WriteLine("❌ rus.traineddata не найден!");
+                    return result;
+                }
+
+                // 3. Распознаем текст
+                Console.WriteLine("Запускаю Tesseract...");
+                using (var engine = new TesseractEngine(_tessDataPath, "rus", EngineMode.Default))
+                {
+                    // Простые настройки
+                    try
+                    {
+                        engine.SetVariable("preserve_interword_spaces", "1");
+                    }
+                    catch { }
+
+                    using (var img = Pix.LoadFromFile(imagePath))
+                    {
+                        using (var page = engine.Process(img))
+                        {
+                            string text = page.GetText();
+                            float confidence = page.GetMeanConfidence();
+
+                            Console.WriteLine($"Уверенность распознавания: {confidence:P}");
+
+                            if (!string.IsNullOrWhiteSpace(text))
+                            {
+                                result = text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+                                    .Select(line => line.Trim())
+                                    .Where(line => line.Length > 0)
+                                    .ToList();
+
+                                Console.WriteLine($"Найдено строк: {result.Count}");
+                            }
+                        }
                     }
                 }
             }
-
-            return imagePath; // Картинка хорошая, не обрабатываем
-        }
-
-        // Улучшаем качество картинки
-        private Bitmap ImproveImageQuality(Bitmap original)
-        {
-            // 1. Увеличиваем разрешение
-            Bitmap result = new Bitmap(original.Width * 2, original.Height * 2);
-
-            using (Graphics g = Graphics.FromImage(result))
+            catch (Exception ex)
             {
-                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                g.DrawImage(original, 0, 0, result.Width, result.Height);
+                Console.WriteLine($"❌ ОШИБКА РАСПОЗНАВАНИЯ:");
+                Console.WriteLine($"Сообщение: {ex.Message}");
+                Console.WriteLine($"Тип: {ex.GetType().Name}");
+
+                // Добавляем понятное сообщение об ошибке
+                if (ex.Message.Contains("Failed to init"))
+                {
+                    result.Add("Ошибка инициализации Tesseract. Проверьте файл rus.traineddata");
+                }
+                else if (ex.Message.Contains("language"))
+                {
+                    result.Add("Ошибка загрузки языкового пакета");
+                }
+                else
+                {
+                    result.Add($"Ошибка: {ex.Message}");
+                }
             }
 
-            // 2. Делаем черно-белой
-            result = MakeBlackAndWhite(result);
-
-            return result;
-        }
-
-        // Преобразуем картинку в черно-белую
-        private Bitmap MakeBlackAndWhite(Bitmap original)
-        {
-            Bitmap result = new Bitmap(original.Width, original.Height);
-
-            for (int x = 0; x < original.Width; x++)
+            if (result.Count == 0)
             {
-                for (int y = 0; y < original.Height; y++)
-                {
-                    Color pixel = original.GetPixel(x, y);
-
-                    // Вычисляем яркость
-                    int brightness = (pixel.R + pixel.G + pixel.B) / 3;
-
-                    // Если яркость больше 128 - белый, иначе черный
-                    if (brightness > 128)
-                        result.SetPixel(x, y, Color.White);
-                    else
-                        result.SetPixel(x, y, Color.Black);
-                }
+                result.Add("Текст на изображении не найден");
             }
 
             return result;
         }
 
-        // Распознаем текст с картинки
-        private string RecognizeText(string imagePath, string language)
-        {
-            using (TesseractEngine engine = new TesseractEngine(_tessDataPath, language, EngineMode.Default))
-            {
-                using (Pix image = Pix.LoadFromFile(imagePath))
-                {
-                    using (Page page = engine.Process(image))
-                    {
-                        string text = page.GetText();
-                        float confidence = page.GetMeanConfidence();
-
-                        Console.WriteLine($"Уверенность распознавания: {confidence:P0}");
-
-                        return text;
-                    }
-                }
-            }
-        }
-
-        // Очищаем и форматируем текст
-        private List<string> CleanText(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text))
-                return new List<string> { "Текст не найден" };
-
-            List<string> lines = new List<string>();
-
-            // Разделяем на строки
-            string[] rawLines = text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-
-            foreach (string line in rawLines)
-            {
-                string cleaned = line.Trim();
-
-                // Убираем слишком короткие строки (меньше 2 символов)
-                if (cleaned.Length >= 2)
-                {
-                    // Исправляем распространенные ошибки
-                    cleaned = FixCommonErrors(cleaned);
-                    lines.Add(cleaned);
-                }
-            }
-
-            return lines;
-        }
-
-        // Исправляем частые ошибки распознавания
-        private string FixCommonErrors(string text)
-        {
-            string result = text;
-
-            // Заменяем английские буквы на русские в русском контексте
-            Dictionary<string, string> replacements = new Dictionary<string, string>
-            {
-                { "o", "о" }, { "O", "О" }, { "c", "с" }, { "C", "С" },
-                { "p", "р" }, { "P", "Р" }, { "y", "у" }, { "Y", "У" },
-                { "a", "а" }, { "A", "А" }, { "e", "е" }, { "E", "Е" }
-            };
-
-            foreach (var replacement in replacements)
-            {
-                result = result.Replace(replacement.Key, replacement.Value);
-            }
-
-            // Убираем лишние пробелы
-            while (result.Contains("  "))
-                result = result.Replace("  ", " ");
-
-            return result;
-        }
-
-        // Получаем список доступных языков
+        // Для отладки - показываем доступные языки
         public List<string> GetAvailableLanguages()
         {
-            List<string> languages = new List<string>();
+            var languages = new List<string>();
 
-            if (Directory.Exists(_tessDataPath))
+            try
             {
-                string[] files = Directory.GetFiles(_tessDataPath, "*.traineddata");
-
-                foreach (string file in files)
+                if (Directory.Exists(_tessDataPath))
                 {
-                    string language = Path.GetFileNameWithoutExtension(file);
-                    languages.Add(language);
+                    var files = Directory.GetFiles(_tessDataPath, "*.traineddata");
+                    foreach (var file in files)
+                    {
+                        string lang = Path.GetFileNameWithoutExtension(file);
+                        languages.Add(lang);
+                    }
+                }
+
+                if (languages.Count == 0)
+                {
+                    languages.Add("rus (требуется файл rus.traineddata)");
                 }
             }
+            catch { }
 
             return languages;
         }
 
-        // Проверяем, готов ли Tesseract к работе
-        public bool IsReady()
+        // Добавьте метод для отладки
+        public void DebugPaths()
         {
-            string rusFile = Path.Combine(_tessDataPath, "rus.traineddata");
-            return File.Exists(rusFile) && new FileInfo(rusFile).Length > 1024 * 1024;
+            Console.WriteLine("\n=== ОТЛАДКА ПУТЕЙ ===");
+
+            string exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            string exeDir = Path.GetDirectoryName(exePath);
+
+            Console.WriteLine($"1. EXE путь: {exePath}");
+            Console.WriteLine($"2. EXE папка: {exeDir}");
+            Console.WriteLine($"3. Текущая директория: {Directory.GetCurrentDirectory()}");
+            Console.WriteLine($"4. BaseDirectory: {AppDomain.CurrentDomain.BaseDirectory}");
+            Console.WriteLine($"5. Tesseract путь: {_tessDataPath}");
+
+            // Проверяем Image папку
+            string imagePath = Path.Combine(exeDir, "Image");
+            Console.WriteLine($"6. Image папка: {imagePath}");
+            Console.WriteLine($"7. Image папка существует: {Directory.Exists(imagePath)}");
+
+            if (Directory.Exists(imagePath))
+            {
+                Console.WriteLine("Содержимое Image папки:");
+                foreach (string file in Directory.GetFiles(imagePath))
+                {
+                    FileInfo info = new FileInfo(file);
+                    Console.WriteLine($"  - {Path.GetFileName(file)} ({info.Length} байт)");
+                }
+            }
         }
     }
 }
