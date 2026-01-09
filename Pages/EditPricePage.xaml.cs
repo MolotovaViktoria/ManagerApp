@@ -356,7 +356,9 @@ namespace ManagerApp.Pages
                 Unit = p.Unit,
                 VAT = p.VAT,
                 PriceWithVAT = p.PriceWithVAT,
-                TotalWithVAT = p.TotalWithVAT
+                TotalWithVAT = p.TotalWithVAT,
+                Measure = p.Measure
+                
             }).ToList();
 
             PriceDataManager.SetMatchedProducts(matchedProducts);

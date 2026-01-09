@@ -18,6 +18,7 @@ namespace ManagerApp.Data.ScharedData
         private decimal _price;
         private bool _hasPrice;
         private string _sectionId;
+        private string _measure;
         private decimal _purchasingPrice;
         private bool _hasPurchasingPrice;
         private string _purchasingCurrency;
@@ -36,6 +37,19 @@ namespace ManagerApp.Data.ScharedData
                 if (_productId != value)
                 {
                     _productId = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string Measure
+        {
+            get => _measure;
+            set
+            {
+                if (_measure != value)
+                {
+                    _measure = value;
                     OnPropertyChanged();
                 }
             }

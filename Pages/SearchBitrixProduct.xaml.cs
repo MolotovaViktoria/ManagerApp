@@ -129,7 +129,9 @@ namespace ManagerApp.Pages
                     FullCategoryPath = product.CategoryPath,
                     Price = product.Price,
                     HasPrice = product.Price > 0,
-                    SectionId = product.LowerSectionId
+                    SectionId = product.LowerSectionId,
+                    Measure = product.Measure,
+                    
                 };
 
                 _allProducts.Add(viewModel);
@@ -152,7 +154,8 @@ namespace ManagerApp.Pages
                     FullCategoryPath = product.CategoryName,
                     Price = product.Price,
                     HasPrice = product.HasPrice,
-                    SectionId = product.SectionId
+                    SectionId = product.SectionId,
+                    Measure = product.Measure,
                 };
 
                 _allProducts.Add(viewModel);
@@ -272,6 +275,12 @@ namespace ManagerApp.Pages
             // Фильтруем по выбранным НИЖНИМ РАЗДЕЛАМ
             List<BitrixProductViewModel> sectionFiltered = _allProducts.ToList();
 
+
+            foreach (var section in sectionFiltered)
+            {
+                Console.WriteLine("Единица измерения " +  section.Measure);
+            }
+
             if (_selectedCategories.Count > 0)
             {
                 sectionFiltered = _allProducts
@@ -294,6 +303,8 @@ namespace ManagerApp.Pages
                         (product.LowerSectionName?.ToLower() ?? "").Contains(word) ||
                         (product.FullCategoryPath?.ToLower() ?? "").Contains(word)))
                     .ToList();
+
+                
             }
 
             _currentPage = 1;

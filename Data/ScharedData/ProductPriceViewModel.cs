@@ -92,6 +92,8 @@ namespace ManagerApp.Data.ScharedData
         }
 
         private decimal _totalWithVAT;
+        internal string Measure;
+
         public decimal TotalWithVAT
         {
             get => _totalWithVAT;

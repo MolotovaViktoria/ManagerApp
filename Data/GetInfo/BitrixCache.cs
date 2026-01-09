@@ -181,7 +181,7 @@ namespace ManagerApp.Data.GetInfo
                             Price = product.Price,
                             HasPrice = product.HasPrice,
                             Code = product.ProductCode ?? "",
-                            Measure = ""
+                            Measure = product.Measure,
                         });
                     }
                     catch (Exception ex)

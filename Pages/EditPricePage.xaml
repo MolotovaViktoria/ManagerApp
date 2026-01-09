@@ -427,48 +427,6 @@
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
 
-                            <!-- Колонка 5: Количество -->
-                            <DataGridTemplateColumn Header="КОЛ-ВО"
-                                                    Width="100">
-                                <DataGridTemplateColumn.HeaderStyle>
-                                    <Style TargetType="DataGridColumnHeader">
-                                        <Setter Property="Background" Value="#F8F8F8"/>
-                                        <Setter Property="Foreground" Value="#333333"/>
-                                        <Setter Property="FontWeight" Value="Bold"/>
-                                        <Setter Property="FontSize" Value="12"/>
-                                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
-                                        <Setter Property="BorderBrush" Value="#E0E0E0"/>
-                                        <Setter Property="BorderThickness" Value="0,0,1,1"/>
-                                        <Setter Property="Padding" Value="10,5"/>
-                                    </Style>
-                                </DataGridTemplateColumn.HeaderStyle>
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <TextBox Text="{Binding Quantity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                 Width="80"
-                                                 Height="30"
-                                                 FontSize="13"
-                                                 TextAlignment="Center"
-                                                 VerticalContentAlignment="Center"
-                                                 BorderBrush="#E0E0E0"
-                                                 BorderThickness="1"
-                                                 Padding="5,0"
-                                                 PreviewTextInput="TextBoxQuantity_PreviewTextInput"
-                                                 LostFocus="TextBox_LostFocus">
-                                            <TextBox.Style>
-                                                <Style TargetType="TextBox">
-                                                    <Style.Triggers>
-                                                        <Trigger Property="IsFocused" Value="True">
-                                                            <Setter Property="BorderBrush" Value="#E2542A"/>
-                                                        </Trigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBox.Style>
-                                        </TextBox>
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
-
                             <!-- Колонка 6: Ед. измерения -->
                             <DataGridTextColumn Header="ЕД. ИЗМ."
                                                 Binding="{Binding Unit}"

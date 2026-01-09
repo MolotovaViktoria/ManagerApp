@@ -459,6 +459,9 @@ namespace ManagerApp.Data.GetInfo
             }
         }
 
+
+
+
         private async Task<bool> AddProductsToSmartInvoice(int invoiceId, List<InvoiceProduct> products)
         {
             Console.WriteLine($"=== ДОБАВЛЕНИЕ ТОВАРОВ В СЧЕТ #{invoiceId} ===");
@@ -479,6 +482,11 @@ namespace ManagerApp.Data.GetInfo
                     // ПОЛУЧАЕМ КАТЕГОРИЮ ТОВАРА
                     string categoryName = await GetSectionNameForProductFromCache(product.ProductId);
 
+                    // Очищаем название товара от категории в скобках
+                    string cleanProductName = CleanProductNameSkobka(product.ProductName);
+                    Console.WriteLine($"Оригинальное название: '{product.ProductName}'");
+                    Console.WriteLine($"Очищенное название: '{cleanProductName}'");
+
                     var productRowRequestData = new
                     {
                         fields = new
@@ -486,8 +494,8 @@ namespace ManagerApp.Data.GetInfo
                             ownerId = invoiceId,
                             ownerType = "SI",
                             productId = product.ProductId > 0 ? (int?)product.ProductId : null,
-                            // ДОБАВЛЯЕМ РАЗДЕЛ В НАЗВАНИЕ ТОВАРА
-                            productName = $"{product.ProductName}",
+                            // ИСПОЛЬЗУЕМ ОЧИЩЕННОЕ НАЗВАНИЕ БЕЗ КАТЕГОРИИ
+                            productName = cleanProductName,
                             price = product.Price,
                             quantity = product.Quantity,
                             taxRate = 20.0,
@@ -502,24 +510,24 @@ namespace ManagerApp.Data.GetInfo
                     var response = await _httpClient.PostAsync(webhookUrl, productContent);
                     string jsonResponse = await response.Content.ReadAsStringAsync();
 
-                    Console.WriteLine($"Ответ при добавлении товара '{product.ProductName}': {jsonResponse}");
+                    Console.WriteLine($"Ответ при добавлении товара '{cleanProductName}': {jsonResponse}");
 
                     if (response.IsSuccessStatusCode)
                     {
                         dynamic result = JsonConvert.DeserializeObject(jsonResponse);
                         if (result?.result?.productRow?.id != null)
                         {
-                            Console.WriteLine($"  ✅ Товар '{product.ProductName}' добавлен. Категория: {categoryName}");
+                            Console.WriteLine($"  ✅ Товар '{cleanProductName}' добавлен. Категория: {categoryName}");
                             successCount++;
                         }
                         else
                         {
-                            Console.WriteLine($"  ⚠️ Для '{product.ProductName}' не получен ID товарной позиции.");
+                            Console.WriteLine($"  ⚠️ Для '{cleanProductName}' не получен ID товарной позиции.");
                         }
                     }
                     else
                     {
-                        Console.WriteLine($"  ❌ Ошибка при добавлении '{product.ProductName}': {response.StatusCode}");
+                        Console.WriteLine($"  ❌ Ошибка при добавлении '{cleanProductName}': {response.StatusCode}");
                         Console.WriteLine($"  Тело ошибки: {jsonResponse}");
                     }
 
@@ -533,6 +541,83 @@ namespace ManagerApp.Data.GetInfo
 
             Console.WriteLine($"=== ИТОГО: Успешно добавлено {successCount} из {products.Count} товаров. ===");
             return successCount > 0;
+        }
+
+        // Метод для очистки названия товара от категории в скобках
+        private string CleanProductNameSkobka(string productName)
+        {
+            if (string.IsNullOrEmpty(productName))
+                return productName;
+
+            // Удаляем всё, что в круглых скобках и сами скобки
+            // Ищем последнюю открывающую скобку
+            int lastOpenBracket = productName.LastIndexOf('(');
+
+            if (lastOpenBracket > 0)
+            {
+                // Проверяем, есть ли закрывающая скобка после нее
+                int closeBracket = productName.IndexOf(')', lastOpenBracket);
+                if (closeBracket > lastOpenBracket)
+                {
+                    // Удаляем всё начиная с пробела перед скобкой
+                    // Ищем пробел перед последней открывающей скобкой
+                    int spaceBeforeBracket = productName.LastIndexOf(' ', lastOpenBracket - 1);
+
+                    if (spaceBeforeBracket > 0)
+                    {
+                        // Удаляем от пробела до конца (включая скобки и категорию)
+                        return productName.Substring(0, spaceBeforeBracket).TrimEnd();
+                    }
+                    else
+                    {
+                        // Если пробела нет, удаляем от открывающей скобки
+                        return productName.Substring(0, lastOpenBracket).TrimEnd();
+                    }
+                }
+            }
+
+            // Если скобок нет или они не образуют пару, возвращаем оригинал
+            return productName;
+        }
+
+
+
+
+        // Метод для очистки названия товара от категории в скобках
+        private string CleanProductName(string productName)
+        {
+            if (string.IsNullOrEmpty(productName))
+                return productName;
+
+            // Удаляем всё, что в круглых скобках и сами скобки
+            // Ищем последнюю открывающую скобку
+            int lastOpenBracket = productName.LastIndexOf('(');
+
+            if (lastOpenBracket > 0)
+            {
+                // Проверяем, есть ли закрывающая скобка после нее
+                int closeBracket = productName.IndexOf(')', lastOpenBracket);
+                if (closeBracket > lastOpenBracket)
+                {
+                    // Удаляем всё начиная с пробела перед скобкой
+                    // Ищем пробел перед последней открывающей скобкой
+                    int spaceBeforeBracket = productName.LastIndexOf(' ', lastOpenBracket - 1);
+
+                    if (spaceBeforeBracket > 0)
+                    {
+                        // Удаляем от пробела до конца (включая скобки и категорию)
+                        return productName.Substring(0, spaceBeforeBracket).TrimEnd();
+                    }
+                    else
+                    {
+                        // Если пробела нет, удаляем от открывающей скобки
+                        return productName.Substring(0, lastOpenBracket).TrimEnd();
+                    }
+                }
+            }
+
+            // Если скобок нет или они не образуют пару, возвращаем оригинал
+            return productName;
         }
 
         // ============ МЕТОДЫ ДЛЯ РАБОТЫ С ТОВАРАМИ ============
@@ -1344,7 +1429,9 @@ namespace ManagerApp.Data.GetInfo
                         HasPrice = product.Price.HasValue,
                         SectionId = product.SectionId,
                         ProductCode = product.Code,
-                        ProductId = product.Id
+                        ProductId = product.Id,
+                        Measure = product.Measure
+
                     };
 
                     result.Add(productInfo);
