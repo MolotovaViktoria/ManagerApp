@@ -491,7 +491,7 @@ namespace ManagerApp.Pages
                     OriginalProductName = item.OriginalProductName,
                     Price = item.Price,
                     Quantity = item.Quantity,
-                    Unit = item.Unit,
+                    Unit = item.UnitFullName,
                     VAT = item.VAT,
                     Total = item.Total
                 };
@@ -651,8 +651,13 @@ namespace ManagerApp.Pages
                             ProductId = productId,
                             ProductName = item.ProductName,
                             Quantity = item.Quantity,
-                            Price = item.Price
+                            Price = item.Price,
+                            UnitName = item.Unit,
+
+                            
                         });
+
+                        Console.WriteLine("Наименование количества: " + item.ProductName + " " + item.Unit);
                     }
                 }
                 catch (Exception ex)
@@ -737,6 +742,7 @@ namespace ManagerApp.Pages
                 Address,
                 DeliveryDays,
                 SelectedPaymentMethod?.Value ?? "Не указано",
+
                 responsibleEmployeeId // Передаем ID сотрудника вместо жестко закодированного значения
             );
         }

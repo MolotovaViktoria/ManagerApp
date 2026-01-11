@@ -9,6 +9,17 @@
       Title="Редактирование цены"
       Loaded="Page_Loaded">
 
+    <Page.InputBindings>
+        <!-- Горячие клавиши -->
+        <KeyBinding Key="F5" Command="{Binding RefreshCommand}" />
+        <KeyBinding Key="Enter" Command="{Binding SelectCommand}" />
+        <KeyBinding Key="Escape" Command="{Binding CancelCommand}" />
+        <KeyBinding Key="Space" Command="{Binding PreviewCommand}" />
+        <KeyBinding Modifiers="Ctrl" Key="C" Command="{Binding CopyCommand}" />
+        <KeyBinding Modifiers="Ctrl" Key="V" Command="{Binding PasteCommand}" />
+        <KeyBinding Modifiers="Ctrl" Key="F" Command="{Binding FocusSearchCommand}" />
+    </Page.InputBindings>
+
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -382,6 +393,32 @@
 
                             <!-- Остальные колонки сдвигаются на 1 позицию -->
                             <!-- Колонка 5: Ввод своей цены (была 4) -->
+                            <!-- Колонка для полного названия единицы измерения -->
+                            <DataGridTextColumn Header="ЕДИНИЦА ИЗМЕРЕНИЯ"
+Binding="{Binding UnitFullName}"
+Width="150"
+IsReadOnly="True">
+                                <DataGridTextColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="Background" Value="#F8F8F8"/>
+                                        <Setter Property="Foreground" Value="#333333"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                        <Setter Property="FontSize" Value="12"/>
+                                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                        <Setter Property="BorderBrush" Value="#E0E0E0"/>
+                                        <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                                        <Setter Property="Padding" Value="10,5"/>
+                                    </Style>
+                                </DataGridTextColumn.HeaderStyle>
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="VerticalAlignment" Value="Center"/>
+                                        <Setter Property="HorizontalAlignment" Value="Center"/>
+                                        <Setter Property="Padding" Value="10,5"/>
+                                        <Setter Property="FontSize" Value="13"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
                             <!-- Колонка 6: Количество (была 5) -->
                             <!-- и т.д. -->
 
@@ -427,32 +464,7 @@
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
 
-                            <!-- Колонка 6: Ед. измерения -->
-                            <DataGridTextColumn Header="ЕД. ИЗМ."
-                                                Binding="{Binding Unit}"
-                                                Width="100"
-                                                IsReadOnly="True">
-                                <DataGridTextColumn.HeaderStyle>
-                                    <Style TargetType="DataGridColumnHeader">
-                                        <Setter Property="Background" Value="#F8F8F8"/>
-                                        <Setter Property="Foreground" Value="#333333"/>
-                                        <Setter Property="FontWeight" Value="Bold"/>
-                                        <Setter Property="FontSize" Value="12"/>
-                                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
-                                        <Setter Property="BorderBrush" Value="#E0E0E0"/>
-                                        <Setter Property="BorderThickness" Value="0,0,1,1"/>
-                                        <Setter Property="Padding" Value="10,5"/>
-                                    </Style>
-                                </DataGridTextColumn.HeaderStyle>
-                                <DataGridTextColumn.ElementStyle>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="VerticalAlignment" Value="Center"/>
-                                        <Setter Property="HorizontalAlignment" Value="Center"/>
-                                        <Setter Property="Padding" Value="10,5"/>
-                                        <Setter Property="FontSize" Value="13"/>
-                                    </Style>
-                                </DataGridTextColumn.ElementStyle>
-                            </DataGridTextColumn>
+                        
 
                             <!-- Колонка 7: НДС -->
                             <DataGridTextColumn Header="НДС"
@@ -510,32 +522,7 @@
                                 </DataGridTextColumn.ElementStyle>
                             </DataGridTextColumn>
 
-                            <!-- Колонка для полного названия единицы измерения -->
-                            <DataGridTextColumn Header="ЕДИНИЦА ИЗМЕРЕНИЯ"
-                    Binding="{Binding UnitFullName}"
-                    Width="150"
-                    IsReadOnly="True">
-                                <DataGridTextColumn.HeaderStyle>
-                                    <Style TargetType="DataGridColumnHeader">
-                                        <Setter Property="Background" Value="#F8F8F8"/>
-                                        <Setter Property="Foreground" Value="#333333"/>
-                                        <Setter Property="FontWeight" Value="Bold"/>
-                                        <Setter Property="FontSize" Value="12"/>
-                                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
-                                        <Setter Property="BorderBrush" Value="#E0E0E0"/>
-                                        <Setter Property="BorderThickness" Value="0,0,1,1"/>
-                                        <Setter Property="Padding" Value="10,5"/>
-                                    </Style>
-                                </DataGridTextColumn.HeaderStyle>
-                                <DataGridTextColumn.ElementStyle>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="VerticalAlignment" Value="Center"/>
-                                        <Setter Property="HorizontalAlignment" Value="Center"/>
-                                        <Setter Property="Padding" Value="10,5"/>
-                                        <Setter Property="FontSize" Value="13"/>
-                                    </Style>
-                                </DataGridTextColumn.ElementStyle>
-                            </DataGridTextColumn>
+                           
                             <!-- Колонка 9: Сумма с НДС -->
                             <DataGridTextColumn Header="СУММА С НДС"
                                                 Binding="{Binding TotalWithVAT, StringFormat='{}{0:#,##0.00} ₽'}"

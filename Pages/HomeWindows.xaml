@@ -7,7 +7,16 @@
         MinHeight="500" MinWidth="800"
         WindowStartupLocation="CenterScreen"
         Background="White">
-
+    <Window.InputBindings>
+        <!-- Горячие клавиши -->
+        <KeyBinding Key="F5" Command="{Binding RefreshCommand}" />
+        <KeyBinding Key="Enter" Command="{Binding SelectCommand}" />
+        <KeyBinding Key="Escape" Command="{Binding CancelCommand}" />
+        <KeyBinding Key="Space" Command="{Binding PreviewCommand}" />
+        <KeyBinding Modifiers="Ctrl" Key="C" Command="{Binding CopyCommand}" />
+        <KeyBinding Modifiers="Ctrl" Key="V" Command="{Binding PasteCommand}" />
+        <KeyBinding Modifiers="Ctrl" Key="F" Command="{Binding FocusSearchCommand}" />
+    </Window.InputBindings>
     <Window.Resources>
         <!-- Стиль для кнопок меню с КАСТОМНОЙ подсветкой -->
         <Style x:Key="MenuButtonStyle" TargetType="Button">

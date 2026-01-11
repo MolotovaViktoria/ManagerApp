@@ -513,6 +513,13 @@ namespace ManagerApp.Pages
                 TotalWithVAT = p.TotalWithVAT
             }).ToList();
 
+
+            Console.WriteLine("ПЕРЕХОД НА ДР3ГУ. СТРАНЦИУ");
+            foreach (var product in Products)
+            {
+                Console.WriteLine(product.BitrixProductName + " UnitFullName " + product.UnitFullName + " Unit" + product.Unit +  " Vat" + product.VAT);
+            }
+
             PriceDataManager.SetMatchedProducts(matchedProducts);
         }
 

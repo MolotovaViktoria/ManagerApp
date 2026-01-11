@@ -1,5 +1,6 @@
 ﻿using ManagerApp.Classes.Setting;
 using ManagerApp.Data.StructureList;
+using ManagerApp.Pages;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
@@ -12,6 +13,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using BitrixProductResponse = ManagerApp.Data.StructureList.BitrixProductResponse;
 namespace ManagerApp.Data.GetInfo
 {
     public class BitrixService
@@ -359,6 +361,200 @@ namespace ManagerApp.Data.GetInfo
             }
         }
 
+
+        private async Task<bool> AddProductsToSmartInvoice(int invoiceId, List<InvoiceProduct> products)
+        {
+            Console.WriteLine($"=== ДОБАВЛЕНИЕ ТОВАРОВ В СЧЕТ #{invoiceId} ===");
+
+            if (products == null || products.Count == 0)
+            {
+                Console.WriteLine("Список товаров пуст.");
+                return true;
+            }
+
+            // ПОЛУЧАЕМ СПИСОК ЕДИНИЦ ИЗМЕРЕНИЯ ИЗ BITRIX24
+            var measures = await BitrixMeasureService.GetMeasuresAsync();
+            Console.WriteLine($"Загружено единиц измерения из Bitrix24: {measures?.Count ?? 0}");
+
+            if (measures == null || measures.Count == 0)
+            {
+                Console.WriteLine("⚠️ Не удалось загрузить единицы измерения, используем значения по умолчанию");
+                // Продолжаем с дефолтными значениями
+                measures = new List<BitrixMeasure>();
+            }
+
+            // СОЗДАЕМ СЛОВАРЬ ДЛЯ БЫСТРОГО ПОИСКА
+            var measureDictBySymbol = new Dictionary<string, BitrixMeasure>(StringComparer.OrdinalIgnoreCase);
+            var measureDictByTitle = new Dictionary<string, BitrixMeasure>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var measure in measures)
+            {
+                // Для SYMBOL_RUS
+                if (!string.IsNullOrEmpty(measure.SYMBOL_RUS))
+                {
+                    var symbol = measure.SYMBOL_RUS.Trim();
+                    if (!string.IsNullOrEmpty(symbol) && !measureDictBySymbol.ContainsKey(symbol))
+                        measureDictBySymbol[symbol] = measure;
+                }
+
+                // Для MEASURE_TITLE
+                if (!string.IsNullOrEmpty(measure.MEASURE_TITLE))
+                {
+                    var title = measure.MEASURE_TITLE.Trim();
+                    if (!string.IsNullOrEmpty(title) && !measureDictByTitle.ContainsKey(title))
+                        measureDictByTitle[title] = measure;
+                }
+            }
+
+            string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.item.productrow.add";
+            int successCount = 0;
+
+            foreach (var product in products)
+            {
+                try
+                {
+                    // ПОЛУЧАЕМ КАТЕГОРИЮ ТОВАРА
+                    string categoryName = await GetSectionNameForProductFromCache(product.ProductId);
+
+                    // Очищаем название товара от категории в скобках
+                    string cleanProductName = CleanProductNameSkobka(product.ProductName);
+                    Console.WriteLine($"Оригинальное название: '{product.ProductName}'");
+                    Console.WriteLine($"Очищенное название: '{cleanProductName}'");
+
+                    // ПОЛУЧАЕМ КОД ЕДИНИЦЫ ИЗМЕРЕНИЯ ИЗ BITRIX24
+                    int measureCode = 796; // значение по умолчанию (шт)
+                    string measureName = product.UnitName ?? "Штука";
+
+                    if (!string.IsNullOrEmpty(product.UnitName))
+                    {
+                        var unitName = product.UnitName.Trim();
+                        var unitLower = unitName.ToLower();
+                        BitrixMeasure foundMeasure = null;
+
+                        // 1. Пытаемся найти по SYMBOL_RUS (короткому названию)
+                        if (measureDictBySymbol.TryGetValue(unitName, out foundMeasure))
+                        {
+                            // ID хранится как string, нужно преобразовать в int
+                            if (int.TryParse(foundMeasure.ID, out int id))
+                            {
+                                measureCode = id;
+                            }
+                            measureName = foundMeasure.SYMBOL_RUS ?? unitName;
+                            Console.WriteLine($"  Найдено по символу: '{unitName}' -> код: {measureCode}, символ: {measureName}");
+                        }
+                        // 2. Пытаемся найти по MEASURE_TITLE (полному названию)
+                        else if (measureDictByTitle.TryGetValue(unitName, out foundMeasure))
+                        {
+                            // ID хранится как string, нужно преобразовать в int
+                            if (int.TryParse(foundMeasure.ID, out int id))
+                            {
+                                measureCode = id;
+                            }
+                            measureName = foundMeasure.SYMBOL_RUS ?? foundMeasure.MEASURE_TITLE ?? unitName;
+                            Console.WriteLine($"  Найдено по полному названию: '{unitName}' -> код: {measureCode}, символ: {measureName}");
+                        }
+                        // 3. Ищем частичное совпадение
+                        else
+                        {
+                            foundMeasure = measures.FirstOrDefault(m =>
+                                (!string.IsNullOrEmpty(m.SYMBOL_RUS) &&
+                                 (unitLower.Contains(m.SYMBOL_RUS.ToLower()) || m.SYMBOL_RUS.ToLower().Contains(unitLower))) ||
+                                (!string.IsNullOrEmpty(m.MEASURE_TITLE) &&
+                                 (unitLower.Contains(m.MEASURE_TITLE.ToLower()) || m.MEASURE_TITLE.ToLower().Contains(unitLower))));
+
+                            if (foundMeasure != null)
+                            {
+                                // ID хранится как string, нужно преобразовать в int
+                                if (int.TryParse(foundMeasure.ID, out int id))
+                                {
+                                    measureCode = id;
+                                }
+                                measureName = foundMeasure.SYMBOL_RUS ?? foundMeasure.MEASURE_TITLE ?? unitName;
+                                Console.WriteLine($"  Частичное совпадение: '{unitName}' -> код: {measureCode}, символ: {measureName}");
+                            }
+                            else
+                            {
+                                Console.WriteLine($"  ⚠️ Единица измерения '{unitName}' не найдена, используется по умолчанию (796 - шт)");
+
+                                // Проверим, если это какая-то распространенная единица
+                                if (unitLower.Contains("упак") || unitLower.Contains("уп.") || unitLower.Contains("уп "))
+                                {
+                                    // Пытаемся найти упаковку (если она есть в списке)
+                                    var packMeasure = measures.FirstOrDefault(m =>
+                                        (!string.IsNullOrEmpty(m.MEASURE_TITLE) && m.MEASURE_TITLE.ToLower().Contains("упаков")) ||
+                                        (!string.IsNullOrEmpty(m.SYMBOL_RUS) && m.SYMBOL_RUS.ToLower().Contains("уп")));
+                                    if (packMeasure != null)
+                                    {
+                                        // ID хранится как string, нужно преобразовать в int
+                                        if (int.TryParse(packMeasure.ID, out int id))
+                                        {
+                                            measureCode = id;
+                                        }
+                                        measureName = packMeasure.SYMBOL_RUS ?? packMeasure.MEASURE_TITLE ?? unitName;
+                                        Console.WriteLine($"  Автоопределение как упаковка: код: {measureCode}, символ: {measureName}");
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    var productRowRequestData = new
+                    {
+                        fields = new
+                        {
+                            ownerId = invoiceId,
+                            ownerType = "SI",
+                            productId = product.ProductId > 0 ? (int?)product.ProductId : null,
+                            productName = cleanProductName,
+                            price = product.Price,
+                            quantity = product.Quantity,
+                            taxRate = 20.0,
+                            taxIncluded = "N",
+                            measureCode = measureCode,
+                            measureName = measureName
+                        }
+                    };
+
+                    string productJson = JsonConvert.SerializeObject(productRowRequestData);
+                    var productContent = new StringContent(productJson, Encoding.UTF8, "application/json");
+
+                    var response = await _httpClient.PostAsync(webhookUrl, productContent);
+                    string jsonResponse = await response.Content.ReadAsStringAsync();
+
+                    Console.WriteLine($"Ответ при добавлении товара '{cleanProductName}': {jsonResponse}");
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        dynamic result = JsonConvert.DeserializeObject(jsonResponse);
+                        if (result?.result?.productRow?.id != null)
+                        {
+                            Console.WriteLine($"  ✅ Товар '{cleanProductName}' добавлен. Категория: {categoryName}, Единица: {measureName}");
+                            successCount++;
+                        }
+                        else
+                        {
+                            Console.WriteLine($"  ⚠️ Для '{cleanProductName}' не получен ID товарной позиции.");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine($"  ❌ Ошибка при добавлении '{cleanProductName}': {response.StatusCode}");
+                        Console.WriteLine($"  Тело ошибки: {jsonResponse}");
+                    }
+
+                    await Task.Delay(200);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"  ❌ Исключение для товара '{product.ProductName}': {ex.Message}");
+                }
+            }
+
+            Console.WriteLine($"=== ИТОГО: Успешно добавлено {successCount} из {products.Count} товаров. ===");
+            return successCount > 0;
+        }
+
+
         /// <summary>
         /// Проверяем какие поля реально сохранены в счете
         /// </summary>
@@ -462,86 +658,7 @@ namespace ManagerApp.Data.GetInfo
 
 
 
-        private async Task<bool> AddProductsToSmartInvoice(int invoiceId, List<InvoiceProduct> products)
-        {
-            Console.WriteLine($"=== ДОБАВЛЕНИЕ ТОВАРОВ В СЧЕТ #{invoiceId} ===");
-
-            if (products == null || products.Count == 0)
-            {
-                Console.WriteLine("Список товаров пуст.");
-                return true;
-            }
-
-            string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.item.productrow.add";
-            int successCount = 0;
-
-            foreach (var product in products)
-            {
-                try
-                {
-                    // ПОЛУЧАЕМ КАТЕГОРИЮ ТОВАРА
-                    string categoryName = await GetSectionNameForProductFromCache(product.ProductId);
-
-                    // Очищаем название товара от категории в скобках
-                    string cleanProductName = CleanProductNameSkobka(product.ProductName);
-                    Console.WriteLine($"Оригинальное название: '{product.ProductName}'");
-                    Console.WriteLine($"Очищенное название: '{cleanProductName}'");
-
-                    var productRowRequestData = new
-                    {
-                        fields = new
-                        {
-                            ownerId = invoiceId,
-                            ownerType = "SI",
-                            productId = product.ProductId > 0 ? (int?)product.ProductId : null,
-                            // ИСПОЛЬЗУЕМ ОЧИЩЕННОЕ НАЗВАНИЕ БЕЗ КАТЕГОРИИ
-                            productName = cleanProductName,
-                            price = product.Price,
-                            quantity = product.Quantity,
-                            taxRate = 20.0,
-                            taxIncluded = "N",
-                            measureCode = 796,
-                            measureName = "шт."
-                        }
-                    };
-                    string productJson = JsonConvert.SerializeObject(productRowRequestData);
-                    var productContent = new StringContent(productJson, Encoding.UTF8, "application/json");
-
-                    var response = await _httpClient.PostAsync(webhookUrl, productContent);
-                    string jsonResponse = await response.Content.ReadAsStringAsync();
-
-                    Console.WriteLine($"Ответ при добавлении товара '{cleanProductName}': {jsonResponse}");
-
-                    if (response.IsSuccessStatusCode)
-                    {
-                        dynamic result = JsonConvert.DeserializeObject(jsonResponse);
-                        if (result?.result?.productRow?.id != null)
-                        {
-                            Console.WriteLine($"  ✅ Товар '{cleanProductName}' добавлен. Категория: {categoryName}");
-                            successCount++;
-                        }
-                        else
-                        {
-                            Console.WriteLine($"  ⚠️ Для '{cleanProductName}' не получен ID товарной позиции.");
-                        }
-                    }
-                    else
-                    {
-                        Console.WriteLine($"  ❌ Ошибка при добавлении '{cleanProductName}': {response.StatusCode}");
-                        Console.WriteLine($"  Тело ошибки: {jsonResponse}");
-                    }
-
-                    await Task.Delay(200);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"  ❌ Исключение для товара '{product.ProductName}': {ex.Message}");
-                }
-            }
-
-            Console.WriteLine($"=== ИТОГО: Успешно добавлено {successCount} из {products.Count} товаров. ===");
-            return successCount > 0;
-        }
+       
 
         // Метод для очистки названия товара от категории в скобках
         private string CleanProductNameSkobka(string productName)
@@ -1488,6 +1605,8 @@ namespace ManagerApp.Data.GetInfo
             public string ProductName { get; set; }
             public decimal Quantity { get; set; }
             public decimal Price { get; set; }
+
+            public string UnitName { get; set; }
         }
 
         public class CompanyRequisites
