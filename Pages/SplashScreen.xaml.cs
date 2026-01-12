@@ -27,13 +27,41 @@ namespace ManagerApp.Pages
                 UpdateStatus("Подготовка приложения...", 0);
                 await Task.Delay(500);
 
-                // 2. Инициализация кэша
-                UpdateStatus("Инициализация кэша данных...", 10);
-                await InitializeCacheWithProgress();
+                // 2. Загрузка кеша
+                UpdateStatus("Загрузка кеша данных...", 20);
 
-                // 3. Проверка загруженных данных
+                // Проверяем, есть ли файловый кеш
+                bool cacheExists = CacheFileManager.CacheExists();
+
+                if (cacheExists)
+                {
+                    UpdateStatus("Загрузка из локального кеша...", 30);
+
+                    // Загружаем из файлового кеша
+                    var cacheInfo = await CacheFileManager.LoadCacheInfo();
+                    if (cacheInfo != null && !CacheFileManager.ShouldUpdateCache(cacheInfo.LastCacheUpdate))
+                    {
+                        // Используем существующий кеш
+                        UpdateStatus($"Кеш загружен ({cacheInfo.ProductsCount} товаров)...", 70);
+                        await Task.Delay(1000);
+                    }
+                    else
+                    {
+                        // Кеш устарел, обновляем в фоне
+                        UpdateStatus("Обновление кеша...", 40);
+                        _ = BackgroundUpdateCacheAsync();
+                    }
+                }
+                else
+                {
+                    // Кеша нет, загружаем первый раз
+                    UpdateStatus("Первоначальная загрузка данных...", 30);
+                    await BitrixCache.InitializeAsync();
+                }
+
+                // 3. Проверка данных
                 UpdateStatus("Проверка данных...", 95);
-                await CheckCacheData();
+                await Task.Delay(500);
 
                 // 4. Завершение
                 UpdateStatus("Запуск приложения...", 100);
@@ -52,54 +80,21 @@ namespace ManagerApp.Pages
             }
         }
 
-        private async Task InitializeCacheWithProgress()
+        // Фоновое обновление кеша
+        private async Task BackgroundUpdateCacheAsync()
         {
             try
             {
-                // Запускаем инициализацию кэша
-                var cacheTask = BitrixCache.InitializeAsync();
+                Console.WriteLine("[SplashScreen] Фоновое обновление кеша...");
 
-                // Запускаем анимацию прогресса
-                StartProgressAnimation(10, 80, 30000); // 30 секунд на загрузку
+                // Обновляем кеш
+                await BitrixCache.InitializeAsync();
 
-                // Ждем завершения инициализации кэша
-                await cacheTask;
-
-                // Останавливаем анимацию
-                StopProgressAnimation();
-
-                // Устанавливаем точное значение
-                progressBar.Value = 80;
+                Console.WriteLine("[SplashScreen] Фоновое обновление кеша завершено");
             }
             catch (Exception ex)
             {
-                StopProgressAnimation();
-                throw new Exception($"Ошибка инициализации кэша: {ex.Message}", ex);
-            }
-        }
-
-        private async Task CheckCacheData()
-        {
-            try
-            {
-                // Проверяем, загружены ли данные
-                if (!BitrixCache.IsCacheReady())
-                {
-                    UpdateStatus("Повторная загрузка данных...", 85);
-                    await BitrixCache.RefreshCacheAsync();
-                }
-
-                // Получаем статистику
-                var stats = BitrixCache.GetCacheStats();
-                Console.WriteLine($"[SplashScreen] Статистика кэша: {stats}");
-
-                // Плавное завершение прогресса
-                await SmoothProgressTo(95, 1000);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[SplashScreen] Ошибка проверки данных: {ex.Message}");
-                // Продолжаем работу даже если проверка не удалась
+                Console.WriteLine($"[SplashScreen] Ошибка фонового обновления кеша: {ex.Message}");
             }
         }
 
@@ -140,27 +135,6 @@ namespace ManagerApp.Pages
                 _progressTimer.Stop();
                 _progressTimer = null;
             }
-        }
-
-        private async Task SmoothProgressTo(int targetValue, int durationMilliseconds)
-        {
-            if (progressBar.Value >= targetValue)
-                return;
-
-            double startValue = progressBar.Value;
-            double steps = 20;
-            double delay = durationMilliseconds / steps;
-            double increment = (targetValue - startValue) / steps;
-
-            for (int i = 0; i < steps; i++)
-            {
-                if (!_isLoading) break;
-
-                progressBar.Value += increment;
-                await Task.Delay((int)delay);
-            }
-
-            progressBar.Value = targetValue;
         }
 
         private void UpdateStatus(string status, int progress)

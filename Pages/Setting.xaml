@@ -194,7 +194,7 @@
                         </Grid>
                     </Border>
 
-                    <!-- Настройка пути OCR -->
+                    <!-- Настройка пути OCR --><!--
                     <Border BorderBrush="#E0E0E0"
         BorderThickness="0,0,0,1"
         Padding="0,0,0,25"
@@ -229,7 +229,7 @@
                     VerticalAlignment="Top"
                     Width="400">
 
-                                <!-- Поле для отображения пути -->
+                                --><!-- Поле для отображения пути --><!--
                                 <TextBox x:Name="txtOCRPath"
                      Height="45"
                      FontSize="14"
@@ -252,7 +252,7 @@
                                     </TextBox.Style>
                                 </TextBox>
 
-                                <!-- Кнопки для работы с путем -->
+                                --><!-- Кнопки для работы с путем --><!--
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                     <Button x:Name="btnBrowseOCR"
                         Content="ОБЗОР..."
@@ -317,7 +317,168 @@
                                 </StackPanel>
                             </StackPanel>
                         </Grid>
+                    </Border>-->
+
+                    <!-- Обновление кеша -->
+                    <Border BorderBrush="#E0E0E0"
+                            BorderThickness="0,0,0,1"
+                            Padding="0,0,0,25"
+                            Margin="0,0,0,20">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0"
+                                       Text="ОБНОВЛЕНИЕ ДАННЫХ"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Foreground="#333333"
+                                       Margin="0,0,0,15"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0"
+                                       Text="Принудительное обновление кеша данных из Bitrix"
+                                       FontSize="14"
+                                       Foreground="#666666"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,20,0"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0"
+                                       Text="Приложение будет приостановлено на время обновления"
+                                       FontSize="12"
+                                       FontStyle="Italic"
+                                       Foreground="#999999"
+                                       TextWrapping="Wrap"
+                                       Margin="0,10,20,0"/>
+
+                            <Button x:Name="btnRefreshCache"
+                                    Grid.Row="0" Grid.Column="1" Grid.RowSpan="3"
+                                    Content="ОБНОВИТЬ КЕШ"
+                                    Width="250"
+                                    Height="45"
+                                    Background="#F0F0F0"
+                                    Foreground="Black"
+                                    FontWeight="Bold"
+                                    FontSize="14"
+                                    BorderThickness="0"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Top"
+                                    Click="btnRefreshCache_Click">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            CornerRadius="4">
+                                                        <ContentPresenter HorizontalAlignment="Center"
+                                                                          VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="#45a049"/>
+                                            </Trigger>
+                                            <Trigger Property="IsEnabled" Value="False">
+                                                <Setter Property="Background" Value="#cccccc"/>
+                                                <Setter Property="Foreground" Value="#666666"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </Grid>
                     </Border>
+
+                    <!-- Руководство -->
+                    <Border BorderBrush="#E0E0E0"
+                            BorderThickness="0,0,0,1"
+                            Padding="0,0,0,25"
+                            Margin="0,0,0,20">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0"
+                                       Text="ДОКУМЕНТАЦИЯ"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Foreground="#333333"
+                                       Margin="0,0,0,15"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0"
+                                       Text="Открыть руководство пользователя"
+                                       FontSize="14"
+                                       Foreground="#666666"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,20,0"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0"
+                                       Text="Файл будет открыт в соответствующем приложении"
+                                       FontSize="12"
+                                       FontStyle="Italic"
+                                       Foreground="#999999"
+                                       TextWrapping="Wrap"
+                                       Margin="0,10,20,0"/>
+
+                            <Button x:Name="btnReadManual"
+                                    Grid.Row="0" Grid.Column="1" Grid.RowSpan="3"
+                                    Content="ОТКРЫТЬ РУКОВОДСТВО"
+                                    Width="250"
+                                    Height="45"
+                                     Background="#F0F0F0"
+                                     Foreground="Black"
+                                    FontWeight="Bold"
+                                    FontSize="14"
+                                    BorderThickness="0"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Top"
+                                    Click="btnReadManual_Click">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            CornerRadius="4">
+                                                        <ContentPresenter HorizontalAlignment="Center"
+                                                                          VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="#1976D2"/>
+                                            </Trigger>
+                                            <Trigger Property="IsEnabled" Value="False">
+                                                <Setter Property="Background" Value="#cccccc"/>
+                                                <Setter Property="Foreground" Value="#666666"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </Grid>
+                    </Border>
+
                     <!-- Информационный блок -->
                     <Border Background="#F8F8F8"
                             BorderBrush="#E0E0E0"
@@ -346,7 +507,7 @@
             </ScrollViewer>
         </Border>
 
-        <!-- Панель кнопок -->
+        <!-- Панель кнопок - только Сохранить и Закрыть -->
         <Border Grid.Row="2"
                 Background="#F5F5F5"
                 Padding="20,15"
@@ -385,6 +546,11 @@
                                     </ControlTemplate>
                                 </Setter.Value>
                             </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="#D1431F"/>
+                                </Trigger>
+                            </Style.Triggers>
                         </Style>
                     </Button.Style>
                 </Button>
@@ -416,6 +582,11 @@
                                     </ControlTemplate>
                                 </Setter.Value>
                             </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="#E0E0E0"/>
+                                </Trigger>
+                            </Style.Triggers>
                         </Style>
                     </Button.Style>
                 </Button>

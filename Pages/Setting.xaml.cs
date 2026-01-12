@@ -1,5 +1,6 @@
 ﻿using ManagerApp.Classes.Read.ReadPicture;
 using ManagerApp.Classes.Setting;
+using ManagerApp.Data.GetInfo;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -9,6 +10,8 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -71,10 +74,284 @@ namespace ManagerApp.Pages
             LoadOCRPathFromFile(); // Загружаем путь при создании
         }
 
-
-
-
        
+        private void SetButtonsEnabled(bool enabled)
+        {
+            btnRefreshCache.IsEnabled = enabled;
+            btnReadManual.IsEnabled = enabled;
+            btnSave.IsEnabled = enabled;
+            btnClose.IsEnabled = enabled;
+        }
+
+        private void btnRefreshCache_Click(object sender, RoutedEventArgs e)
+        {
+            var result = MessageBox.Show(
+                "Вы уверены, что хотите обновить кеш?\n\n" +
+                "Приложение приостановит работу на время обновления.\n" +
+                "Это может занять несколько минут в зависимости от объема данных.\n\n" +
+                "Продолжить?",
+                "Обновление кеша",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (result != MessageBoxResult.Yes)
+                return;
+
+            // Отключаем кнопку
+            btnRefreshCache.IsEnabled = false;
+
+            // Создаем окно ожидания
+            var waitingWindow = new WaitingWindow("Обновление кеша", "Начало обновления...");
+            waitingWindow.Owner = Window.GetWindow(this);
+
+            // Используем BackgroundWorker
+            var worker = new System.ComponentModel.BackgroundWorker
+            {
+                WorkerReportsProgress = true,
+                WorkerSupportsCancellation = false
+            };
+
+            worker.DoWork += (s, args) =>
+            {
+                try
+                {
+                    worker.ReportProgress(0, "Подготовка к обновлению...");
+                    System.Threading.Thread.Sleep(500);
+
+                    worker.ReportProgress(10, "Загрузка данных из Bitrix...");
+
+                    // Синхронный вызов вместо асинхронного
+                    var task = Task.Run(async () => await BitrixCache.ForceUpdateCacheAsync());
+                    task.Wait();
+
+                    worker.ReportProgress(90, "Завершение обновления...");
+                    System.Threading.Thread.Sleep(500);
+
+                    var cacheStats = BitrixCache.GetCacheStats();
+                    args.Result = new CacheUpdateResult
+                    {
+                        Success = true,
+                        Message = cacheStats,
+                        Error = null
+                    };
+                }
+                catch (Exception ex)
+                {
+                    args.Result = new CacheUpdateResult
+                    {
+                        Success = false,
+                        Message = ex.Message,
+                        Error = ex
+                    };
+                }
+            };
+
+            worker.ProgressChanged += (s, args) =>
+            {
+                waitingWindow.UpdateMessage(args.UserState?.ToString() ?? "Обработка...");
+            };
+
+            worker.RunWorkerCompleted += (s, args) =>
+            {
+                // Закрываем окно ожидания
+                waitingWindow.Close();
+
+                // Включаем кнопку
+                btnRefreshCache.IsEnabled = true;
+
+                if (args.Result is CacheUpdateResult resultData)
+                {
+                    if (resultData.Success)
+                    {
+                        MessageBox.Show(
+                            $"✅ Кеш успешно обновлен!\n\n" +
+                            $"{resultData.Message}\n\n" +
+                            "Приложение продолжит работу с обновленными данными.",
+                            "Обновление завершено",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Information);
+                    }
+                    else
+                    {
+                        MessageBox.Show(
+                            $"❌ Ошибка при обновлении кеша:\n{resultData.Message}\n\n" +
+                            "Приложение продолжит работу со старым кешем.",
+                            "Ошибка обновления",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Error);
+                    }
+                }
+                else
+                {
+                    MessageBox.Show(
+                        "❌ Неизвестная ошибка при обновлении кеша",
+                        "Ошибка обновления",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                }
+            };
+
+            // Показываем окно и запускаем worker
+            waitingWindow.Show();
+            worker.RunWorkerAsync();
+        }
+
+        // Класс для хранения результата обновления кеша
+        private class CacheUpdateResult
+        {
+            public bool Success { get; set; }
+            public string Message { get; set; }
+            public Exception Error { get; set; }
+        }
+
+
+        private void btnReadManual_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Показываем окно ожидания для поиска файла
+                var waitingWindow = new WaitingWindow("Поиск руководства", "Поиск файла руководства...");
+                waitingWindow.Owner = Window.GetWindow(this);
+                waitingWindow.Show();
+
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        // Путь к файлу руководства
+                        string manualPath = Path.Combine(
+                            AppDomain.CurrentDomain.BaseDirectory,
+                            "Руководство_пользователя.docx");
+
+                        Dispatcher.Invoke(() =>
+                        {
+                            waitingWindow.Close();
+
+                            if (File.Exists(manualPath))
+                            {
+                                // Открываем файл в Word
+                                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                                {
+                                    FileName = manualPath,
+                                    UseShellExecute = true
+                                });
+
+                                MessageBox.Show(
+                                    $"Руководство открыто:\n{manualPath}",
+                                    "Руководство",
+                                    MessageBoxButton.OK,
+                                    MessageBoxImage.Information);
+                            }
+                            else
+                            {
+                                // Если файла нет, показываем сообщение
+                                MessageBoxResult result = MessageBox.Show(
+                                    "Файл руководства не найден.\n\n" +
+                                    $"Ожидаемый путь: {manualPath}\n\n" +
+                                    "Хотите создать шаблон руководства?",
+                                    "Руководство не найдено",
+                                    MessageBoxButton.YesNo,
+                                    MessageBoxImage.Question);
+
+                                if (result == MessageBoxResult.Yes)
+                                {
+                                    CreateTemplateManual(manualPath);
+                                }
+                            }
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Dispatcher.Invoke(() =>
+                        {
+                            waitingWindow.Close();
+                            MessageBox.Show($"Ошибка поиска руководства: {ex.Message}",
+                                "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                        });
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка: {ex.Message}",
+                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void CreateTemplateManual(string filePath)
+        {
+            try
+            {
+                string templateContent = @"РУКОВОДСТВО ПОЛЬЗОВАТЕЛЯ
+Приложение для управления товарами
+
+1. ОСНОВНЫЕ ВОЗМОЖНОСТИ
+   - Загрузка и обновление данных из Bitrix24
+   - Управление товарами и категориями
+   - Настройка параметров приложения
+   - Работа с чеками и документами
+
+2. НАСТРОЙКИ
+   2.1. НДС
+     - Установите процент НДС для расчетов
+     - Значение сохраняется автоматически
+
+   2.2. Сотрудник
+     - Выберите текущего сотрудника из списка
+     - ID сохраняется в файл setting_id_sotrudmik.txt
+
+   2.3. OCR (оптическое распознавание текста)
+     - Укажите путь к языковому пакету rus.traineddata
+     - Для работы с распознаванием текста из изображений
+
+3. КЕШИРОВАНИЕ
+   - Данные кешируются для ускорения работы
+   - Кеш автоматически обновляется раз в 24 часа
+   - Можно принудительно обновить через кнопку ""Обновить кеш""
+
+4. КЛАВИШИ БЫСТРОГО ДОСТУПА
+   - F1 - Справка
+   - Ctrl+S - Сохранить
+   - Ctrl+Q - Выход
+
+5. УСТРАНЕНИЕ НЕПОЛАДОК
+   5.1. Проблемы с загрузкой данных
+     - Проверьте подключение к интернету
+     - Обновите кеш вручную
+
+   5.2. OCR не работает
+     - Убедитесь, что файл rus.traineddata находится в указанной папке
+     - Проверьте путь в настройках
+
+Для дополнительной помощи обратитесь к администратору системы.";
+
+                // Создаем текстовый файл как временное решение
+                string txtFilePath = Path.ChangeExtension(filePath, ".txt");
+                File.WriteAllText(txtFilePath, templateContent, Encoding.UTF8);
+
+                MessageBox.Show(
+                    $"Шаблон руководства создан:\n{txtFilePath}\n\n" +
+                    "Вы можете открыть его в любом текстовом редакторе.",
+                    "Шаблон создан",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+
+                // Открываем созданный файл
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = txtFilePath,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка создания шаблона: {ex.Message}",
+                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+
+
         //private void Page_Loaded(object sender, RoutedEventArgs e)
         //{
         //    LoadVATFromFile();
@@ -277,65 +554,65 @@ namespace ManagerApp.Pages
 
         private void LoadOCRPathFromFile()
         {
-            try
-            {
-                if (File.Exists(OCRSettingsFileName))
-                {
-                    var lines = File.ReadAllLines(OCRSettingsFileName);
-                    foreach (var line in lines)
-                    {
-                        if (line.StartsWith("OCRPATH="))
-                        {
-                            var path = line.Substring(8).Trim();
-                            if (!string.IsNullOrEmpty(path))
-                            {
-                                OCRPath = path;
+            //try
+            //{
+            //    if (File.Exists(OCRSettingsFileName))
+            //    {
+            //        var lines = File.ReadAllLines(OCRSettingsFileName);
+            //        foreach (var line in lines)
+            //        {
+            //            if (line.StartsWith("OCRPATH="))
+            //            {
+            //                var path = line.Substring(8).Trim();
+            //                if (!string.IsNullOrEmpty(path))
+            //                {
+            //                    OCRPath = path;
 
-                                // Если путь существует, сразу применяем его
-                                if (Directory.Exists(path))
-                                {
-                                    ApplyOCRPath(path);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка загрузки пути OCR: {ex.Message}", "Ошибка",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
+            //                    // Если путь существует, сразу применяем его
+            //                    if (Directory.Exists(path))
+            //                    {
+            //                        ApplyOCRPath(path);
+            //                    }
+            //                }
+            //            }
+            //        }
+            //    }
+            //}
+            //catch (Exception ex)
+            //{
+            //    MessageBox.Show($"Ошибка загрузки пути OCR: {ex.Message}", "Ошибка",
+            //        MessageBoxButton.OK, MessageBoxImage.Warning);
+            //}
         }
         // Обновите метод LoadOCRPathFromFile:
         private void SaveOCRPathToFile(string path)
         {
-            try
-            {
-                var lines = new List<string>();
+            //try
+            //{
+            //    var lines = new List<string>();
 
-                if (File.Exists(OCRSettingsFileName))
-                {
-                    lines = File.ReadAllLines(OCRSettingsFileName).ToList();
-                }
+            //    if (File.Exists(OCRSettingsFileName))
+            //    {
+            //        lines = File.ReadAllLines(OCRSettingsFileName).ToList();
+            //    }
 
-                // Удаляем старую запись OCRPATH если есть
-                lines.RemoveAll(line => line.StartsWith("OCRPATH="));
+            //    // Удаляем старую запись OCRPATH если есть
+            //    lines.RemoveAll(line => line.StartsWith("OCRPATH="));
 
-                // Добавляем новую запись
-                lines.Add($"OCRPATH={path}");
+            //    // Добавляем новую запись
+            //    lines.Add($"OCRPATH={path}");
 
-                File.WriteAllLines(OCRSettingsFileName, lines);
-                OCRPath = path;
+            //    File.WriteAllLines(OCRSettingsFileName, lines);
+            //    OCRPath = path;
 
-                MessageBox.Show($"Путь к OCR сохранен в файл: {OCRSettingsFileName}", "Сохранено",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка сохранения пути OCR: {ex.Message}", "Ошибка",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            //    MessageBox.Show($"Путь к OCR сохранен в файл: {OCRSettingsFileName}", "Сохранено",
+            //        MessageBoxButton.OK, MessageBoxImage.Information);
+            //}
+            //catch (Exception ex)
+            //{
+            //    MessageBox.Show($"Ошибка сохранения пути OCR: {ex.Message}", "Ошибка",
+            //        MessageBoxButton.OK, MessageBoxImage.Error);
+            //}
         }
 
         // Обновите метод SaveOCRPathToFile:

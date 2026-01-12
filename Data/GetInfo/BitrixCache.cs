@@ -1,4 +1,5 @@
 ﻿using ManagerApp.Data.StructureList;
+using ManagerApp.Pages;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -12,12 +13,15 @@ namespace ManagerApp.Data.GetInfo
         private static BitrixService _bitrixService = new BitrixService();
         private static bool _isInitialized = false;
         private static readonly object _lockObject = new object();
+        private static bool _isBackgroundUpdateInProgress = false;
 
         // Основные кэши
         private static List<ProductWithCategoryInfo> _allProductsWithCategories = null;
+        private static List<BitrixMeasure> _allMeasures = null;
         private static List<Product> _allProductsSimple = null;
-        private static DateTime _lastCacheUpdate = DateTime.MinValue;
-        private static readonly TimeSpan _cacheDuration = TimeSpan.FromMinutes(30);
+
+        // Информация о кеше
+        private static CacheInfo _cacheInfo = null;
 
         // Словари для быстрого поиска
         private static readonly ConcurrentDictionary<string, int> _productIdByName =
@@ -37,14 +41,15 @@ namespace ManagerApp.Data.GetInfo
 
         // ============ ПУБЛИЧНЫЕ МЕТОДЫ ============
 
-        public static async Task<bool> InitializeAsync()
+        // Основной метод инициализации
+        public static async Task<bool> InitializeAsync(bool forceUpdate = false)
         {
-            if (_isInitialized)
+            if (_isInitialized && !forceUpdate)
                 return true;
 
             lock (_lockObject)
             {
-                if (_isInitialized)
+                if (_isInitialized && !forceUpdate)
                     return true;
             }
 
@@ -52,35 +57,52 @@ namespace ManagerApp.Data.GetInfo
             {
                 Console.WriteLine("[BitrixCache] Начало инициализации кэша...");
 
-                // Загружаем основные данные
-                //Console.WriteLine("[BitrixCache] Загрузка категорий...");
-                //var categories = await _bitrixService.GetСategories();
-                //Console.WriteLine($"[BitrixCache] Загружено {categories?.Count ?? 0} категорий");
+                // Загружаем информацию о кеше
+                _cacheInfo = await CacheFileManager.LoadCacheInfo();
+                Console.WriteLine($"[BitrixCache] Последнее обновление кеша: {_cacheInfo.LastCacheUpdate}");
 
-                Console.WriteLine("[BitrixCache] Загрузка товаров с категориями...");
-                var products = await _bitrixService.GetProductsWithCategoryInfo();
+                // Определяем, нужно ли обновлять кеш
+                bool needsUpdate = forceUpdate ||
+                                  _cacheInfo.LastCacheUpdate == DateTime.MinValue ||
+                                  CacheFileManager.ShouldUpdateCache(_cacheInfo.LastCacheUpdate);
 
-                if (products == null || !products.Any())
+                // Запускаем фоновое обновление если нужно (но не при принудительном обновлении)
+                if (needsUpdate && !forceUpdate)
                 {
-                    Console.WriteLine("[BitrixCache] Предупреждение: не удалось загрузить товары");
-                    return false;
+                    Console.WriteLine("[BitrixCache] Кеш устарел, запуск фонового обновления...");
+                    _ = BackgroundUpdateCacheAsync(); // Запускаем фоновое обновление
                 }
 
-                _allProductsWithCategories = products;
-                _lastCacheUpdate = DateTime.Now;
+                // Пытаемся загрузить из файлового кеша
+                bool loadedFromCache = await LoadFromFileCache();
 
-                Console.WriteLine("[BitrixCache] Загрузка простых товаров...");
-                //_allProductsSimple = await _bitrixService.GetProducts();
+                if (!loadedFromCache || forceUpdate)
+                {
+                    Console.WriteLine("[BitrixCache] Загрузка из файлового кеша не удалась или требуется принудительное обновление");
 
-                // Обновляем словари
-                UpdateSearchDictionaries(products);
+                    // Загружаем из Bitrix
+                    await LoadFromBitrixAndSaveToCache();
+
+                    _cacheInfo.IsFirstRun = false;
+                    _cacheInfo.LastCacheUpdate = DateTime.Now;
+
+                    // Сохраняем обновленную информацию о кеше
+                    await CacheFileManager.SaveCacheInfo(_cacheInfo);
+                }
+                else
+                {
+                    Console.WriteLine("[BitrixCache] Кеш успешно загружен из файла");
+                }
+
+                // Обновляем словари быстрого поиска
+                UpdateSearchDictionaries(_allProductsWithCategories);
 
                 lock (_lockObject)
                 {
                     _isInitialized = true;
                 }
 
-                Console.WriteLine($"[BitrixCache] Кэш успешно загружен. Товаров: {_productIdByName.Count}");
+                Console.WriteLine($"[BitrixCache] Кэш успешно загружен. Товаров: {_allProductsWithCategories?.Count ?? 0}");
                 return true;
             }
             catch (Exception ex)
@@ -91,27 +113,84 @@ namespace ManagerApp.Data.GetInfo
             }
         }
 
+        // Фоновое обновление кеша
+        private static async Task BackgroundUpdateCacheAsync()
+        {
+            if (_isBackgroundUpdateInProgress)
+                return;
+
+            _isBackgroundUpdateInProgress = true;
+
+            try
+            {
+                Console.WriteLine("[BitrixCache] Начало фонового обновления кеша...");
+
+                // Сохраняем текущие данные на случай ошибки
+                var oldProducts = _allProductsWithCategories;
+                var oldMeasures = _allMeasures;
+
+                // Загружаем новые данные из Bitrix
+                var productsTask = _bitrixService.GetProductsWithCategoryInfo();
+                var measuresTask = _bitrixService.GetMeasuresAsync();
+
+                await Task.WhenAll(productsTask, measuresTask);
+
+                var newProducts = await productsTask;
+                var newMeasures = await measuresTask;
+
+                if (newProducts != null && newProducts.Any() && newMeasures != null && newMeasures.Any())
+                {
+                    lock (_lockObject)
+                    {
+                        _allProductsWithCategories = newProducts;
+                        _allMeasures = newMeasures;
+
+                        _cacheInfo.LastCacheUpdate = DateTime.Now;
+                        _cacheInfo.ProductsCount = newProducts.Count;
+                        _cacheInfo.MeasuresCount = newMeasures.Count;
+                    }
+
+                    // Сохраняем в файловый кеш
+                    await CacheFileManager.SaveProductsToFile(newProducts);
+                    await CacheFileManager.SaveMeasuresToFile(newMeasures);
+                    await CacheFileManager.SaveCacheInfo(_cacheInfo);
+
+                    // Обновляем словари
+                    UpdateSearchDictionaries(newProducts);
+
+                    Console.WriteLine($"[BitrixCache] Фоновое обновление завершено. Обновлено {newProducts.Count} товаров и {newMeasures.Count} единиц измерения");
+                }
+                else
+                {
+                    Console.WriteLine("[BitrixCache] Не удалось загрузить новые данные, оставляем старый кеш");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[BitrixCache] Ошибка фонового обновления: {ex.Message}");
+                // При ошибке оставляем старый кеш
+            }
+            finally
+            {
+                _isBackgroundUpdateInProgress = false;
+            }
+        }
+
+        // Принудительное обновление кеша
+        public static async Task ForceUpdateCacheAsync()
+        {
+            Console.WriteLine("[BitrixCache] Принудительное обновление кеша...");
+            await InitializeAsync(true);
+        }
+
         // Получить все товары с категориями
         public static async Task<List<ProductWithCategoryInfo>> GetAllProductsWithCategories()
         {
             try
             {
-                // Проверяем, нужно ли обновлять кэш
-                bool needsUpdate = _allProductsWithCategories == null ||
-                                   (DateTime.Now - _lastCacheUpdate) > _cacheDuration;
-
-                if (needsUpdate)
+                if (!_isInitialized)
                 {
-                    Console.WriteLine("[BitrixCache] Обновление кэша товаров...");
-                    _allProductsWithCategories = await _bitrixService.GetProductsWithCategoryInfo();
-                    _lastCacheUpdate = DateTime.Now;
-
-                    // Обновляем словари быстрого поиска
-                    if (_allProductsWithCategories != null)
-                    {
-                        UpdateSearchDictionaries(_allProductsWithCategories);
-                        Console.WriteLine($"[BitrixCache] Кэш обновлен: {_allProductsWithCategories.Count} товаров");
-                    }
+                    await InitializeAsync();
                 }
 
                 return _allProductsWithCategories ?? new List<ProductWithCategoryInfo>();
@@ -120,6 +199,25 @@ namespace ManagerApp.Data.GetInfo
             {
                 Console.WriteLine($"[BitrixCache] Ошибка получения товаров с категориями: {ex.Message}");
                 return new List<ProductWithCategoryInfo>();
+            }
+        }
+
+        // Получить все единицы измерения
+        public static async Task<List<BitrixMeasure>> GetAllMeasures()
+        {
+            try
+            {
+                if (!_isInitialized)
+                {
+                    await InitializeAsync();
+                }
+
+                return _allMeasures ?? new List<BitrixMeasure>();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[BitrixCache] Ошибка получения единиц измерения: {ex.Message}");
+                return new List<BitrixMeasure>();
             }
         }
 
@@ -140,16 +238,15 @@ namespace ManagerApp.Data.GetInfo
                 return new List<Product>();
             }
         }
+
         public static async Task<List<ProductWithLowerSection>> GetAllProductsWithLowerSections()
         {
             try
             {
-                // Получаем все товары с категориями
                 var allProducts = await GetAllProductsWithCategories();
                 if (allProducts == null || !allProducts.Any())
                     return new List<ProductWithLowerSection>();
 
-                // Используем кэшированные категории
                 var categories = await _bitrixService.GetСategories();
                 var categoryDict = categories.ToDictionary(c => c.SelectionId, c => c);
 
@@ -199,35 +296,7 @@ namespace ManagerApp.Data.GetInfo
             }
         }
 
-        // Обновите метод BuildCategoryPath в BitrixCache:
-        private static string BuildCategoryPath(string categoryId, Dictionary<string, Category> categoryDict)
-        {
-            if (string.IsNullOrEmpty(categoryId) || !categoryDict.ContainsKey(categoryId))
-                return "Без категории";
-
-            var pathParts = new List<string>();
-            var currentId = categoryId;
-            var visited = new HashSet<string>();
-
-            while (!string.IsNullOrEmpty(currentId) && categoryDict.TryGetValue(currentId, out var category))
-            {
-                // Защита от циклических ссылок
-                if (visited.Contains(currentId))
-                    break;
-                visited.Add(currentId);
-
-                pathParts.Insert(0, category.Name);
-                currentId = category.ParentId;
-
-                if (pathParts.Count > 10)
-                    break;
-            }
-
-            return pathParts.Count > 0 ? string.Join(" → ", pathParts) : "Без категории";
-        }
-
-
-        // Получить ID товара по названию (быстрый поиск из кэша)
+        // Методы быстрого поиска
         public static int GetProductIdByName(string productName)
         {
             if (string.IsNullOrWhiteSpace(productName))
@@ -235,11 +304,9 @@ namespace ManagerApp.Data.GetInfo
 
             var normalizedName = productName.Trim();
 
-            // Прямой поиск
             if (_productIdByName.TryGetValue(normalizedName, out int productId))
                 return productId;
 
-            // Частичный поиск
             var foundProducts = FindProductsByPartialName(normalizedName);
             var firstProduct = foundProducts.FirstOrDefault();
 
@@ -248,9 +315,7 @@ namespace ManagerApp.Data.GetInfo
 
             return 0;
         }
-       
 
-        // Найти товары по частичному названию
         public static List<ProductWithCategoryInfo> FindProductsByPartialName(string searchTerm)
         {
             if (string.IsNullOrWhiteSpace(searchTerm))
@@ -259,7 +324,6 @@ namespace ManagerApp.Data.GetInfo
             var normalizedSearch = searchTerm.Trim().ToLower();
             var foundProducts = new HashSet<ProductWithCategoryInfo>();
 
-            // Разбиваем на слова для поиска в индексе
             var searchWords = normalizedSearch.Split(new[] { ' ', ',', '.', '-', '_' },
                 StringSplitOptions.RemoveEmptyEntries)
                 .Where(w => w.Length > 2);
@@ -273,7 +337,6 @@ namespace ManagerApp.Data.GetInfo
                 }
             }
 
-            // Фильтруем по точному совпадению
             return foundProducts
                 .Where(p => p.ProductName?.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase) >= 0 ||
                            normalizedSearch.IndexOf(p.ProductName?.ToLower() ?? "", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -283,34 +346,43 @@ namespace ManagerApp.Data.GetInfo
         // Обновить кэш принудительно
         public static async Task RefreshCacheAsync()
         {
-            try
-            {
-                Console.WriteLine("[BitrixCache] Принудительное обновление кэша...");
+            await ForceUpdateCacheAsync();
+        }
 
-                // Сбрасываем кэши
-                _allProductsWithCategories = null;
-                _allProductsSimple = null;
-                _productsByCategory.Clear();
-                _productsByLowerSection.Clear();
-                _productIdByName.Clear();
-                _productById.Clear();
-                _productsByNameSearch.Clear();
+        // Статистика кэша
+        public static string GetCacheStats()
+        {
+            var productsCount = _allProductsWithCategories?.Count ?? 0;
+            var measuresCount = _allMeasures?.Count ?? 0;
+            var cacheSizeMB = CacheFileManager.GetCacheSizeMB();
 
-                // Перезагружаем данные
-                await GetAllProductsWithCategories();
+            return $"Кэш: {productsCount} товаров, {measuresCount} единиц измерения, " +
+                   $"размер: {cacheSizeMB} MB, " +
+                   $"последнее обновление: {_cacheInfo?.LastCacheUpdate:g}";
+        }
 
-                Console.WriteLine("[BitrixCache] Кэш успешно обновлен");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[BitrixCache] Ошибка обновления кэша: {ex.Message}");
-            }
+        // Проверка готовности кэша
+        public static bool IsCacheReady()
+        {
+            return _isInitialized &&
+                   _allProductsWithCategories != null &&
+                   _allProductsWithCategories.Any() &&
+                   _allMeasures != null &&
+                   _allMeasures.Any();
+        }
+
+        // Проверить, нужно ли обновление кеша
+        public static async Task<bool> NeedsUpdateAsync()
+        {
+            var cacheInfo = await CacheFileManager.LoadCacheInfo();
+            return CacheFileManager.ShouldUpdateCache(cacheInfo.LastCacheUpdate);
         }
 
         // Очистить кэш
         public static void ClearCache()
         {
             _allProductsWithCategories = null;
+            _allMeasures = null;
             _allProductsSimple = null;
             _productsByCategory.Clear();
             _productsByLowerSection.Clear();
@@ -318,27 +390,108 @@ namespace ManagerApp.Data.GetInfo
             _productById.Clear();
             _productsByNameSearch.Clear();
             _isInitialized = false;
-            _lastCacheUpdate = DateTime.MinValue;
-        }
 
-        // Проверка готовности кэша
-        public static bool IsCacheReady()
-        {
-            return _isInitialized && _allProductsWithCategories != null && _allProductsWithCategories.Any();
-        }
-
-        // Статистика кэша
-        public static string GetCacheStats()
-        {
-            return $"Кэш: {_productIdByName.Count} товаров, " +
-                   $"индекс: {_productsByNameSearch.Count} слов, " +
-                   $"готов: {IsCacheReady()}";
+            CacheFileManager.ClearCache();
         }
 
         // ============ ПРИВАТНЫЕ МЕТОДЫ ============
 
+        private static async Task<bool> LoadFromFileCache()
+        {
+            try
+            {
+                Console.WriteLine("[BitrixCache] Попытка загрузки из файлового кеша...");
+                CacheFileManager.DebugCacheFiles();
+
+                // Загружаем товары
+                var products = await CacheFileManager.LoadProductsFromFile<List<ProductWithCategoryInfo>>();
+                if (products == null || !products.Any())
+                {
+                    Console.WriteLine("[BitrixCache] Не удалось загрузить товары из файлового кеша");
+                    return false;
+                }
+
+                // Загружаем единицы измерения
+                var measures = await CacheFileManager.LoadMeasuresFromFile<List<BitrixMeasure>>();
+                if (measures == null || !measures.Any())
+                {
+                    Console.WriteLine("[BitrixCache] Не удалось загрузить единицы измерения из файлового кеша");
+                    return false;
+                }
+
+                _allProductsWithCategories = products;
+                _allMeasures = measures;
+                _cacheInfo.ProductsCount = products.Count;
+                _cacheInfo.MeasuresCount = measures.Count;
+
+                Console.WriteLine($"[BitrixCache] Загружено {products.Count} товаров и {measures.Count} единиц измерения из файлового кеша");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[BitrixCache] Ошибка загрузки из файлового кеша: {ex.Message}");
+                return false;
+            }
+        }
+        // Измените метод LoadFromBitrixAndSaveToCache в BitrixCache:
+
+        private static async Task LoadFromBitrixAndSaveToCache()
+        {
+            try
+            {
+                Console.WriteLine("[BitrixCache] Загрузка данных из Bitrix...");
+
+                // Параллельная загрузка товаров и единиц измерения
+                var productsTask = _bitrixService.GetProductsWithCategoryInfo();
+                var measuresTask = _bitrixService.GetMeasuresAsync();
+
+                await Task.WhenAll(productsTask, measuresTask);
+
+                _allProductsWithCategories = await productsTask;
+                _allMeasures = await measuresTask;
+
+                if (_allProductsWithCategories != null && _allProductsWithCategories.Any() &&
+                    _allMeasures != null && _allMeasures.Any())
+                {
+                    Console.WriteLine($"[BitrixCache] Загружено {_allProductsWithCategories.Count} товаров и {_allMeasures.Count} единиц измерения из Bitrix");
+
+                    // Сохраняем в файловый кеш
+                    await CacheFileManager.SaveProductsToFile(_allProductsWithCategories);
+                    await CacheFileManager.SaveMeasuresToFile(_allMeasures);
+
+                    _cacheInfo.ProductsCount = _allProductsWithCategories.Count;
+                    _cacheInfo.MeasuresCount = _allMeasures.Count;
+
+                    // Также сохраняем информацию о кеше
+                    _cacheInfo.LastCacheUpdate = DateTime.Now;
+                    _cacheInfo.IsFirstRun = false;
+                    await CacheFileManager.SaveCacheInfo(_cacheInfo);
+
+                    Console.WriteLine($"[BitrixCache] Данные успешно сохранены в файловый кеш");
+                }
+                else
+                {
+                    Console.WriteLine("[BitrixCache] Предупреждение: не удалось загрузить данные из Bitrix");
+
+                    // Если товары загрузились, но нет единиц измерения, создаем пустые
+                    if (_allMeasures == null)
+                    {
+                        _allMeasures = new List<BitrixMeasure>();
+                        Console.WriteLine("[BitrixCache] Создан пустой список единиц измерения");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[BitrixCache] Ошибка загрузки из Bitrix: {ex.Message}");
+            }
+        }
+
+
         private static void UpdateSearchDictionaries(List<ProductWithCategoryInfo> products)
         {
+            if (products == null) return;
+
             _productIdByName.Clear();
             _productById.Clear();
             _productsByNameSearch.Clear();
@@ -350,16 +503,11 @@ namespace ManagerApp.Data.GetInfo
 
                 try
                 {
-                    // ID товара
                     if (int.TryParse(product.ProductId, out int productId) && productId > 0)
                     {
-                        // Название -> ID
                         _productIdByName.TryAdd(product.ProductName.Trim(), productId);
-
-                        // ID -> Объект товара
                         _productById.TryAdd(productId, product);
 
-                        // Индекс для поиска по словам
                         var words = product.ProductName.ToLower()
                             .Split(new[] { ' ', ',', '.', '-', '_' }, StringSplitOptions.RemoveEmptyEntries)
                             .Where(w => w.Length > 2);
@@ -385,7 +533,29 @@ namespace ManagerApp.Data.GetInfo
             }
         }
 
-   
+        private static string BuildCategoryPath(string categoryId, Dictionary<string, Category> categoryDict)
+        {
+            if (string.IsNullOrEmpty(categoryId) || !categoryDict.ContainsKey(categoryId))
+                return "Без категории";
 
+            var pathParts = new List<string>();
+            var currentId = categoryId;
+            var visited = new HashSet<string>();
+
+            while (!string.IsNullOrEmpty(currentId) && categoryDict.TryGetValue(currentId, out var category))
+            {
+                if (visited.Contains(currentId))
+                    break;
+                visited.Add(currentId);
+
+                pathParts.Insert(0, category.Name);
+                currentId = category.ParentId;
+
+                if (pathParts.Count > 10)
+                    break;
+            }
+
+            return pathParts.Count > 0 ? string.Join(" → ", pathParts) : "Без категории";
+        }
     }
 }

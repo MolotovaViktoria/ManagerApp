@@ -286,6 +286,7 @@
     <Compile Include="Classes\Setting\StaticEmployeeProvider.cs" />
     <Compile Include="Data\GetInfo\BitrixCache.cs" />
     <Compile Include="Data\GetInfo\BitrixService.cs" />
+    <Compile Include="Data\GetInfo\CacheFileManager.cs" />
     <Compile Include="Data\ScharedData\BitrixProductViewModel.cs" />
     <Compile Include="Data\ScharedData\BitrixPurchasePriceService.cs" />
     <Compile Include="Data\ScharedData\MatchedProduct.cs" />
@@ -301,6 +302,7 @@
     <Compile Include="Data\StructureList\BitrixCategoryResponse.cs" />
     <Compile Include="Data\StructureList\BitrixProductResponse.cs" />
     <Compile Include="Data\StructureList\BitrixProductViewModel.cs" />
+    <Compile Include="Data\StructureList\CacheInfo.cs" />
     <Compile Include="Data\StructureList\ProductRequst.cs" />
     <Compile Include="Data\StructureList\ProductWithCategoryInfo.cs" />
     <Compile Include="Pages\ComparisonProduct.xaml.cs">
@@ -341,6 +343,9 @@
     </Compile>
     <Compile Include="Pages\SplashScreen.xaml.cs">
       <DependentUpon>SplashScreen.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Pages\WaitingWindow.xaml.cs">
+      <DependentUpon>WaitingWindow.xaml</DependentUpon>
     </Compile>
     <Compile Include="Pages\WorldPdfFile.xaml.cs">
       <DependentUpon>WorldPdfFile.xaml</DependentUpon>
@@ -433,6 +438,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Pages\SplashScreen.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Pages\WaitingWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

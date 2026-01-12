@@ -394,10 +394,11 @@
                             <!-- Остальные колонки сдвигаются на 1 позицию -->
                             <!-- Колонка 5: Ввод своей цены (была 4) -->
                             <!-- Колонка для полного названия единицы измерения -->
+                            <!-- Колонка для полного названия единицы измерения -->
                             <DataGridTextColumn Header="ЕДИНИЦА ИЗМЕРЕНИЯ"
-Binding="{Binding UnitFullName}"
-Width="150"
-IsReadOnly="True">
+                    Binding="{Binding UnitFullName, FallbackValue='Штука'}"
+                    Width="150"
+                    IsReadOnly="True">
                                 <DataGridTextColumn.HeaderStyle>
                                     <Style TargetType="DataGridColumnHeader">
                                         <Setter Property="Background" Value="#F8F8F8"/>
@@ -416,6 +417,7 @@ IsReadOnly="True">
                                         <Setter Property="HorizontalAlignment" Value="Center"/>
                                         <Setter Property="Padding" Value="10,5"/>
                                         <Setter Property="FontSize" Value="13"/>
+                                        <Setter Property="Text" Value="{Binding UnitFullName, FallbackValue='Штука'}"/>
                                     </Style>
                                 </DataGridTextColumn.ElementStyle>
                             </DataGridTextColumn>

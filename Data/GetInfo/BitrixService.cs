@@ -61,7 +61,59 @@ namespace ManagerApp.Data.GetInfo
                 return string.Empty;
             }
         }
-        public async Task<byte[]> DownloadDocumentBytes(string documentUrl)
+        // В классе BitrixService добавьте:
+        public async Task<List<BitrixMeasure>> GetMeasuresAsync()
+        {
+            try
+            {
+                Console.WriteLine("[BitrixService] Загрузка единиц измерения из Bitrix...");
+
+                using (var httpClient = new HttpClient())
+                {
+                    httpClient.Timeout = TimeSpan.FromSeconds(30);
+
+                    string apiUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.measure.list.json";
+                    Console.WriteLine($"[BitrixService] Запрос: {apiUrl}");
+
+                    var response = await httpClient.GetAsync(apiUrl);
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var json = await response.Content.ReadAsStringAsync();
+                        Console.WriteLine($"[BitrixService] Получен ответ, длина: {json.Length} символов");
+
+                        // Десериализуем JSON
+                        var result = JsonConvert.DeserializeObject<BitrixMeasureResponse>(json);
+
+                        if (result?.Result != null)
+                        {
+                            Console.WriteLine($"[BitrixService] Загружено {result.Result.Count} единиц измерения");
+                            return result.Result;
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[BitrixService] HTTP ошибка: {response.StatusCode}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[BitrixService] Ошибка получения единиц измерения: {ex.Message}");
+            }
+
+            // Возвращаем пустой список при ошибке
+            return new List<BitrixMeasure>();
+        }
+
+        // Класс для десериализации ответа от Bitrix
+
+
+
+        public class BitrixMeasureResponse
+        {
+            public List<BitrixMeasure> Result { get; set; }
+        }        public async Task<byte[]> DownloadDocumentBytes(string documentUrl)
         {
             try
             {

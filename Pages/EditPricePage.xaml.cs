@@ -159,32 +159,37 @@ namespace ManagerApp.Pages
         // Метод для получения названия единицы измерения по ID
         private string GetMeasureName(string measureId)
         {
+            // Если ID пустой, возвращаем "Штука" по умолчанию
             if (string.IsNullOrEmpty(measureId))
             {
-                Console.WriteLine($"GetMeasureName: Пустой measureId, возвращаем пустую строку");
-                return "";
+                Console.WriteLine($"GetMeasureName: Пустой measureId, возвращаем 'Штука' по умолчанию");
+                return "Штука";
             }
 
             lock (_measuresLock)
             {
                 if (_measuresDictionary.TryGetValue(measureId, out var measure))
                 {
-                    Console.WriteLine($"GetMeasureName: Найдена мера ID={measureId}, Название={measure.MEASURE_TITLE}");
-                    return measure.MEASURE_TITLE;
+                    if (!string.IsNullOrEmpty(measure.MEASURE_TITLE))
+                    {
+                        Console.WriteLine($"GetMeasureName: Найдена мера ID={measureId}, Название={measure.MEASURE_TITLE}");
+                        return measure.MEASURE_TITLE;
+                    }
                 }
             }
 
-            Console.WriteLine($"GetMeasureName: Мера не найдена для ID={measureId}");
-            return "";
+            Console.WriteLine($"GetMeasureName: Мера не найдена для ID={measureId}, возвращаем 'Штука' по умолчанию");
+            return "Штука"; // Возвращаем "Штука" по умолчанию
         }
 
         // Метод для получения символа единицы измерения по ID
         private string GetMeasureSymbol(string measureId)
         {
+            // Если ID пустой, возвращаем "шт." по умолчанию
             if (string.IsNullOrEmpty(measureId))
             {
-                Console.WriteLine($"GetMeasureSymbol: Пустой measureId, возвращаем пустую строку");
-                return "";
+                Console.WriteLine($"GetMeasureSymbol: Пустой measureId, возвращаем 'шт.' по умолчанию");
+                return "шт.";
             }
 
             lock (_measuresLock)
@@ -193,20 +198,29 @@ namespace ManagerApp.Pages
                 {
                     // Используем русский символ, если он есть
                     if (!string.IsNullOrEmpty(measure.SYMBOL_RUS))
+                    {
+                        Console.WriteLine($"GetMeasureSymbol: Найден символ для ID={measureId}: {measure.SYMBOL_RUS}");
                         return measure.SYMBOL_RUS;
+                    }
 
                     // Или международный символ
                     if (!string.IsNullOrEmpty(measure.SYMBOL_INTL))
+                    {
+                        Console.WriteLine($"GetMeasureSymbol: Найден международный символ для ID={measureId}: {measure.SYMBOL_INTL}");
                         return measure.SYMBOL_INTL;
+                    }
 
                     // Или название
                     if (!string.IsNullOrEmpty(measure.MEASURE_TITLE))
+                    {
+                        Console.WriteLine($"GetMeasureSymbol: Используем название как символ для ID={measureId}: {measure.MEASURE_TITLE}");
                         return measure.MEASURE_TITLE;
+                    }
                 }
             }
 
-            Console.WriteLine($"GetMeasureSymbol: Мера не найдена для ID={measureId}");
-            return "";
+            Console.WriteLine($"GetMeasureSymbol: Мера не найдена для ID={measureId}, возвращаем 'шт.' по умолчанию");
+            return "шт."; // Возвращаем "шт." по умолчанию
         }
 
         private async Task LoadMatchedProductsAsync(List<ManagerApp.Data.ScharedData.MatchedProduct> matchedProducts)
@@ -228,41 +242,49 @@ namespace ManagerApp.Pages
                     string unitSymbol = "";
                     string unitName = "";
 
-                    // Если у нас уже есть MeasureId в MatchedProduct, используем его
-                    if (!string.IsNullOrEmpty(matchedProduct.Measure))
-                    {
-                        measureId = matchedProduct.Measure;
-                        unitSymbol = GetMeasureSymbol(measureId);
-                        unitName = GetMeasureName(measureId);
-                        Console.WriteLine($"Используем Measure из MatchedProduct: ID={measureId}, Symbol='{unitSymbol}', Name='{unitName}'");
-                    }
-                    else
-                    {
-                        // Если нет, пробуем получить из Bitrix
-                        Console.WriteLine($"Пробуем получить Measure из Bitrix для товара ID={matchedProduct.BitrixProductId}");
+                    // Всегда пытаемся получить из Bitrix (самый актуальный источник)
+                    Console.WriteLine($"Пробуем получить Measure из Bitrix для товара ID={matchedProduct.BitrixProductId}");
 
-                        try
+                    try
+                    {
+                        var productDetail = await BitrixProductService.GetProductAsync(matchedProduct.BitrixProductId);
+
+                        if (productDetail != null && !string.IsNullOrEmpty(productDetail.MEASURE))
                         {
-                            var productDetail = await BitrixProductService.GetProductAsync(matchedProduct.BitrixProductId);
-
-                            if (productDetail != null && !string.IsNullOrEmpty(productDetail.MEASURE))
+                            measureId = productDetail.MEASURE;
+                            Console.WriteLine($"Получено из Bitrix: MEASURE_ID={measureId}");
+                        }
+                        else
+                        {
+                            // Если не удалось получить из Bitrix, пробуем из MatchedProduct
+                            if (!string.IsNullOrEmpty(matchedProduct.Measure))
                             {
-                                measureId = productDetail.MEASURE;
-                                unitSymbol = GetMeasureSymbol(measureId);
-                                unitName = GetMeasureName(measureId);
-
-                                Console.WriteLine($"Получено из Bitrix: MEASURE_ID={measureId}, Symbol='{unitSymbol}', Name='{unitName}'");
+                                measureId = matchedProduct.Measure;
+                                Console.WriteLine($"Используем Measure из MatchedProduct: ID={measureId}");
                             }
                             else
                             {
-                                Console.WriteLine($"Не удалось получить Measure из Bitrix для товара ID={matchedProduct.BitrixProductId}");
+                                Console.WriteLine($"Не удалось получить Measure ни из Bitrix, ни из MatchedProduct, будет использовано значение по умолчанию");
                             }
                         }
-                        catch (Exception ex)
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Ошибка при получении Measure из Bitrix для товара ID={matchedProduct.BitrixProductId}: {ex.Message}");
+
+                        // При ошибке тоже пробуем из MatchedProduct
+                        if (!string.IsNullOrEmpty(matchedProduct.Measure))
                         {
-                            Console.WriteLine($"Ошибка при получении Measure из Bitrix для товара ID={matchedProduct.BitrixProductId}: {ex.Message}");
+                            measureId = matchedProduct.Measure;
+                            Console.WriteLine($"Используем Measure из MatchedProduct после ошибки: ID={measureId}");
                         }
                     }
+
+                    // Получаем название и символ (по умолчанию будет "Штука"/"шт.")
+                    unitSymbol = GetMeasureSymbol(measureId);
+                    unitName = GetMeasureName(measureId);
+
+                    Console.WriteLine($"Итог для товара {matchedProduct.OriginalProductName}: Symbol='{unitSymbol}', Name='{unitName}'");
 
                     var product = new ProductPriceViewModel
                     {
@@ -285,6 +307,25 @@ namespace ManagerApp.Pages
                 catch (Exception ex)
                 {
                     Console.WriteLine($"Ошибка при загрузке товара {matchedProduct.OriginalProductName}: {ex.Message}");
+
+                    // Создаем товар с значениями по умолчанию даже при ошибке
+                    var defaultProduct = new ProductPriceViewModel
+                    {
+                        BitrixProductId = matchedProduct.BitrixProductId,
+                        OriginalProductName = matchedProduct.OriginalProductName,
+                        BitrixProductName = matchedProduct.BitrixProductName,
+                        BitrixPrice = matchedProduct.BitrixPrice,
+                        PurchasingPrice = matchedProduct.PurchasingPrice,
+                        CustomPrice = matchedProduct.CustomPrice > 0 ? matchedProduct.CustomPrice : matchedProduct.BitrixPrice,
+                        Quantity = matchedProduct.Quantity > 0 ? matchedProduct.Quantity : 1,
+                        Unit = !string.IsNullOrEmpty(matchedProduct.Unit) ? matchedProduct.Unit : "шт.",
+                        UnitFullName = "Штука",
+                        MeasureId = matchedProduct.Measure,
+                        VAT = SettingsHelper.GetVATAsString()
+                    };
+
+                    defaultProduct.PropertyChanged += Product_PropertyChanged;
+                    Products.Add(defaultProduct);
                 }
             }
 
@@ -292,7 +333,6 @@ namespace ManagerApp.Pages
             UpdateVATDisplay();
             LoadPurchasingPricesBackground();
         }
-
         // Остальные методы без изменений...
         private async void LoadPurchasingPricesBackground()
         {
@@ -505,19 +545,17 @@ namespace ManagerApp.Pages
                 PurchasingPrice = p.PurchasingPrice,
                 CustomPrice = p.CustomPrice,
                 Quantity = p.Quantity,
-                Unit = p.UnitFullName,
-
+                Unit = p.UnitFullName, // Сохраняем полное название в Unit
                 Measure = p.MeasureId,
                 VAT = p.VAT,
                 PriceWithVAT = p.PriceWithVAT,
                 TotalWithVAT = p.TotalWithVAT
             }).ToList();
 
-
-            Console.WriteLine("ПЕРЕХОД НА ДР3ГУ. СТРАНЦИУ");
+            Console.WriteLine("Сохранение товаров перед переходом на другую страницу:");
             foreach (var product in Products)
             {
-                Console.WriteLine(product.BitrixProductName + " UnitFullName " + product.UnitFullName + " Unit" + product.Unit +  " Vat" + product.VAT);
+                Console.WriteLine($"Товар: {product.BitrixProductName}, UnitFullName: {product.UnitFullName}, Unit: {product.Unit}, VAT: {product.VAT}");
             }
 
             PriceDataManager.SetMatchedProducts(matchedProducts);
