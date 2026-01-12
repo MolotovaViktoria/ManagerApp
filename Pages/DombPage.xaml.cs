@@ -189,13 +189,13 @@ namespace ManagerApp.Pages
         {
             try
             {
-                // Создаем страницу для обработки изображения
+                // ПРОСТО Создаем и открываем страницу для обработки изображения
                 PngPage pngPage = new PngPage(filePath);
                 this.NavigationService.Navigate(pngPage);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка при обработке изображения: {ex.Message}",
+                MessageBox.Show($"Ошибка при открытии изображения: {ex.Message}",
                     "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }

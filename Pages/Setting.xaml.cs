@@ -209,71 +209,52 @@ namespace ManagerApp.Pages
         {
             try
             {
-                // Показываем окно ожидания для поиска файла
-                var waitingWindow = new WaitingWindow("Поиск руководства", "Поиск файла руководства...");
-                waitingWindow.Owner = Window.GetWindow(this);
-                waitingWindow.Show();
+                // Получаем путь к исполняемому файлу
+                string exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                string exeDir = Path.GetDirectoryName(exePath);
 
-                Task.Run(() =>
+                // Путь к вашему PDF файлу
+                string manualPath = Path.Combine(exeDir, "руководствоПользователя.pdf");
+
+                // Проверяем существует ли файл
+                if (File.Exists(manualPath))
                 {
+                    // Открываем файл
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = manualPath,
+                        UseShellExecute = true
+                    });
+                }
+                else
+                {
+                    // Если файл не найден, показываем где его нужно разместить
+                    MessageBox.Show(
+                        $"Файл руководства не найден.\n\n" +
+                        $"Разместите файл 'руководствоПользователя.pdf' в папке:\n{exeDir}\n\n" +
+                        $"Или перетащите его прямо в эту папку.",
+                        "Руководство не найдено",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+
+                    // Можно дополнительно открыть папку для пользователя
                     try
                     {
-                        // Путь к файлу руководства
-                        string manualPath = Path.Combine(
-                            AppDomain.CurrentDomain.BaseDirectory,
-                            "Руководство_пользователя.docx");
-
-                        Dispatcher.Invoke(() =>
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                         {
-                            waitingWindow.Close();
-
-                            if (File.Exists(manualPath))
-                            {
-                                // Открываем файл в Word
-                                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                                {
-                                    FileName = manualPath,
-                                    UseShellExecute = true
-                                });
-
-                                MessageBox.Show(
-                                    $"Руководство открыто:\n{manualPath}",
-                                    "Руководство",
-                                    MessageBoxButton.OK,
-                                    MessageBoxImage.Information);
-                            }
-                            else
-                            {
-                                // Если файла нет, показываем сообщение
-                                MessageBoxResult result = MessageBox.Show(
-                                    "Файл руководства не найден.\n\n" +
-                                    $"Ожидаемый путь: {manualPath}\n\n" +
-                                    "Хотите создать шаблон руководства?",
-                                    "Руководство не найдено",
-                                    MessageBoxButton.YesNo,
-                                    MessageBoxImage.Question);
-
-                                if (result == MessageBoxResult.Yes)
-                                {
-                                    CreateTemplateManual(manualPath);
-                                }
-                            }
+                            FileName = exeDir,
+                            UseShellExecute = true
                         });
                     }
-                    catch (Exception ex)
+                    catch
                     {
-                        Dispatcher.Invoke(() =>
-                        {
-                            waitingWindow.Close();
-                            MessageBox.Show($"Ошибка поиска руководства: {ex.Message}",
-                                "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-                        });
+                        // Игнорируем ошибку открытия папки
                     }
-                });
+                }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка: {ex.Message}",
+                MessageBox.Show($"Ошибка открытия руководства: {ex.Message}",
                     "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -644,18 +625,18 @@ namespace ManagerApp.Pages
                 if (fileFound)
                 {
                     // Устанавливаем путь через статический метод SimpleOCRProcessor
-                    bool success = SimpleOCRProcessor.SetCustomPath(tessdataPath);
+                    //bool success = SimpleOCRProcessor.SetCustomPath(tessdataPath);
 
-                    if (success)
-                    {
-                        MessageBox.Show($"Путь к OCR успешно применен!\nФайл найден: {foundFile}", "Успех",
-                            MessageBoxButton.OK, MessageBoxImage.Information);
-                    }
-                    else
-                    {
-                        MessageBox.Show($"Не удалось установить путь OCR", "Ошибка",
-                            MessageBoxButton.OK, MessageBoxImage.Warning);
-                    }
+                    //if (success)
+                    //{
+                    //    MessageBox.Show($"Путь к OCR успешно применен!\nФайл найден: {foundFile}", "Успех",
+                    //        MessageBoxButton.OK, MessageBoxImage.Information);
+                    //}
+                    //else
+                    //{
+                    //    MessageBox.Show($"Не удалось установить путь OCR", "Ошибка",
+                    //        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    //}
                 }
                 else
                 {

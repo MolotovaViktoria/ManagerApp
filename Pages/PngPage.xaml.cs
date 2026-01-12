@@ -64,7 +64,7 @@ namespace ManagerApp.Pages
         {
             try
             {
-                // 1. Сначала пытаемся создать OCR
+                // 1. Создаем OCR процессор
                 _ocrProcessor = new SimpleOCRProcessor();
 
                 // 2. Проверяем готовность
@@ -76,31 +76,18 @@ namespace ManagerApp.Pages
                 }
                 else
                 {
-                    // Получаем сообщение об ошибке (если есть такой метод)
-                    string errorMsg = "Tesseract не готов. ";
-
-                    // Пытаемся получить более детальное сообщение
-                    try
-                    {
-                        // Если есть метод GetErrorMessage
-                        var method = _ocrProcessor.GetType().GetMethod("GetErrorMessage");
-                        if (method != null)
-                        {
-                            string detailedError = (string)method.Invoke(_ocrProcessor, null);
-                            if (!string.IsNullOrEmpty(detailedError))
-                            {
-                                errorMsg += detailedError;
-                            }
-                        }
-                    }
-                    catch { }
+                    // Получаем сообщение об ошибке
+                    string errorMsg = _ocrProcessor.GetErrorMessage();
+                    if (string.IsNullOrEmpty(errorMsg))
+                        errorMsg = "Файл rus.traineddata не найден";
 
                     statusText.Text = errorMsg;
                     statusText.Foreground = Brushes.Red;
                     Console.WriteLine($"❌ {errorMsg}");
 
-                    // Дополнительная диагностика
-                    PerformQuickDiagnostics();
+                    // Показываем где искать файл
+                    string debugInfo = _ocrProcessor.GetDebugInfo();
+                    Console.WriteLine(debugInfo);
                 }
 
                 // 3. Инициализируем другие анализаторы
@@ -111,7 +98,7 @@ namespace ManagerApp.Pages
             {
                 statusText.Text = $"Ошибка инициализации: {ex.Message}";
                 statusText.Foreground = Brushes.Red;
-                Console.WriteLine($"💥 ОШИБКА В InitializeAnalyzers: {ex.Message}");
+                Console.WriteLine($"💥 ОШИБКА: {ex.Message}");
             }
         }
         private void btnReinitializeOCR_Click(object sender, RoutedEventArgs e)
@@ -253,7 +240,7 @@ namespace ManagerApp.Pages
 
                     if (retry)
                     {
-                        _ocrProcessor.Reinitialize();
+                        //_ocrProcessor.Reinitialize();
                         if (_ocrProcessor.IsOCRReady())
                         {
                             // Продолжаем распознавание
@@ -726,7 +713,7 @@ namespace ManagerApp.Pages
         {
             if (_ocrProcessor != null)
             {
-                _ocrProcessor.ShowHelp();
+                //_ocrProcessor.ShowHelp();
             }
         }
 
