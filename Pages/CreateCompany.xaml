@@ -6,8 +6,8 @@
         xmlns:local="clr-namespace:ManagerApp.Pages"
         mc:Ignorable="d"
         Title="Создание компании в Bitrix"
-        Height="450"
-        Width="600"
+        Height="550"
+        Width="700"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         WindowStyle="None"
@@ -60,86 +60,135 @@
             </Border>
 
             <!-- Основной контент -->
-            <Grid Grid.Row="1" Margin="20">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-
-                <!-- Название компании -->
-                <Grid Grid.Row="0" Margin="0,0,0,15">
+            <ScrollViewer Grid.Row="1" Margin="20" VerticalScrollBarVisibility="Auto">
+                <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0"
-                               Text="Название компании *"
-                               FontWeight="Bold"
-                               Foreground="#333333"
-                               Margin="0,0,0,5"/>
-                    <TextBox x:Name="txtTitle"
-                             Grid.Row="1"
-                             Height="40"
-                             Padding="10"
-                             FontSize="14"
-                             VerticalContentAlignment="Center"
-                             BorderBrush="#DFE1E5"
-                             BorderThickness="1"
-                             TextChanged="txtTitle_TextChanged"/>
-                </Grid>
-
-                <!-- Телефон -->
-                <Grid Grid.Row="1" Margin="0,0,0,15">
-                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0"
-                               Text="Телефон"
-                               FontWeight="Bold"
-                               Foreground="#333333"
-                               Margin="0,0,0,5"/>
-                    <TextBox x:Name="txtPhone"
-                             Grid.Row="1"
-                             Height="40"
-                             Padding="10"
-                             FontSize="14"
-                             VerticalContentAlignment="Center"
-                             BorderBrush="#DFE1E5"
-                             BorderThickness="1"/>
-                </Grid>
 
-                <!-- Адрес -->
-                <Grid Grid.Row="2" Margin="0,0,0,15">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0"
-                               Text="Адрес"
-                               FontWeight="Bold"
-                               Foreground="#333333"
-                               Margin="0,0,0,5"/>
-                    <TextBox x:Name="txtAddress"
-                             Grid.Row="1"
-                             Height="40"
-                             Padding="10"
-                             FontSize="14"
-                             VerticalContentAlignment="Center"
-                             BorderBrush="#DFE1E5"
-                             BorderThickness="1"/>
-                </Grid>
+                    <!-- Название компании -->
+                    <Grid Grid.Row="0" Margin="0,0,0,15">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0"
+                                   Text="Название компании *"
+                                   FontWeight="Bold"
+                                   Foreground="#333333"
+                                   Margin="0,0,0,5"/>
+                        <TextBox x:Name="txtTitle"
+                                 Grid.Row="1"
+                                 Height="40"
+                                 Padding="10"
+                                 FontSize="14"
+                                 VerticalContentAlignment="Center"
+                                 BorderBrush="#DFE1E5"
+                                 BorderThickness="1"
+                                 TextChanged="txtTitle_TextChanged"/>
+                    </Grid>
 
-                <!-- Примечание -->
-                <Grid Grid.Row="3">
-                    <TextBlock Text="* - обязательное поле. Телефон и адрес - необязательные."
-                               FontSize="12"
-                               Foreground="#666666"
-                               FontStyle="Italic"/>
+                    <!-- ИНН -->
+                    <Grid Grid.Row="1" Margin="0,0,0,15">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0"
+                                   Text="ИНН *"
+                                   FontWeight="Bold"
+                                   Foreground="#333333"
+                                   Margin="0,0,0,5"/>
+                        <TextBox x:Name="txtInn"
+                                 Grid.Row="1"
+                                 Height="40"
+                                 Padding="10"
+                                 FontSize="14"
+                                 VerticalContentAlignment="Center"
+                                 BorderBrush="#DFE1E5"
+                                 BorderThickness="1"
+                                 TextChanged="ValidateForm"/>
+                    </Grid>
+
+                    <!-- КПП -->
+                    <Grid Grid.Row="2" Margin="0,0,0,15">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0"
+                                   Text="КПП *"
+                                   FontWeight="Bold"
+                                   Foreground="#333333"
+                                   Margin="0,0,0,5"/>
+                        <TextBox x:Name="txtKpp"
+                                 Grid.Row="1"
+                                 Height="40"
+                                 Padding="10"
+                                 FontSize="14"
+                                 VerticalContentAlignment="Center"
+                                 BorderBrush="#DFE1E5"
+                                 BorderThickness="1"
+                                 TextChanged="ValidateForm"/>
+                    </Grid>
+
+                    <!-- Адрес -->
+                    <Grid Grid.Row="3" Margin="0,0,0,15">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0"
+                                   Text="Адрес *"
+                                   FontWeight="Bold"
+                                   Foreground="#333333"
+                                   Margin="0,0,0,5"/>
+                        <TextBox x:Name="txtAddress"
+                                 Grid.Row="1"
+                                 Height="40"
+                                 Padding="10"
+                                 FontSize="14"
+                                 VerticalContentAlignment="Center"
+                                 BorderBrush="#DFE1E5"
+                                 BorderThickness="1"
+                                 TextChanged="ValidateForm"/>
+                    </Grid>
+
+                    <!-- Телефон -->
+                    <Grid Grid.Row="4" Margin="0,0,0,15">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0"
+                                   Text="Телефон"
+                                   FontWeight="Bold"
+                                   Foreground="#333333"
+                                   Margin="0,0,0,5"/>
+                        <TextBox x:Name="txtPhone"
+                                 Grid.Row="1"
+                                 Height="40"
+                                 Padding="10"
+                                 FontSize="14"
+                                 VerticalContentAlignment="Center"
+                                 BorderBrush="#DFE1E5"
+                                 BorderThickness="1"/>
+                    </Grid>
+
+                    <!-- Примечание -->
+                    <Grid Grid.Row="5">
+                        <TextBlock Text="* - обязательное поле. Телефон - необязательное."
+                                   FontSize="12"
+                                   Foreground="#666666"
+                                   FontStyle="Italic"/>
+                    </Grid>
                 </Grid>
-            </Grid>
+            </ScrollViewer>
 
             <!-- Кнопки действий -->
             <Border Grid.Row="2"

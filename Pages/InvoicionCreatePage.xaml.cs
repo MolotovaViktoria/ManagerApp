@@ -252,53 +252,7 @@ namespace ManagerApp.Pages
                 SelectedPaymentMethod = PaymentMethods[0];
         }
 
-        // Кнопка добавления своего способа оплаты
-        private void btnAddCustomPayment_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                // Создаем простое окно для ввода способа оплаты
-                var dialog = new CustomPaymentDialog();
-                dialog.Owner = Application.Current.MainWindow;
-                dialog.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-
-                bool? result = dialog.ShowDialog();
-
-                if (result == true && !string.IsNullOrEmpty(dialog.PaymentMethodName))
-                {
-                    string newMethod = dialog.PaymentMethodName.Trim();
-
-                    // Проверяем, нет ли уже такого способа оплаты
-                    if (PaymentMethods.Any(p => p.Name == newMethod || p.Value == newMethod))
-                    {
-                        MessageBox.Show("Такой способ оплаты уже есть в списке!",
-                            "Внимание", MessageBoxButton.OK, MessageBoxImage.Warning);
-                        return;
-                    }
-
-                    // Просто добавляем новый способ оплаты в коллекцию
-                    var newPaymentMethod = new PaymentMethod
-                    {
-                        Name = newMethod,
-                        Value = newMethod
-                    };
-
-                    PaymentMethods.Add(newPaymentMethod);
-
-                    // Автоматически выбираем только что добавленный способ
-                    SelectedPaymentMethod = newPaymentMethod;
-
-                    MessageBox.Show($"Добавлен новый способ оплаты: {newMethod}",
-                        "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Ошибка: {ex.Message}",
-                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
+     
         // Метод для обновления статуса с иконкой
         private void UpdateStatus(string message, string icon = "⏳")
         {
@@ -1039,16 +993,65 @@ namespace ManagerApp.Pages
             }
         }
 
-        // Кнопка создания новой компании
+        private void btnAddCustomPayment_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Создаем простое окно для ввода способа оплаты
+                var dialog = new CustomPaymentDialog();
+
+                // Убираем Owner и просто центрируем на экране
+                dialog.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+
+                // Можно также установить Topmost, если нужно
+                // dialog.Topmost = true;
+
+                bool? result = dialog.ShowDialog();
+
+                if (result == true && !string.IsNullOrEmpty(dialog.PaymentMethodName))
+                {
+                    string newMethod = dialog.PaymentMethodName.Trim();
+
+                    // Проверяем, нет ли уже такого способа оплаты
+                    if (PaymentMethods.Any(p => p.Name == newMethod || p.Value == newMethod))
+                    {
+                        MessageBox.Show("Такой способ оплаты уже есть в списке!",
+                            "Внимание", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    // Просто добавляем новый способ оплаты в коллекцию
+                    var newPaymentMethod = new PaymentMethod
+                    {
+                        Name = newMethod,
+                        Value = newMethod
+                    };
+
+                    PaymentMethods.Add(newPaymentMethod);
+
+                    // Автоматически выбираем только что добавленный способ
+                    SelectedPaymentMethod = newPaymentMethod;
+
+                    MessageBox.Show($"Добавлен новый способ оплаты: {newMethod}",
+                        "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка: {ex.Message}",
+                    "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        // Аналогично для создания компании
         private async void btnCreateNewCompany_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                var createCompanyWindow = new CreateCompany(_bitrixService)
-                {
-                    Owner = Application.Current.MainWindow,
-                    WindowStartupLocation = WindowStartupLocation.CenterOwner
-                };
+                var createCompanyWindow = new CreateCompany(_bitrixService);
+
+                // Убираем Owner
+                createCompanyWindow.WindowStartupLocation = WindowStartupLocation.CenterScreen;
 
                 var result = createCompanyWindow.ShowDialog();
 

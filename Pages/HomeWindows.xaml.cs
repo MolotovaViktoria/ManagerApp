@@ -31,6 +31,7 @@ namespace ManagerApp.Pages
                 txtHome.Visibility = Visibility.Visible;
                 txtHistory.Visibility = Visibility.Visible;
                 txtSettings.Visibility = Visibility.Visible;
+                txtHome1.Visibility = Visibility.Visible;
             }
             else
             {
@@ -41,6 +42,7 @@ namespace ManagerApp.Pages
                 txtHome.Visibility = Visibility.Collapsed;
                 txtHistory.Visibility = Visibility.Collapsed;
                 txtSettings.Visibility = Visibility.Collapsed;
+                txtHome1.Visibility = Visibility.Collapsed;
             }
         }
 

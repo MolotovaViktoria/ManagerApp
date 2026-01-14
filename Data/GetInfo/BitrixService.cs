@@ -1296,25 +1296,43 @@ namespace ManagerApp.Data.GetInfo
             return myCompanies;
         }
 
-        public async Task<int> CreateCompany(string title, string phone = null, string address = null, bool registerEvent = true)
+        public async Task<int> CreateCompany(string title, string phone = null, string address = null,
+                                        string inn = null, string kpp = null, bool registerEvent = true)
         {
             if (string.IsNullOrWhiteSpace(title))
             {
                 throw new ArgumentException("Название компании обязательно");
             }
 
+            if (string.IsNullOrWhiteSpace(inn))
+            {
+                throw new ArgumentException("ИНН обязательно");
+            }
+
+            if (string.IsNullOrWhiteSpace(kpp))
+            {
+                throw new ArgumentException("КПП обязательно");
+            }
+
+            if (string.IsNullOrWhiteSpace(address))
+            {
+                throw new ArgumentException("Адрес обязателен");
+            }
+
             string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.company.add";
 
-            // Подготавливаем данные для создания компании БЕЗ OWNER_ID
+            // Подготавливаем данные для создания компании с новыми полями
             var requestData = new
             {
                 fields = new
                 {
                     TITLE = title.Trim(),
+                    UF_CRM_67055523A3E63 = inn.Trim(), // ИНН
+                    UF_CRM_67055523AA362 = kpp.Trim(), // КПП
+                    ADDRESS = address.Trim(), // Адрес
                     PHONE = !string.IsNullOrWhiteSpace(phone) ?
                            new[] { new { VALUE = phone.Trim(), VALUE_TYPE = "WORK" } } :
                            null,
-                    ADDRESS = !string.IsNullOrWhiteSpace(address) ? address.Trim() : null,
                     // НЕ УКАЗЫВАЕМ OWNER_ID - Bitrix назначит автоматически
                     // НЕ УКАЗЫВАЕМ ASSIGNED_BY_ID - будет использован текущий пользователь
                 },
@@ -1382,43 +1400,45 @@ namespace ManagerApp.Data.GetInfo
             }
         }
 
-        // Альтернативный метод для создания компании с минимальными полями
+        // Метод для минимального создания компании (без дополнительных полей)
         private async Task<int> CreateCompanyMinimal(string title, string phone = null, string address = null)
         {
+            string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.company.add";
+
+            var requestData = new
+            {
+                fields = new
+                {
+                    TITLE = title.Trim()
+                }
+            };
+
             try
             {
-                string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.company.add";
-
-                // САМЫЙ МИНИМАЛЬНЫЙ запрос - только название
-                var minimalRequest = new
-                {
-                    fields = new
-                    {
-                        TITLE = title.Trim()
-                    }
-                    // Не передаем даже @params
-                };
-
-                string jsonRequest = JsonConvert.SerializeObject(minimalRequest);
-                Console.WriteLine("=== МИНИМАЛЬНЫЕ ДАННЫЕ ===");
-                Console.WriteLine(jsonRequest);
-                Console.WriteLine("==========================");
-
+                string jsonRequest = JsonConvert.SerializeObject(requestData);
                 var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+
                 var response = await _httpClient.PostAsync(webhookUrl, content);
                 string jsonResponse = await response.Content.ReadAsStringAsync();
 
-                Console.WriteLine($"Минимальный ответ: {jsonResponse}");
-
                 var result = JsonConvert.DeserializeObject<BitrixAddResponse>(jsonResponse);
+
+                if (!string.IsNullOrEmpty(result?.Error))
+                {
+                    Console.WriteLine($"Ошибка минимального создания: {result.Error}");
+                    return 0;
+                }
+
                 return result?.Result ?? 0;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Ошибка в минимальном методе: {ex.Message}");
+                Console.WriteLine($"Исключение при минимальном создании компании: {ex.Message}");
                 return 0;
             }
         }
+
+       
 
 
         public async Task<List<ProductWithCategoryInfo>> GetProductsWithCategoryInfoByCategory(int categoryId)

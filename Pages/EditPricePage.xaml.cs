@@ -1,18 +1,19 @@
 ﻿using ManagerApp.Classes.Setting;
 using ManagerApp.Data.ScharedData;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
+using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Net.Http;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using static ManagerApp.Pages.NullableDecimalConverter;
 
 namespace ManagerApp.Pages
 {
@@ -223,6 +224,7 @@ namespace ManagerApp.Pages
             return "шт."; // Возвращаем "шт." по умолчанию
         }
 
+
         private async Task LoadMatchedProductsAsync(List<ManagerApp.Data.ScharedData.MatchedProduct> matchedProducts)
         {
             if (matchedProducts == null)
@@ -241,50 +243,66 @@ namespace ManagerApp.Pages
                     string measureId = "";
                     string unitSymbol = "";
                     string unitName = "";
+                    decimal purchasingPrice = 0; // По умолчанию 0
 
-                    // Всегда пытаемся получить из Bitrix (самый актуальный источник)
-                    Console.WriteLine($"Пробуем получить Measure из Bitrix для товара ID={matchedProduct.BitrixProductId}");
-
-                    try
+                    // Пробуем получить закупочную цену из каталога
+                    if (matchedProduct.BitrixProductId > 0)
                     {
-                        var productDetail = await BitrixProductService.GetProductAsync(matchedProduct.BitrixProductId);
+                        Console.WriteLine($"Пробуем получить закупочную цену из каталога для ID={matchedProduct.BitrixProductId}");
 
-                        if (productDetail != null && !string.IsNullOrEmpty(productDetail.MEASURE))
+                        try
                         {
-                            measureId = productDetail.MEASURE;
-                            Console.WriteLine($"Получено из Bitrix: MEASURE_ID={measureId}");
-                        }
-                        else
-                        {
-                            // Если не удалось получить из Bitrix, пробуем из MatchedProduct
-                            if (!string.IsNullOrEmpty(matchedProduct.Measure))
+                            var catalogProduct = await BitrixCatalogProductService.GetCatalogProductAsync(matchedProduct.BitrixProductId);
+
+                            if (catalogProduct != null && catalogProduct.PurchasingPrice.HasValue)
                             {
-                                measureId = matchedProduct.Measure;
-                                Console.WriteLine($"Используем Measure из MatchedProduct: ID={measureId}");
+                                purchasingPrice = catalogProduct.PurchasingPrice.Value;
+                                Console.WriteLine($"Получена закупочная цена из каталога: {purchasingPrice}");
                             }
                             else
                             {
-                                Console.WriteLine($"Не удалось получить Measure ни из Bitrix, ни из MatchedProduct, будет использовано значение по умолчанию");
+                                Console.WriteLine("Закупочная цена не найдена в каталоге, оставляем 0");
                             }
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Ошибка при получении Measure из Bitrix для товара ID={matchedProduct.BitrixProductId}: {ex.Message}");
-
-                        // При ошибке тоже пробуем из MatchedProduct
-                        if (!string.IsNullOrEmpty(matchedProduct.Measure))
+                        catch (Exception ex)
                         {
-                            measureId = matchedProduct.Measure;
-                            Console.WriteLine($"Используем Measure из MatchedProduct после ошибки: ID={measureId}");
+                            Console.WriteLine($"Ошибка при получении данных из каталога: {ex.Message}, оставляем закупочную цену = 0");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("BitrixProductId = 0, пропускаем запрос к каталогу");
+                    }
+
+                    // Получаем единицу измерения
+                    if (!string.IsNullOrEmpty(matchedProduct.Measure))
+                    {
+                        measureId = matchedProduct.Measure;
+                        Console.WriteLine($"Используем Measure из MatchedProduct: ID={measureId}");
+                    }
+                    else if (matchedProduct.BitrixProductId > 0)
+                    {
+                        // Если не нашли в MatchedProduct, пробуем из Bitrix
+                        try
+                        {
+                            var productDetail = await BitrixProductService.GetProductAsync(matchedProduct.BitrixProductId);
+                            if (productDetail != null && !string.IsNullOrEmpty(productDetail.MEASURE))
+                            {
+                                measureId = productDetail.MEASURE;
+                                Console.WriteLine($"Получено из Bitrix: MEASURE_ID={measureId}");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Ошибка при получении Measure из Bitrix: {ex.Message}");
                         }
                     }
 
-                    // Получаем название и символ (по умолчанию будет "Штука"/"шт.")
+                    // Получаем название и символ единицы измерения (по умолчанию "Штука"/"шт.")
                     unitSymbol = GetMeasureSymbol(measureId);
                     unitName = GetMeasureName(measureId);
 
-                    Console.WriteLine($"Итог для товара {matchedProduct.OriginalProductName}: Symbol='{unitSymbol}', Name='{unitName}'");
+                    Console.WriteLine($"Итог для товара {matchedProduct.OriginalProductName}: PurchasingPrice={purchasingPrice}, Symbol='{unitSymbol}', Name='{unitName}'");
 
                     var product = new ProductPriceViewModel
                     {
@@ -292,8 +310,8 @@ namespace ManagerApp.Pages
                         OriginalProductName = matchedProduct.OriginalProductName,
                         BitrixProductName = matchedProduct.BitrixProductName,
                         BitrixPrice = matchedProduct.BitrixPrice,
-                        PurchasingPrice = matchedProduct.PurchasingPrice,
-                        CustomPrice = matchedProduct.CustomPrice > 0 ? matchedProduct.CustomPrice : matchedProduct.BitrixPrice,
+                        PurchasingPrice = purchasingPrice, // 0 если не нашли
+                        CustomPrice = 0, // Пользователь сам введет свою цену
                         Quantity = matchedProduct.Quantity > 0 ? matchedProduct.Quantity : 1,
                         Unit = !string.IsNullOrEmpty(matchedProduct.Unit) ? matchedProduct.Unit : unitSymbol,
                         UnitFullName = unitName,
@@ -308,19 +326,19 @@ namespace ManagerApp.Pages
                 {
                     Console.WriteLine($"Ошибка при загрузке товара {matchedProduct.OriginalProductName}: {ex.Message}");
 
-                    // Создаем товар с значениями по умолчанию даже при ошибке
+                    // Создаем товар с минимальными данными
                     var defaultProduct = new ProductPriceViewModel
                     {
                         BitrixProductId = matchedProduct.BitrixProductId,
                         OriginalProductName = matchedProduct.OriginalProductName,
                         BitrixProductName = matchedProduct.BitrixProductName,
                         BitrixPrice = matchedProduct.BitrixPrice,
-                        PurchasingPrice = matchedProduct.PurchasingPrice,
-                        CustomPrice = matchedProduct.CustomPrice > 0 ? matchedProduct.CustomPrice : matchedProduct.BitrixPrice,
+                        PurchasingPrice = 0, // 0 при ошибке
+                        CustomPrice = 0, // Пользователь сам введет
                         Quantity = matchedProduct.Quantity > 0 ? matchedProduct.Quantity : 1,
                         Unit = !string.IsNullOrEmpty(matchedProduct.Unit) ? matchedProduct.Unit : "шт.",
                         UnitFullName = "Штука",
-                        MeasureId = matchedProduct.Measure,
+                        MeasureId = matchedProduct.Measure ?? "",
                         VAT = SettingsHelper.GetVATAsString()
                     };
 
@@ -331,8 +349,10 @@ namespace ManagerApp.Pages
 
             dataGridProducts.ItemsSource = Products;
             UpdateVATDisplay();
-            LoadPurchasingPricesBackground();
         }
+
+
+
         // Остальные методы без изменений...
         private async void LoadPurchasingPricesBackground()
         {
@@ -756,6 +776,71 @@ namespace ManagerApp.Pages
         {
             writer.WriteValue(value);
         }
+
+        // Сервис для получения деталей товара из Bitrix Catalog (с закупочной ценой)
+        public static class BitrixCatalogProductService
+        {
+            public static async Task<BitrixCatalogProductDetail> GetCatalogProductAsync(int productId)
+            {
+                try
+                {
+                    Console.WriteLine($"BitrixCatalogProductService.GetCatalogProductAsync: Запрос товара ID={productId}");
+
+                    using (var httpClient = new HttpClient())
+                    {
+                        httpClient.Timeout = TimeSpan.FromSeconds(30);
+
+                        string apiUrl = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/catalog.product.get?id={productId}";
+                        Console.WriteLine($"Запрос товара из каталога: {apiUrl}");
+
+                        var response = await httpClient.GetAsync(apiUrl);
+
+                        if (response.IsSuccessStatusCode)
+                        {
+                            var json = await response.Content.ReadAsStringAsync();
+                            Console.WriteLine($"Получены детали товара из каталога ID={productId}, длина: {json.Length} символов");
+
+                            // Для отладки
+                            int previewLength = Math.Min(300, json.Length);
+                            Console.WriteLine($"Начало ответа: {json.Substring(0, previewLength)}...");
+
+                            try
+                            {
+                                var result = JsonConvert.DeserializeObject<BitrixCatalogProductResponse>(json);
+                                var productDetail = result?.GetProductDetail();
+
+                                if (productDetail != null)
+                                {
+                                    Console.WriteLine($"Успешно загружены детали товара из каталога ID={productId}");
+                                    Console.WriteLine($"PurchasingPrice: {productDetail.PurchasingPrice}, Quantity: {productDetail.Quantity}");
+                                    return productDetail;
+                                }
+                                else
+                                {
+                                    Console.WriteLine($"Не удалось десериализовать ответ для товара ID={productId}");
+                                    return null;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"Ошибка JSON при десериализации товара ID={productId}: {ex.Message}");
+                                return null;
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine($"HTTP ошибка при загрузке товара ID={productId}: {response.StatusCode} - {response.ReasonPhrase}");
+                            return null;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Ошибка в BitrixCatalogProductService.GetCatalogProductAsync для ID={productId}: {ex.Message}");
+                    return null;
+                }
+            }
+        }
     }
 
     // Класс для ответа от Bitrix API для товара
@@ -1029,6 +1114,62 @@ namespace ManagerApp.Pages
         protected virtual void OnPropertyChanged(string propertyName)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    // Класс для деталей товара из Bitrix Catalog с закупочной ценой
+    public class BitrixCatalogProductDetail
+    {
+        [JsonProperty("id")]
+        public int Id { get; set; }
+
+        [JsonProperty("name")]
+        public string Name { get; set; }
+
+        [JsonProperty("purchasingPrice")]
+        [JsonConverter(typeof(NullableDecimalConverter))]
+        public decimal? PurchasingPrice { get; set; }
+
+        [JsonProperty("purchasingCurrency")]
+        public string PurchasingCurrency { get; set; }
+
+        [JsonProperty("quantity")]
+        public decimal? Quantity { get; set; }
+
+        [JsonProperty("measure")]
+        public string Measure { get; set; }
+
+        [JsonProperty("active")]
+        public string Active { get; set; }
+
+        [JsonProperty("code")]
+        public string Code { get; set; }
+    }
+
+    // Класс для ответа от Bitrix Catalog API
+    public class BitrixCatalogProductResponse
+    {
+        [JsonProperty("result")]
+        public JObject Result { get; set; } // Используем JObject для гибкости
+
+        public BitrixCatalogProductDetail GetProductDetail()
+        {
+            if (Result?["product"] == null)
+                return null;
+
+            var product = Result["product"];
+
+            return new BitrixCatalogProductDetail
+            {
+                Id = product["id"]?.Value<int>() ?? 0,
+                Name = product["name"]?.ToString(),
+                PurchasingPrice = product["purchasingPrice"]?.Value<decimal?>(),
+                PurchasingCurrency = product["purchasingCurrency"]?.ToString(),
+                Quantity = product["quantity"]?.Value<decimal?>(),
+                Measure = product["measure"]?.ToString(),
+                Active = product["active"]?.ToString(),
+                Code = product["code"]?.ToString()
+            };
         }
     }
 }

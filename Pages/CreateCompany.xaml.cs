@@ -24,9 +24,20 @@ namespace ManagerApp.Pages
             ValidateForm();
         }
 
+        // Добавляем параметры в метод ValidateForm
+        private void ValidateForm(object sender, TextChangedEventArgs e)
+        {
+            ValidateForm();
+        }
+
+        // Перегрузка метода без параметров
         private void ValidateForm()
         {
-            bool isValid = !string.IsNullOrWhiteSpace(txtTitle.Text);
+            bool isValid = !string.IsNullOrWhiteSpace(txtTitle.Text) &&
+                          !string.IsNullOrWhiteSpace(txtInn.Text) &&
+                          !string.IsNullOrWhiteSpace(txtKpp.Text) &&
+                          !string.IsNullOrWhiteSpace(txtAddress.Text);
+
             btnCreate.IsEnabled = isValid;
         }
 
@@ -42,11 +53,13 @@ namespace ManagerApp.Pages
 
                 // Получаем данные
                 string title = txtTitle.Text.Trim();
-                string phone = txtPhone.Text.Trim();
+                string inn = txtInn.Text.Trim();
+                string kpp = txtKpp.Text.Trim();
                 string address = txtAddress.Text.Trim();
+                string phone = txtPhone.Text.Trim();
 
                 // Вызываем метод создания компании
-                int companyId = await _bitrixService.CreateCompany(title, phone, address);
+                int companyId = await _bitrixService.CreateCompany(title, phone, address, inn, kpp);
 
                 if (companyId > 0)
                 {
