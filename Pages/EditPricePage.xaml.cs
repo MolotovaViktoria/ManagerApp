@@ -27,6 +27,16 @@ namespace ManagerApp.Pages
         private readonly object _measuresLock = new object();
 
         private decimal _totalSum;
+        private ObservableCollection<BitrixMeasure> _allMeasures;
+        public ObservableCollection<BitrixMeasure> AllMeasures
+        {
+            get => _allMeasures;
+            set
+            {
+                _allMeasures = value;
+                OnPropertyChanged(nameof(AllMeasures));
+            }
+        }
         public decimal TotalSum
         {
             get => _totalSum;
@@ -59,6 +69,7 @@ namespace ManagerApp.Pages
         {
             InitializeComponent();
             Products = new ObservableCollection<ProductPriceViewModel>();
+            AllMeasures = new ObservableCollection<BitrixMeasure>();
             DataContext = this;
         }
 
@@ -119,6 +130,15 @@ namespace ManagerApp.Pages
 
                 if (measures != null && measures.Any())
                 {
+                    await Dispatcher.InvokeAsync(() =>
+                    {
+                        AllMeasures.Clear();
+                        foreach (var measure in measures)
+                        {
+                            AllMeasures.Add(measure);
+                        }
+                    });
+
                     lock (_measuresLock)
                     {
                         _measuresDictionary.Clear();
@@ -132,13 +152,6 @@ namespace ManagerApp.Pages
                         }
 
                         Console.WriteLine($"Загружено {_measuresDictionary.Count} единиц измерения из Bitrix");
-
-                        // Выводим для отладки
-                        foreach (var measure in _measuresDictionary)
-                        {
-                            Console.WriteLine($"ID: {measure.Key}, Название: {measure.Value.MEASURE_TITLE}, Символ: {measure.Value.SYMBOL_RUS}");
-                        }
-
                         _measuresLoaded = true;
                     }
                 }
@@ -156,7 +169,6 @@ namespace ManagerApp.Pages
                 HideLoadingIndicator();
             }
         }
-
         // Метод для получения названия единицы измерения по ID
         private string GetMeasureName(string measureId)
         {
@@ -316,6 +328,8 @@ namespace ManagerApp.Pages
                         Unit = !string.IsNullOrEmpty(matchedProduct.Unit) ? matchedProduct.Unit : unitSymbol,
                         UnitFullName = unitName,
                         MeasureId = measureId,
+                        SelectedMeasureId = measureId, // Устанавливаем выбранную единицу
+                        IsMeasureEditable = true, // Разрешаем редактирование
                         VAT = SettingsHelper.GetVATAsString()
                     };
 
@@ -566,7 +580,8 @@ namespace ManagerApp.Pages
                 CustomPrice = p.CustomPrice,
                 Quantity = p.Quantity,
                 Unit = p.UnitFullName, // Сохраняем полное название в Unit
-                Measure = p.MeasureId,
+                Measure = p.SelectedMeasureId, // Сохраняем выбранную единицу
+
                 VAT = p.VAT,
                 PriceWithVAT = p.PriceWithVAT,
                 TotalWithVAT = p.TotalWithVAT
@@ -1042,6 +1057,8 @@ namespace ManagerApp.Pages
         public string UnitFullName { get; set; }
         public string VAT { get; set; }
         public decimal Total { get; set; }
+        public string MeasureId { get; set; }
+        public int Count { get; set; }
     }
 
     // Класс ProductPriceViewModel
@@ -1095,6 +1112,35 @@ namespace ManagerApp.Pages
             }
         }
 
+        // Добавляем свойство для выбранной единицы измерения
+        private string _selectedMeasureId;
+        public string SelectedMeasureId
+        {
+            get => _selectedMeasureId;
+            set
+            {
+                if (_selectedMeasureId != value)
+                {
+                    _selectedMeasureId = value;
+                    MeasureId = value;
+
+                    // Обновляем Unit и UnitFullName при изменении выбора
+                    if (!string.IsNullOrEmpty(value))
+                    {
+                        Unit = GetMeasureSymbol(value);
+                        UnitFullName = GetMeasureName(value);
+                        OnPropertyChanged(nameof(Unit));
+                        OnPropertyChanged(nameof(UnitFullName));
+                    }
+
+                    OnPropertyChanged(nameof(SelectedMeasureId));
+                }
+            }
+        }
+
+        // Добавляем свойство для возможности редактирования
+        public bool IsMeasureEditable { get; set; } = true;
+
         public decimal PriceWithVAT
         {
             get
@@ -1114,6 +1160,17 @@ namespace ManagerApp.Pages
         protected virtual void OnPropertyChanged(string propertyName)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        // Временные методы (будут заменены внешними)
+        private string GetMeasureSymbol(string measureId)
+        {
+            return "шт."; // Заменится на реальную логику
+        }
+
+        private string GetMeasureName(string measureId)
+        {
+            return "Штука"; // Заменится на реальную логику
         }
     }
 

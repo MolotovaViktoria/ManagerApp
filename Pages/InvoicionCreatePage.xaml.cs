@@ -1,4 +1,5 @@
-﻿using ManagerApp.Classes.Setting;
+﻿using DocumentFormat.OpenXml.Packaging;
+using ManagerApp.Classes.Setting;
 using ManagerApp.Data.GetInfo;
 using ManagerApp.Data.ScharedData;
 using Newtonsoft.Json;
@@ -18,6 +19,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using static ManagerApp.Data.GetInfo.BitrixService;
 
+using DocumentFormat.OpenXml.Wordprocessing;
 namespace ManagerApp.Pages
 {
     /// <summary>
@@ -380,6 +382,16 @@ namespace ManagerApp.Pages
             // ГЕНЕРАЦИЯ ДОКУМЕНТА WORD СРАЗУ ПОСЛЕ СОЗДАНИЯ СЧЕТА
             await GenerateAndDownloadDocumentAsync(invoiceId, foundProducts, notFoundProducts);
         }
+        private string RemoveRubleSymbolFromText(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return text;
+
+            return text
+                .Replace(" ₽", "")  // С пробелом
+                .Replace("₽", "")   // Без пробела
+                .Trim();
+        }
 
         private async Task GenerateAndDownloadDocumentAsync(int invoiceId,
             List<(string Name, int Id)> foundProducts, List<string> notFoundProducts)
@@ -713,33 +725,33 @@ namespace ManagerApp.Pages
                     return null;
                 }
 
+                // ОЧИЩАЕМ ДОКУМЕНТ ОТ СИМВОЛА РУБЛЯ
+                byte[] cleanedBytes = RemoveRubleSymbolFromDocument(fileBytes);
+
                 List<string> savedPaths = new List<string>();
 
-                // 1. Сохраняем в папку ManagerApp\History
+                // 1. Сохраняем в папку ManagerApp\History (ОЧИЩЕННЫЙ)
                 string appHistoryPath = GetAppHistoryFilePath(invoiceId, companyName);
-                await SaveToFileAsync(fileBytes, appHistoryPath);
+                await SaveToFileAsync(cleanedBytes, appHistoryPath); // Используем очищенный
                 savedPaths.Add(appHistoryPath);
 
-                // 2. Сохраняем в папку Downloads текущего пользователя
+                // 2. Сохраняем в папку Downloads (ОЧИЩЕННЫЙ)
                 string downloadsPath = GetDownloadsFilePath(invoiceId, companyName);
-                await SaveToFileAsync(fileBytes, downloadsPath);
+                await SaveToFileAsync(cleanedBytes, downloadsPath); // Используем очищенный
                 savedPaths.Add(downloadsPath);
 
                 // 3. Предлагаем пользователю выбрать дополнительную папку
-                string userSelectedPath = await SaveWithUserDialogAsync(fileBytes, invoiceId, companyName);
+                string userSelectedPath = await SaveWithUserDialogAsync(cleanedBytes, invoiceId, companyName);
                 if (!string.IsNullOrEmpty(userSelectedPath))
                 {
                     savedPaths.Add(userSelectedPath);
                 }
 
-                Console.WriteLine($"✅ Документ сохранен в {savedPaths.Count} местах:");
+                Console.WriteLine($"✅ Документ сохранен в {savedPaths.Count} местах (без символа ₽):");
                 foreach (var path in savedPaths)
                 {
                     Console.WriteLine($"   📁 {path}");
                 }
-
-                // Открываем папку History для просмотра
-                OpenFolderInExplorer(appHistoryPath);
 
                 return appHistoryPath;
             }
@@ -747,7 +759,6 @@ namespace ManagerApp.Pages
             {
                 Console.WriteLine($"❌ Ошибка скачивания: {ex.Message}");
 
-                // Если не удалось сохранить, открываем URL напрямую
                 Process.Start(new ProcessStartInfo
                 {
                     FileName = documentUrl,
@@ -776,7 +787,11 @@ namespace ManagerApp.Pages
                     Directory.CreateDirectory(yearMonthPath);
                 }
 
-                string safeCompanyName = RemoveInvalidFileNameChars(companyName);
+                // Убираем символ рубля из названия компании
+                string safeCompanyName = RemoveRubleSymbolFromText(companyName);
+                // Убираем недопустимые символы
+                safeCompanyName = RemoveInvalidFileNameChars(safeCompanyName);
+
                 string fileName = $"Счет_{invoiceId}_{safeCompanyName}_{DateTime.Now:yyyyMMdd_HHmmss}.docx";
 
                 return Path.Combine(yearMonthPath, fileName);
@@ -806,6 +821,30 @@ namespace ManagerApp.Pages
                 return null;
             }
         }
+        private byte[] RemoveRubleSymbolFromDocument(byte[] documentBytes)
+        {
+            try
+            {
+                using (MemoryStream stream = new MemoryStream(documentBytes))
+                using (WordprocessingDocument doc = WordprocessingDocument.Open(stream, true))
+                {
+                    // Находим все текстовые элементы в документе
+                    foreach (Text text in doc.MainDocumentPart.Document.Descendants<Text>())
+                    {
+                        // Заменяем символ рубля в тексте
+                        text.Text = text.Text.Replace("₽", "").Replace(" ₽", "").Trim();
+                    }
+
+                    doc.Save();
+                    return stream.ToArray();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка очистки документа: {ex.Message}");
+                return documentBytes; // Возвращаем оригинал в случае ошибки
+            }
+        }
 
         private async Task<string> SaveWithUserDialogAsync(byte[] fileBytes, int invoiceId, string companyName)
         {
@@ -813,11 +852,15 @@ namespace ManagerApp.Pages
             {
                 return await Task.Run(() =>
                 {
+                    // Убираем символ рубля из названия компании перед созданием имени файла
+                    string cleanCompanyName = RemoveRubleSymbolFromText(companyName);
+                    cleanCompanyName = RemoveInvalidFileNameChars(cleanCompanyName);
+
                     var saveFileDialog = new Microsoft.Win32.SaveFileDialog
                     {
                         Title = "Сохранить документ счета",
                         Filter = "Документ Word (*.docx)|*.docx|Все файлы (*.*)|*.*",
-                        FileName = $"Счет_{invoiceId}_{RemoveInvalidFileNameChars(companyName)}.docx",
+                        FileName = $"Счет_{invoiceId}_{cleanCompanyName}.docx", // Используем очищенное имя
                         DefaultExt = ".docx",
                         AddExtension = true
                     };

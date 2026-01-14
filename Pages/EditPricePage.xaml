@@ -277,13 +277,14 @@
                               HorizontalGridLinesBrush="#F0F0F0"
                               VerticalGridLinesBrush="#F0F0F0"
                               LoadingRow="DataGrid_LoadingRow"
-                              CellEditEnding="DataGrid_CellEditEnding" SelectionChanged="dataGridProducts_SelectionChanged">
+                              CellEditEnding="DataGrid_CellEditEnding" 
+                              SelectionChanged="dataGridProducts_SelectionChanged">
 
                         <DataGrid.Columns>
                             <!-- Колонка 1: Наименование товара (из заявки) -->
                             <DataGridTextColumn Header="НАИМЕНОВАНИЕ ТОВАРА"
                                                 Binding="{Binding OriginalProductName}"
-                                                Width="300"
+                                                Width="280"
                                                 IsReadOnly="True">
                                 <DataGridTextColumn.HeaderStyle>
                                     <Style TargetType="DataGridColumnHeader">
@@ -301,7 +302,7 @@
                                     <Style TargetType="TextBlock">
                                         <Setter Property="TextWrapping" Value="Wrap"/>
                                         <Setter Property="VerticalAlignment" Value="Center"/>
-                                        <Setter Property="HorizontalAlignment" Value="Center"/>
+                                        <Setter Property="HorizontalAlignment" Value="Left"/>
                                         <Setter Property="Padding" Value="10,5"/>
                                         <Setter Property="FontSize" Value="13"/>
                                     </Style>
@@ -311,7 +312,7 @@
                             <!-- Колонка 2: Товар из Bitrix -->
                             <DataGridTextColumn Header="ТОВАР ИЗ BITRIX"
                                                 Binding="{Binding BitrixProductName}"
-                                                Width="500"
+                                                Width="350"
                                                 IsReadOnly="True">
                                 <DataGridTextColumn.HeaderStyle>
                                     <Style TargetType="DataGridColumnHeader">
@@ -329,7 +330,7 @@
                                     <Style TargetType="TextBlock">
                                         <Setter Property="TextWrapping" Value="Wrap"/>
                                         <Setter Property="VerticalAlignment" Value="Center"/>
-                                        <Setter Property="HorizontalAlignment" Value="Center"/>
+                                        <Setter Property="HorizontalAlignment" Value="Left"/>
                                         <Setter Property="Padding" Value="10,5"/>
                                         <Setter Property="FontSize" Value="13"/>
                                     </Style>
@@ -339,7 +340,7 @@
                             <!-- Колонка 3: Цена из Bitrix -->
                             <DataGridTextColumn Header="РОЗНИЧНАЯ ЦЕНА"
                                                 Binding="{Binding BitrixPrice, StringFormat='{}{0:#,##0.00} ₽'}"
-                                                Width="140"
+                                                Width="120"
                                                 IsReadOnly="True">
                                 <DataGridTextColumn.HeaderStyle>
                                     <Style TargetType="DataGridColumnHeader">
@@ -365,9 +366,9 @@
 
                             <!-- Колонка 4: Закупочная цена -->
                             <DataGridTextColumn Header="ЗАКУПОЧНАЯ ЦЕНА"
-                    Binding="{Binding PurchasingPrice, StringFormat='{}{0:#,##0.00} ₽'}"
-                    Width="140"
-                    IsReadOnly="True">
+                                                Binding="{Binding PurchasingPrice, StringFormat='{}{0:#,##0.00} ₽'}"
+                                                Width="120"
+                                                IsReadOnly="True">
                                 <DataGridTextColumn.HeaderStyle>
                                     <Style TargetType="DataGridColumnHeader">
                                         <Setter Property="Background" Value="#F8F8F8"/>
@@ -391,15 +392,10 @@
                                 </DataGridTextColumn.ElementStyle>
                             </DataGridTextColumn>
 
-                            <!-- Остальные колонки сдвигаются на 1 позицию -->
-                            <!-- Колонка 5: Ввод своей цены (была 4) -->
-                            <!-- Колонка для полного названия единицы измерения -->
-                            <!-- Колонка для полного названия единицы измерения -->
-                            <DataGridTextColumn Header="ЕДИНИЦА ИЗМЕРЕНИЯ"
-                    Binding="{Binding UnitFullName, FallbackValue='Штука'}"
-                    Width="150"
-                    IsReadOnly="True">
-                                <DataGridTextColumn.HeaderStyle>
+                            <!-- Колонка 5: Выбор единицы измерения -->
+                            <DataGridTemplateColumn Header="ЕДИНИЦА ИЗМЕРЕНИЯ"
+                                                    Width="180">
+                                <DataGridTemplateColumn.HeaderStyle>
                                     <Style TargetType="DataGridColumnHeader">
                                         <Setter Property="Background" Value="#F8F8F8"/>
                                         <Setter Property="Foreground" Value="#333333"/>
@@ -410,23 +406,77 @@
                                         <Setter Property="BorderThickness" Value="0,0,1,1"/>
                                         <Setter Property="Padding" Value="10,5"/>
                                     </Style>
-                                </DataGridTextColumn.HeaderStyle>
-                                <DataGridTextColumn.ElementStyle>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="VerticalAlignment" Value="Center"/>
-                                        <Setter Property="HorizontalAlignment" Value="Center"/>
-                                        <Setter Property="Padding" Value="10,5"/>
-                                        <Setter Property="FontSize" Value="13"/>
-                                        <Setter Property="Text" Value="{Binding UnitFullName, FallbackValue='Штука'}"/>
-                                    </Style>
-                                </DataGridTextColumn.ElementStyle>
-                            </DataGridTextColumn>
-                            <!-- Колонка 6: Количество (была 5) -->
-                            <!-- и т.д. -->
+                                </DataGridTemplateColumn.HeaderStyle>
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ComboBox ItemsSource="{Binding Path=DataContext.AllMeasures, 
+                                                    RelativeSource={RelativeSource AncestorType={x:Type Page}}}"
+                                                  SelectedValue="{Binding SelectedMeasureId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  SelectedValuePath="ID"
+                                                  DisplayMemberPath="MEASURE_TITLE"
+                                                  Width="160"
+                                                  Height="30"
+                                                  FontSize="13"
+                                                  VerticalContentAlignment="Center"
+                                                  IsEnabled="{Binding IsMeasureEditable}">
+                                            <ComboBox.Style>
+                                                <Style TargetType="ComboBox">
+                                                    <Setter Property="Background" Value="White"/>
+                                                    <Setter Property="BorderBrush" Value="#E0E0E0"/>
+                                                    <Setter Property="BorderThickness" Value="1"/>
+                                                    <Setter Property="Padding" Value="5,0"/>
+                                                </Style>
+                                            </ComboBox.Style>
+                                        </ComboBox>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
 
-                            <!-- Колонка 4: Ввод своей цены -->
+                            <!-- Колонка 6: Количество -->
+                            <DataGridTemplateColumn Header="КОЛИЧЕСТВО"
+                                                    Width="120">
+                                <DataGridTemplateColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="Background" Value="#F8F8F8"/>
+                                        <Setter Property="Foreground" Value="#333333"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                        <Setter Property="FontSize" Value="12"/>
+                                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                        <Setter Property="BorderBrush" Value="#E0E0E0"/>
+                                        <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                                        <Setter Property="Padding" Value="10,5"/>
+                                    </Style>
+                                </DataGridTemplateColumn.HeaderStyle>
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding Quantity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                 Width="100"
+                                                 Height="30"
+                                                 FontSize="13"
+                                                 TextAlignment="Center"
+                                                 VerticalContentAlignment="Center"
+                                                 BorderBrush="#E0E0E0"
+                                                 BorderThickness="1"
+                                                 Padding="5,0"
+                                                 PreviewTextInput="TextBoxQuantity_PreviewTextInput"
+                                                 LostFocus="TextBoxQuantity_LostFocus">
+                                            <TextBox.Style>
+                                                <Style TargetType="TextBox">
+                                                    <Style.Triggers>
+                                                        <Trigger Property="IsFocused" Value="True">
+                                                            <Setter Property="BorderBrush" Value="#E2542A"/>
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBox.Style>
+                                        </TextBox>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Колонка 7: Ввод своей цены -->
                             <DataGridTemplateColumn Header="СВОЯ ЦЕНА"
-                                                    Width="140">
+                                                    Width="120">
                                 <DataGridTemplateColumn.HeaderStyle>
                                     <Style TargetType="DataGridColumnHeader">
                                         <Setter Property="Background" Value="#F8F8F8"/>
@@ -442,7 +492,7 @@
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <TextBox Text="{Binding CustomPrice, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                 Width="120"
+                                                 Width="100"
                                                  Height="30"
                                                  FontSize="13"
                                                  TextAlignment="Center"
@@ -466,9 +516,7 @@
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
 
-                        
-
-                            <!-- Колонка 7: НДС -->
+                            <!-- Колонка 8: НДС -->
                             <DataGridTextColumn Header="НДС"
                                                 Binding="{Binding VAT, StringFormat='{}{0}%'}"
                                                 Width="80"
@@ -495,10 +543,10 @@
                                 </DataGridTextColumn.ElementStyle>
                             </DataGridTextColumn>
 
-                            <!-- Колонка 8: Цена с НДС -->
+                            <!-- Колонка 9: Цена с НДС -->
                             <DataGridTextColumn Header="ЦЕНА С НДС"
                                                 Binding="{Binding PriceWithVAT, StringFormat='{}{0:#,##0.00} ₽'}"
-                                                Width="140"
+                                                Width="120"
                                                 IsReadOnly="True">
                                 <DataGridTextColumn.HeaderStyle>
                                     <Style TargetType="DataGridColumnHeader">
@@ -524,11 +572,10 @@
                                 </DataGridTextColumn.ElementStyle>
                             </DataGridTextColumn>
 
-                           
-                            <!-- Колонка 9: Сумма с НДС -->
+                            <!-- Колонка 10: Сумма с НДС -->
                             <DataGridTextColumn Header="СУММА С НДС"
                                                 Binding="{Binding TotalWithVAT, StringFormat='{}{0:#,##0.00} ₽'}"
-                                                Width="140"
+                                                Width="130"
                                                 IsReadOnly="True">
                                 <DataGridTextColumn.HeaderStyle>
                                     <Style TargetType="DataGridColumnHeader">
