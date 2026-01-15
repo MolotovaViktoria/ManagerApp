@@ -1,8 +1,10 @@
 ﻿using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
 using ManagerApp.Classes.Setting;
 using ManagerApp.Data.GetInfo;
 using ManagerApp.Data.ScharedData;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -18,8 +20,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using static ManagerApp.Data.GetInfo.BitrixService;
-
-using DocumentFormat.OpenXml.Wordprocessing;
 namespace ManagerApp.Pages
 {
     /// <summary>
@@ -27,7 +27,8 @@ namespace ManagerApp.Pages
     /// </summary>
     public partial class InvoicionCreatePage : Page, INotifyPropertyChanged
     {
-        DateTime inviteTime;
+        private DateTime? inviteTime; // nullable DateTime
+        DateTime invoiceDate;
         // Новые свойства для полей формы
         private string _invoiceNumber;
         public string InvoiceNumber
@@ -432,7 +433,7 @@ namespace ManagerApp.Pages
                     successMessage += $"\n\nПропущено: {notFoundProducts.Count} товаров";
                 }
 
-                MessageBox.Show(successMessage, "Готово", MessageBoxButton.OK, MessageBoxImage.Information);
+                //MessageBox.Show(successMessage, "Готово", MessageBoxButton.OK, MessageBoxImage.Information);
                 UpdateStatus($"Документ счета #{invoiceId} готов", "✅");
             }
             catch (Exception ex)
@@ -459,7 +460,8 @@ namespace ManagerApp.Pages
                     Quantity = item.Quantity,
                     Unit = item.UnitFullName,
                     VAT = item.VAT,
-                    Total = item.Total
+                    Total = item.Total,
+                    MiasureId = item.MeasureId
                 };
 
                 invoiceItem.PropertyChanged += InvoiceItem_PropertyChanged;
@@ -489,22 +491,27 @@ namespace ManagerApp.Pages
                     return;
                 }
 
-
-                // ПРОВЕРКА ТОВАРОВ
-                if (inviteTime == null)
+                // ОБРАБОТКА ДАТЫ
+                DateTime invoiceDate;
+                if (inviteTime == null || !inviteTime.HasValue)
                 {
-                    MessageBox.Show("Выберите дату!", "Ошибка",
-                        MessageBoxButton.OK, MessageBoxImage.Error);
-                    return;
+                    invoiceDate = DateTime.Today;
+                    Console.WriteLine($"⚠️ Дата не выбрана, используем сегодняшнюю: {invoiceDate:dd.MM.yyyy}");
+                }
+                else
+                {
+                    invoiceDate = inviteTime.Value;
+                    Console.WriteLine($"📅 Используем выбранную дату: {invoiceDate:dd.MM.yyyy}");
                 }
 
-                // ПОДТВЕРЖДЕНИЕ
-                var confirmResult = MessageBox.Show(
-                    $"Создать счет для {SelectedCompany.Title}?\n" +
-                    $"Итого: {GrandTotal:#,##0.00} ₽", "Подтверждение",
-                    MessageBoxButton.YesNo, MessageBoxImage.Question);
+                //ПОДТВЕРЖДЕНИЕ
+               var confirmResult = MessageBox.Show(
+                   $"Создание счета для {SelectedCompany.Title}?\n" +
+                   $"Дата: {invoiceDate:dd.MM.yyyy}\n" +
+                   $"Итого: {GrandTotal:#,##0.00} ₽", "",
+                   MessageBoxButton.OK, MessageBoxImage.Information);
 
-                if (confirmResult != MessageBoxResult.Yes) return;
+                //if (confirmResult != MessageBoxResult.Yes) return;
 
                 // БЛОКИРОВКА КНОПОК
                 DisableButtons();
@@ -521,8 +528,8 @@ namespace ManagerApp.Pages
 
                 if (notFoundProducts.Any()) ShowNotFoundWarning(notFoundProducts);
 
-                // СОЗДАНИЕ СЧЕТА
-                int invoiceId = await CreateBitrixInvoiceAsync(invoiceProducts);
+                // СОЗДАНИЕ СЧЕТА - передаем дату!
+                int invoiceId = await CreateBitrixInvoiceAsync(invoiceProducts, invoiceDate);
 
                 if (invoiceId > 0)
                 {
@@ -619,7 +626,7 @@ namespace ManagerApp.Pages
                             Quantity = item.Quantity,
                             Price = item.Price,
                             UnitName = item.Unit,
-
+                            MeasureId = item.MiasureId
                             
                         });
 
@@ -652,54 +659,46 @@ namespace ManagerApp.Pages
             MessageBox.Show(warning, "Внимание", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
 
-        private async Task<int> CreateBitrixInvoiceAsync(List<InvoiceProduct> invoiceProducts)
+        private async Task<int> CreateBitrixInvoiceAsync(List<InvoiceProduct> invoiceProducts, DateTime invoiceDate)
         {
             UpdateStatus("Создание счета...", "⏳");
+            Console.WriteLine($"📅 Дата для создания счета: {invoiceDate:dd.MM.yyyy}");
 
             // Получаем ID выбранного сотрудника из настроек
             int responsibleEmployeeId = IDSetting.GetSelectedEmployeeId();
 
             if (responsibleEmployeeId <= 0)
             {
-                // Если сотрудник не выбран, используем значение по умолчанию (241) и показываем предупреждение
-                responsibleEmployeeId = 241; // значение по умолчанию
-                UpdateStatus("Ответственный сотрудник не выбран, используется значение по умолчанию", "⚠️");
-                Console.WriteLine("⚠️ Внимание: ответственный сотрудник не выбран в настройках!");
+                responsibleEmployeeId = 241;
+                Console.WriteLine("⚠️ Ответственный сотрудник не выбран, используем 241");
             }
             else
             {
-                //// Получаем информацию о сотруднике для логов
-                //int employee = IDSetting.GetSelectedEmployeeId();
-                //if (employee != null)
-                //{
-                //    Console.WriteLine($"✅ Ответственный сотрудник: {employee} ");
-                //}
+                Console.WriteLine($"✅ Ответственный сотрудник ID: {responsibleEmployeeId}");
             }
 
-            string orderTopic = $"Счет для {SelectedCompany.Title} от {DateTime.Now:dd.MM.yyyy}";
+            // Используем переданную дату в заголовке
+            string orderTopic = $"Счет для {SelectedCompany.Title} от {invoiceDate:dd.MM.yyyy}";
 
             // ВЫВОД НОВЫХ ПОЛЕЙ В КОНСОЛЬ ПЕРЕД СОЗДАНИЕМ
             Console.WriteLine("=== ПЕРЕДАВАЕМЫЕ ДАННЫЕ ДЛЯ СЧЕТА ===");
-            Console.WriteLine($"1. Номер счета: {InvoiceNumber}");
-            Console.WriteLine($"2. Адрес: {Address}");
-            Console.WriteLine($"3. Дней доставки: {DeliveryDays}");
-            Console.WriteLine($"4. Способ оплаты: {(SelectedPaymentMethod?.Name ?? "Не выбран")}");
-            Console.WriteLine($"5. Ответственный сотрудник ID: {responsibleEmployeeId}");
-
-            // Показываем имя сотрудника, если он выбран
-            if (responsibleEmployeeId > 0)
-            {
-                int employeeId = IDSetting.GetSelectedEmployeeId();
-
-            }
-
+            Console.WriteLine($"1. Дата счета: {invoiceDate:dd.MM.yyyy}");
+            Console.WriteLine($"2. Номер счета: {InvoiceNumber}");
+            Console.WriteLine($"3. Клиент: {SelectedCompany.Title} (ID: {SelectedCompany.Id})");
+            Console.WriteLine($"4. Компания: {SelectedMyCompany.Title} (ID: {SelectedMyCompany.Id})");
+            Console.WriteLine($"5. Адрес: {Address}");
+            Console.WriteLine($"6. Дней доставки: {DeliveryDays}");
+            Console.WriteLine($"7. Способ оплаты: {(SelectedPaymentMethod?.Name ?? "Не выбран")}");
+            Console.WriteLine($"8. Ответственный сотрудник ID: {responsibleEmployeeId}");
             Console.WriteLine("=====================================");
 
             if (string.IsNullOrEmpty(Address))
+            {
                 Address = "самовывоз со склада Поставщика г. Екатеринбург, ул. Мартовская, д.8: с 9 ч. 00 мин. до 18 ч. 00 мин. по местному времени в рабочие дни";
+            }
 
             return await _bitrixService.CreateSmartInvoice(
-                inviteTime,
+                invoiceDate, // передаем дату
                 SelectedCompany.Id,
                 SelectedMyCompany.Id,
                 orderTopic,
@@ -708,8 +707,7 @@ namespace ManagerApp.Pages
                 Address,
                 DeliveryDays,
                 SelectedPaymentMethod?.Value ?? "Не указано",
-
-                responsibleEmployeeId // Передаем ID сотрудника вместо жестко закодированного значения
+                responsibleEmployeeId
             );
         }
 
@@ -732,20 +730,18 @@ namespace ManagerApp.Pages
 
                 // 1. Сохраняем в папку ManagerApp\History (ОЧИЩЕННЫЙ)
                 string appHistoryPath = GetAppHistoryFilePath(invoiceId, companyName);
-                await SaveToFileAsync(cleanedBytes, appHistoryPath); // Используем очищенный
+                await SaveToFileAsync(cleanedBytes, appHistoryPath);
                 savedPaths.Add(appHistoryPath);
 
-                // 2. Сохраняем в папку Downloads (ОЧИЩЕННЫЙ)
+                // 2. Сохраняем в папку Downloads (ОЧИЩЕННЫЙ) И СРАЗУ ОТКРЫВАЕМ
                 string downloadsPath = GetDownloadsFilePath(invoiceId, companyName);
-                await SaveToFileAsync(cleanedBytes, downloadsPath); // Используем очищенный
+                await SaveToFileAsync(cleanedBytes, downloadsPath);
                 savedPaths.Add(downloadsPath);
 
-                // 3. Предлагаем пользователю выбрать дополнительную папку
-                string userSelectedPath = await SaveWithUserDialogAsync(cleanedBytes, invoiceId, companyName);
-                if (!string.IsNullOrEmpty(userSelectedPath))
-                {
-                    savedPaths.Add(userSelectedPath);
-                }
+                // ОТКРЫВАЕМ ФАЙЛ СРАЗУ ПОСЛЕ СОХРАНЕНИЯ
+                OpenFile(downloadsPath);
+
+
 
                 Console.WriteLine($"✅ Документ сохранен в {savedPaths.Count} местах (без символа ₽):");
                 foreach (var path in savedPaths)
@@ -766,6 +762,30 @@ namespace ManagerApp.Pages
                 });
 
                 return null;
+            }
+        }
+
+        private void OpenFile(string filePath)
+        {
+            try
+            {
+                if (File.Exists(filePath))
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = filePath,
+                        UseShellExecute = true
+                    });
+                    Console.WriteLine($"📂 Открыт файл: {filePath}");
+                }
+                else
+                {
+                    Console.WriteLine($"❌ Файл не найден: {filePath}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Ошибка при открытии файла: {ex.Message}");
             }
         }
 
@@ -1288,36 +1308,113 @@ namespace ManagerApp.Pages
             }
         }
 
+
+        private async Task<bool> CheckInvoiceExistsAsync(string invoiceNumber)
+        {
+            Console.WriteLine($"=== НАЧАЛО ПРОВЕРКИ НОМЕРА '{invoiceNumber}' ===");
+
+            BitrixService bitrixService = new BitrixService();
+
+            try
+            {
+                // Пробуем разные варианты фильтра
+                var filtersToTry = new List<Dictionary<string, object>>
+        {
+            new Dictionary<string, object> { ["ACCOUNT_NUMBER"] = invoiceNumber },
+            new Dictionary<string, object> { ["=ACCOUNT_NUMBER"] = invoiceNumber }
+        };
+
+                foreach (var filter in filtersToTry)
+                {
+                    Console.WriteLine($"Пробуем фильтр: {JsonConvert.SerializeObject(filter)}");
+
+                    var result = await bitrixService.CallMethodAsync("crm.item.list", new
+                    {
+                        entityTypeId = 31,
+                        filter = filter,
+                        select = new[] { "id", "ACCOUNT_NUMBER", "TITLE" }
+                    });
+
+                    Console.WriteLine($"Ответ Bitrix: {result.ToString(Newtonsoft.Json.Formatting.None)}");
+
+                    JArray items = null;
+                    if (result["result"]?["items"] is JArray r1)
+                        items = r1;
+                    else if (result["items"] is JArray r2)
+                        items = r2;
+
+                    if (items != null && items.Count > 0)
+                    {
+                        Console.WriteLine($"УСПЕХ! Найден счет: ID={items[0]["id"]}, Номер={items[0]["accountNumber"]}");
+                        return true;
+                    }
+                }
+
+                Console.WriteLine($"Номер '{invoiceNumber}' не найден в системе");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ОШИБКА: {ex.Message}");
+                return false;
+            }
+            finally
+            {
+                Console.WriteLine($"=== КОНЕЦ ПРОВЕРКИ НОМЕРА '{invoiceNumber}' ===");
+            }
+        }
         private async void btnFinish_Click(object sender, RoutedEventArgs e)
         {
-            if (SelectedCompany == null)
+            if (SelectedCompany == null || SelectedMyCompany == null)
             {
-                MessageBox.Show("Выберите компанию клиента!", "Ошибка",
+                MessageBox.Show("Выберите компании!", "Ошибка",
                     MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
 
-            if (SelectedMyCompany == null)
+            // Проверяем только если введен номер
+            if (!string.IsNullOrWhiteSpace(txtInvoiceNumber.Text))
             {
-                MessageBox.Show("Выберите вашу компанию!", "Ошибка",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
+                string invoiceNumber = txtInvoiceNumber.Text.Trim();
+                Console.WriteLine($"Начинаем проверку номера: '{invoiceNumber}'");
+
+                bool exists = await CheckInvoiceExistsAsync(invoiceNumber);
+                Console.WriteLine($"Результат проверки: {exists}");
+
+                if (exists)
+                {
+                    Console.WriteLine("Показываем MessageBox...");
+
+                    // ОБЯЗАТЕЛЬНО ждем пока MessageBox закроется
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        MessageBox.Show($"Счет с номером '{invoiceNumber}' уже существует!\n\n" +
+                                      "Пожалуйста, введите другой номер.",
+                                      "Номер занят",
+                                      MessageBoxButton.OK,
+                                      MessageBoxImage.Error);
+                    });
+
+                    Console.WriteLine("MessageBox закрыт, прерываем выполнение");
+                    btnFinish.IsEnabled = true;
+                    return;
+                }
+                Console.WriteLine("Проверка пройдена, номер свободен");
             }
 
             try
             {
                 btnFinish.IsEnabled = false;
+                Console.WriteLine("Начинаем создание счета...");
                 await CreateInvoiceAsync();
 
-                MessageBox.Show($"Счет успешно создан для:\n" +
-                              $"Клиент: {SelectedCompany.Title}\n" +
-                              $"Ваша компания: {SelectedMyCompany.Title}\n" +
-                              $"Товаров: {InvoiceItems.Count}\n" +
-                              $"Итого: {GrandTotal:#,##0.00} ₽",
-                              "Счет создан", MessageBoxButton.OK, MessageBoxImage.Information);
+                //MessageBox.Show($"Счет успешно создан!\n" +
+                //              $"Номер: {InvoiceNumber}\n" +
+                //              $"Клиент: {SelectedCompany.Title}\n" +
+                //              $"Итого: {GrandTotal:#,##0.00} ₽",
+                //              "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
 
-                var dombPage = new DombPage();
-                NavigationService.Navigate(dombPage);
+                NavigationService.Navigate(new DombPage());
             }
             catch (Exception ex)
             {
@@ -1329,6 +1426,7 @@ namespace ManagerApp.Pages
                 btnFinish.IsEnabled = true;
             }
         }
+
 
         private void PreviewInvoice()
         {
@@ -1442,6 +1540,18 @@ namespace ManagerApp.Pages
             {
                 _productName = value;
                 OnPropertyChanged(nameof(ProductName));
+            }
+        }
+
+        private string _miasureId;
+
+        public string MiasureId
+        {
+            get => _miasureId;
+            set
+            {
+                _miasureId = value;
+                OnPropertyChanged(nameof(MiasureId));
             }
         }
 

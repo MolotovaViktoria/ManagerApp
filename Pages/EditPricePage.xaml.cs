@@ -553,6 +553,7 @@ namespace ManagerApp.Pages
                 Unit = p.Unit,
                 UnitFullName = p.UnitFullName,
                 VAT = p.VAT,
+                MeasureId = p.MeasureId,
                 Total = p.TotalWithVAT
             }).ToList();
 

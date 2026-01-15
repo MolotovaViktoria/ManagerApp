@@ -1,5 +1,6 @@
 ﻿using ManagerApp.Classes;
 using ManagerApp.Classes.Setting;
+using ManagerApp.Data.GetInfo;
 using ManagerApp.Data.ScharedData;
 using ManagerApp.Data.Search;
 using ManagerApp.Data.StructureList;
@@ -581,8 +582,10 @@ namespace ManagerApp.Pages
             }
         }
 
-        private void btnNext_Click(object sender, RoutedEventArgs e)
+        private async void btnNext_Click(object sender, RoutedEventArgs e)
         {
+            BitrixService bitrixService = new BitrixService();
+
             // Проверка 1: Есть ли вообще товары в списке
             if (!ProductItems.Any())
             {
@@ -593,53 +596,25 @@ namespace ManagerApp.Pages
                 return;
             }
 
-            // Проверка 2: Есть ли неподобранные товары
-            var unmatchedProducts = ProductItems.Where(p => p.SelectedBitrixProduct == null).ToList();
+            // Итоговый список сопоставленных товаров
+            var matchedProductList = new List<MatchedProduct>();
 
-            if (unmatchedProducts.Any())
+            // Обрабатываем уже сопоставленные товары
+            foreach (var item in ProductItems.Where(p => p.SelectedBitrixProduct != null))
             {
-                string unmatchedList = string.Join("\n", unmatchedProducts.Select(p => $"• {p.OriginalProduct}"));
-
-                MessageBox.Show($"Есть неподобранные товары: {unmatchedProducts.Count}\n\n" +
-                               $"Неподобранные товары:\n{unmatchedList}\n\n" +
-                               "Пожалуйста, сопоставьте все товары перед продолжением.",
-                               "Внимание",
-                               MessageBoxButton.OK,
-                               MessageBoxImage.Warning);
-                return;
-            }
-
-            // Проверка 3: Все ли товары имеют валидное сопоставление
-            foreach (var item in ProductItems)
-            {
-                if (item.SelectedBitrixProduct == null)
+                // Безопасное преобразование ID
+                if (!int.TryParse(item.SelectedBitrixProduct?.ProductId, out int bitrixProductId) || bitrixProductId <= 0)
                 {
-                    MessageBox.Show($"Товар '{item.OriginalProduct}' не сопоставлен.",
+                    MessageBox.Show($"Некорректный ID товара для '{item.OriginalProduct}'",
                                   "Ошибка",
                                   MessageBoxButton.OK,
                                   MessageBoxImage.Error);
                     return;
                 }
 
-                if (string.IsNullOrWhiteSpace(item.SelectedBitrixProduct.ProductId) ||
-                    item.SelectedBitrixProduct.ProductId == "0")
-                {
-                    MessageBox.Show($"Товар '{item.OriginalProduct}' имеет некорректное сопоставление.",
-                                  "Ошибка",
-                                  MessageBoxButton.OK,
-                                  MessageBoxImage.Error);
-                    return;
-                }
-            }
-
-            // Все проверки пройдены - формируем список
-            var matchedProducts = new List<MatchedProduct>();
-
-            foreach (var item in ProductItems)
-            {
                 var matchedProduct = new MatchedProduct
                 {
-                    BitrixProductId = Convert.ToInt32(item.SelectedBitrixProduct.ProductId),
+                    BitrixProductId = bitrixProductId,
                     OriginalProductName = item.OriginalProduct,
                     BitrixProductName = item.SelectedBitrixProduct.ProductName,
                     BitrixPrice = item.SelectedBitrixProduct.Price,
@@ -648,11 +623,91 @@ namespace ManagerApp.Pages
                     Unit = "шт.",
                     VAT = SettingsHelper.GetVATAsString()
                 };
-                matchedProducts.Add(matchedProduct);
+                matchedProductList.Add(matchedProduct);
             }
 
-            PriceDataManager.SetMatchedProducts(matchedProducts);
-            var editPricePage = new EditPricePage(matchedProducts);
+            // Проверяем несопоставленные товары
+            var unmatchedProducts = ProductItems.Where(p => p.SelectedBitrixProduct == null).ToList();
+
+            if (unmatchedProducts.Any())
+            {
+                var result = MessageBox.Show($"Найдено {unmatchedProducts.Count} неподобранных товаров.\n\n" +
+                                            "Хотите создать их в Битрикс24 автоматически?",
+                                            "Создание товаров",
+                                            MessageBoxButton.YesNo,
+                                            MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    try
+                    {
+                        // Создаем каждый несопоставленный товар и сразу добавляем в список
+                        foreach (var item in unmatchedProducts)
+                        {
+                            int createdProductId = await bitrixService.CreateProductAsync(item.OriginalProduct);
+
+                            if (createdProductId > 0)
+                            {
+                                // Сразу добавляем созданный товар в итоговый список
+                                var matchedProduct = new MatchedProduct
+                                {
+                                    BitrixProductId = createdProductId,
+                                    OriginalProductName = item.OriginalProduct,
+                                    BitrixProductName = item.OriginalProduct, // Используем оригинальное название
+                                    BitrixPrice = 0, // Цена по умолчанию
+                                    CustomPrice = 0, // Цена по умолчанию
+                                    Quantity = 1,
+                                    Unit = "шт.",
+                                    VAT = SettingsHelper.GetVATAsString()
+                                };
+                                matchedProductList.Add(matchedProduct);
+
+
+
+                                Console.WriteLine($"✅ Создан товар '{item.OriginalProduct}' (ID: {createdProductId})");
+                            }
+                            else
+                            {
+                                MessageBox.Show($"Не удалось создать товар '{item.OriginalProduct}'",
+                                              "Ошибка создания",
+                                              MessageBoxButton.OK,
+                                              MessageBoxImage.Error);
+                                return;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"Ошибка при создании товаров: {ex.Message}",
+                                      "Ошибка",
+                                      MessageBoxButton.OK,
+                                      MessageBoxImage.Error);
+                        return;
+                    }
+                }
+                else
+                {
+                    MessageBox.Show("Пожалуйста, сопоставьте все товары вручную перед продолжением.",
+                                  "Необходимо сопоставление",
+                                  MessageBoxButton.OK,
+                                  MessageBoxImage.Warning);
+                    return;
+                }
+            }
+
+            // Проверка: есть ли товары в итоговом списке
+            if (!matchedProductList.Any())
+            {
+                MessageBox.Show("Не удалось сформировать список товаров для обработки.",
+                              "Ошибка",
+                              MessageBoxButton.OK,
+                              MessageBoxImage.Error);
+                return;
+            }
+
+            // Сохраняем и переходим на следующую страницу
+            PriceDataManager.SetMatchedProducts(matchedProductList);
+            var editPricePage = new EditPricePage(matchedProductList);
             NavigationService.Navigate(editPricePage);
         }
 

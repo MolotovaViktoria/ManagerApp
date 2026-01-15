@@ -548,58 +548,104 @@
                                        FontWeight="Bold"
                                        Foreground="#333333"/>
                         </Border>
+<!-- Таблица товаров -->
+<ScrollViewer Grid.Row="1"
+              VerticalScrollBarVisibility="Auto"
+              Margin="0">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <!-- Заголовки -->
+            <RowDefinition Height="*"/> <!-- Список товаров -->
+        </Grid.RowDefinitions>
 
-                        <!-- Таблица товаров -->
-                        <ScrollViewer Grid.Row="1"
-                                      VerticalScrollBarVisibility="Auto">
-                            <ItemsControl ItemsSource="{Binding InvoiceItems}"
-                                          Margin="0">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border BorderBrush="#E0E0E0"
-                                                BorderThickness="0,0,0,1"
-                                                Padding="15,10">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*"/>
-                                                    <ColumnDefinition Width="80"/>
-                                                    <ColumnDefinition Width="100"/>
-                                                    <ColumnDefinition Width="30"/>
-                                                </Grid.ColumnDefinitions>
+        <!-- Заголовки таблицы -->
+        <Border Grid.Row="0"
+                BorderBrush="#E0E0E0"
+                BorderThickness="0,0,0,1"
+                Background="#F8F8F8"
+                Padding="15,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="80"/>
+                    <ColumnDefinition Width="100"/>
+                </Grid.ColumnDefinitions>
 
-                                                <!-- Название товара -->
-                                                <TextBlock Grid.Column="0"
-                                                           Text="{Binding ProductName}"
-                                                           TextWrapping="Wrap"
-                                                           VerticalAlignment="Center"
-                                                           FontSize="14"/>
+                <!-- Название -->
+                <TextBlock Grid.Column="0"
+                           Text="Наименование"
+                           VerticalAlignment="Center"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="#333333"/>
 
-                                                <!-- Количество -->
-                                                <TextBox Grid.Column="1"
-                                                         Text="{Binding Quantity, StringFormat='{}{0}'}"
-                                                         Margin="5,0"
-                                                         VerticalAlignment="Center"
-                                                         FontSize="14"
-                                                         TextAlignment="Center"
-                                                         Width="60"
-                                                         Height="30"
-                                                         Padding="5,0"/>
+                <!-- Количество -->
+                <TextBlock Grid.Column="1"
+                           Text="Количество"
+                           VerticalAlignment="Center"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="#333333"
+                           HorizontalAlignment="Center"/>
 
-                                                <!-- Цена -->
-                                                <TextBlock Grid.Column="2"
-                                                           Text="{Binding Price,  StringFormat='{}{0:#,##0.00} ₽'}"
-                                                           VerticalAlignment="Center"
-                                                           FontSize="14"
-                                                           TextAlignment="Right"
-                                                           Margin="5,0"/>
+                <!-- Стоимость -->
+                <TextBlock Grid.Column="2"
+                           Text="Стоимость"
+                           VerticalAlignment="Center"
+                           FontSize="14"
+                           FontWeight="Bold"
+                           Foreground="#333333"
+                           HorizontalAlignment="Right"/>
+            </Grid>
+        </Border>
 
+        <!-- Список товаров -->
+        <ItemsControl Grid.Row="1"
+                      ItemsSource="{Binding InvoiceItems}"
+                      Margin="0,1,0,0">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Border BorderBrush="#E0E0E0"
+                            BorderThickness="0,0,0,1"
+                            Padding="15,10"
+                            Background="White">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="80"/>
+                                <ColumnDefinition Width="100"/>
+                            </Grid.ColumnDefinitions>
 
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </ScrollViewer>
+                            <!-- Название товара -->
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding ProductName}"
+                                       TextWrapping="Wrap"
+                                       VerticalAlignment="Center"
+                                       FontSize="14"
+                                       Foreground="#333333"/>
+
+                            <!-- Количество (TextBlock вместо TextBox) -->
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding Quantity, StringFormat='{}{0:0.##}'}"
+                                       VerticalAlignment="Center"
+                                       FontSize="14"
+                                       HorizontalAlignment="Center"
+                                       Foreground="#333333"/>
+
+                            <!-- Цена -->
+                            <TextBlock Grid.Column="2"
+                                       Text="{Binding Price, StringFormat='{}{0:#,##0.00} ₽'}"
+                                       VerticalAlignment="Center"
+                                       FontSize="14"
+                                       HorizontalAlignment="Right"
+                                       Foreground="#333333"/>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </Grid>
+</ScrollViewer>
                     </Grid>
                 </Border>
 

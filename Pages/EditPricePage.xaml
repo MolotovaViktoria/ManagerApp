@@ -459,7 +459,7 @@
                                                  BorderThickness="1"
                                                  Padding="5,0"
                                                  PreviewTextInput="TextBoxQuantity_PreviewTextInput"
-                                                 LostFocus="TextBoxQuantity_LostFocus">
+                                                 >
                                             <TextBox.Style>
                                                 <Style TargetType="TextBox">
                                                     <Style.Triggers>
