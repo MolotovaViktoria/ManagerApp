@@ -392,11 +392,21 @@ namespace ManagerApp.Pages
             {
                 item.BitrixProducts.Clear();
 
+                // Добавляем пустой элемент
+                item.BitrixProducts.Add(new Data.ScharedData.BitrixProductViewModel
+                {
+                    ProductId = "0",
+                    ProductName = "-- Не выбран --",
+                    CategoryName = string.Empty,
+                    HasPrice = false,
+                    Price = 0
+                });
+
                 if (products == null || !products.Any())
                 {
                     item.BitrixProducts.Add(new Data.ScharedData.BitrixProductViewModel
                     {
-                        ProductId = "0",
+                        ProductId = "-1",
                         ProductName = "❌ Товар не найден",
                         CategoryName = "Нажмите кнопку поиска для ручного подбора",
                         HasPrice = false
@@ -599,9 +609,30 @@ namespace ManagerApp.Pages
             // Итоговый список сопоставленных товаров
             var matchedProductList = new List<MatchedProduct>();
 
-            // Обрабатываем уже сопоставленные товары
-            foreach (var item in ProductItems.Where(p => p.SelectedBitrixProduct != null))
+            // Списки для разных типов товаров
+            var unmatchedProducts = new List<ProductItemViewModel>();
+
+            // Обрабатываем все товары
+            foreach (var item in ProductItems)
             {
+                if (item.SelectedBitrixProduct == null)
+                {
+                    // Товар без выбора
+                    unmatchedProducts.Add(item);
+                    continue;
+                }
+
+                // Проверяем, не является ли выбранный товар пустым или "не найден"
+                if (item.SelectedBitrixProduct.ProductId == "0" ||
+                    item.SelectedBitrixProduct.ProductId == "-1" ||
+                    item.SelectedBitrixProduct.ProductName.Contains("-- Не выбран --") ||
+                    item.SelectedBitrixProduct.ProductName.Contains("❌ Товар не найден"))
+                {
+                    // Обрабатываем как несопоставленный товар
+                    unmatchedProducts.Add(item);
+                    continue;
+                }
+
                 // Безопасное преобразование ID
                 if (!int.TryParse(item.SelectedBitrixProduct?.ProductId, out int bitrixProductId) || bitrixProductId <= 0)
                 {
@@ -627,12 +658,11 @@ namespace ManagerApp.Pages
             }
 
             // Проверяем несопоставленные товары
-            var unmatchedProducts = ProductItems.Where(p => p.SelectedBitrixProduct == null).ToList();
-
             if (unmatchedProducts.Any())
             {
-                var result = MessageBox.Show($"Найдено {unmatchedProducts.Count} неподобранных товаров.\n\n" +
-                                            "Хотите создать их в Битрикс24 автоматически?",
+                var result = MessageBox.Show($"Найдено {unmatchedProducts.Count} неподобранных товаров:\n\n" +
+                                            string.Join("\n", unmatchedProducts.Select(p => $"• {p.OriginalProduct}")) +
+                                            "\n\nХотите создать их в Битрикс24 автоматически?",
                                             "Создание товаров",
                                             MessageBoxButton.YesNo,
                                             MessageBoxImage.Question);
@@ -661,8 +691,6 @@ namespace ManagerApp.Pages
                                     VAT = SettingsHelper.GetVATAsString()
                                 };
                                 matchedProductList.Add(matchedProduct);
-
-
 
                                 Console.WriteLine($"✅ Создан товар '{item.OriginalProduct}' (ID: {createdProductId})");
                             }
