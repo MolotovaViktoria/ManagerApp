@@ -394,7 +394,7 @@
                                                 BorderBrush="#E0E0E0"
                                                 BorderThickness="0,0,1,0"
                                                 Padding="10,0">
-                                            <TextBlock Text="{Binding OriginalProduct}"
+                                            <TextBox Text="{Binding OriginalProduct, Mode=TwoWay}"
                                                        TextWrapping="Wrap"
                                                        HorizontalAlignment="Center"
                                                        VerticalAlignment="Center"
