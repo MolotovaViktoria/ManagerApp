@@ -43,10 +43,10 @@ namespace ManagerApp.Data.Search
             return products;
         }
 
-        // ОСНОВНОЙ МЕТОД ПОИСКА - МАКСИМАЛЬНО ПРОСТОЙ
+        // ✅ ИСПРАВЛЕННЫЙ МЕТОД: 10 ТОВАРОВ, МИНИМУМ 3 ПОСТАВЩИКА
         public async Task<List<ProductWithCategoryInfo>> FindSimilarProductsAsync(
             string searchQuery,
-            int maxResults = 5)
+            int maxResults = 10) // ✅ ФИКСИРУЕМ 10 ТОВАРОВ
         {
             if (string.IsNullOrWhiteSpace(searchQuery))
                 return new List<ProductWithCategoryInfo>();
@@ -59,121 +59,153 @@ namespace ManagerApp.Data.Search
                 if (allProducts == null || !allProducts.Any())
                     return new List<ProductWithCategoryInfo>();
 
-                var query = searchQuery.Trim().ToLower();
+                var query = searchQuery.Trim();
                 Console.WriteLine($"🔍 Поиск: '{query}'");
 
-                // Разбиваем запрос на важные части
-                var searchParts = ExtractSearchParts(query);
-
-                if (!searchParts.Any())
-                    return new List<ProductWithCategoryInfo>();
-
-                Console.WriteLine($"Поисковые части: [{string.Join(", ", searchParts)}]");
-
-                // 1. Ищем товары по разным стратегиям
-                var allMatches = new HashSet<ProductWithCategoryInfo>();
-
-                // Стратегия 1: Точное совпадение
-                var exactMatches = allProducts
-                    .Where(p => p.ProductName?.ToLower().Contains(query) == true)
-                    .Take(10);
-                AddToSet(allMatches, exactMatches);
-
-                // Если нашли точные совпадения - возвращаем их
-                if (allMatches.Count >= 3)
-                {
-                    return allMatches.Take(maxResults).ToList();
-                }
-
-                // Стратегия 2: По всем частям запроса
-                foreach (var product in allProducts)
-                {
-                    var productName = product.ProductName?.ToLower() ?? "";
-                    var categoryName = product.CategoryName?.ToLower() ?? "";
-                    var fullText = productName + " " + categoryName;
-
-                    // Считаем совпадения
-                    int matchCount = 0;
-                    foreach (var part in searchParts)
-                    {
-                        if (fullText.Contains(part))
-                        {
-                            matchCount++;
-                        }
-                    }
-
-                    // Если нашли хотя бы 50% частей
-                    if (matchCount >= (searchParts.Count / 2) + 1)
-                    {
-                        allMatches.Add(product);
-                        if (allMatches.Count >= maxResults * 3)
-                            break;
-                    }
-                }
-
-                // Стратегия 3: По первым двум частям (самые важные)
-                if (allMatches.Count < maxResults && searchParts.Count >= 2)
-                {
-                    var firstTwoParts = searchParts.Take(2).ToList();
-
-                    foreach (var product in allProducts.Where(p => !allMatches.Contains(p)))
-                    {
-                        var productName = product.ProductName?.ToLower() ?? "";
-
-                        bool hasFirst = firstTwoParts.Count > 0 && productName.Contains(firstTwoParts[0]);
-                        bool hasSecond = firstTwoParts.Count > 1 && productName.Contains(firstTwoParts[1]);
-
-                        if (hasFirst && hasSecond)
-                        {
-                            allMatches.Add(product);
-                            if (allMatches.Count >= maxResults * 3)
-                                break;
-                        }
-                    }
-                }
-
-                // Стратегия 4: По числам (размеры, диаметры и т.д.)
-                if (allMatches.Count < maxResults)
-                {
-                    var numbersInQuery = ExtractNumbers(query);
-                    if (numbersInQuery.Any())
-                    {
-                        foreach (var product in allProducts.Where(p => !allMatches.Contains(p)))
-                        {
-                            var productName = product.ProductName?.ToLower() ?? "";
-                            var numbersInProduct = ExtractNumbers(productName);
-
-                            // Если есть совпадение чисел
-                            if (numbersInQuery.Any(q => numbersInProduct.Contains(q)))
-                            {
-                                allMatches.Add(product);
-                                if (allMatches.Count >= maxResults * 3)
-                                    break;
-                            }
-                        }
-                    }
-                }
-
-                // 2. СОРТИРУЕМ И ВОЗВРАЩАЕМ
-                var sortedResults = allMatches
-                    .OrderByDescending(p => CalculateRelevance(p, searchParts)) // Сначала самые релевантные
-                    .ThenByDescending(p => p.HasPrice) // С ценами выше
-                    .ThenBy(p => p.ProductName?.Length ?? int.MaxValue) // Короткие названия выше
-                    .Take(maxResults) // Только потом обрезаем
+                // ✅ ШАГ 1: НАХОДИМ ВСЕ ПОСТАВЩИКОВ В БАЗЕ
+                var allSuppliers = allProducts
+                    .Where(p => !string.IsNullOrEmpty(p.CategoryName))
+                    .Select(p => p.CategoryName)
+                    .Distinct()
                     .ToList();
 
-                Console.WriteLine($"✅ Найдено: {sortedResults.Count} товаров");
+                Console.WriteLine($"📊 Всего поставщиков в базе: {allSuppliers.Count}");
 
-                if (sortedResults.Any())
+                // ✅ ШАГ 2: ДЛЯ КАЖДОГО ПОСТАВЩИКА НАХОДИМ САМЫЙ ПОХОЖИЙ ТОВАР
+                var supplierBestProducts = new List<ProductWithSupplierRelevance>();
+
+                foreach (var supplier in allSuppliers)
                 {
-                    Console.WriteLine("Лучшие результаты:");
-                    for (int i = 0; i < Math.Min(3, sortedResults.Count); i++)
+                    var supplierProducts = allProducts
+                        .Where(p => p.CategoryName == supplier)
+                        .ToList();
+
+                    // ✅ НАХОДИМ САМЫЙ ПОХОЖИЙ ТОВАР ОТ ЭТОГО ПОСТАВЩИКА
+                    var bestProduct = FindBestProductForSupplier(supplierProducts, query);
+
+                    if (bestProduct != null)
                     {
-                        Console.WriteLine($"  {i + 1}. {sortedResults[i].ProductName}");
+                        var relevance = CalculateDeepRelevance(bestProduct, query);
+                        supplierBestProducts.Add(new ProductWithSupplierRelevance
+                        {
+                            Product = bestProduct,
+                            Supplier = supplier,
+                            Relevance = relevance
+                        });
+
+                        Console.WriteLine($"   📦 {supplier}: '{bestProduct.ProductName}' (релевантность: {relevance})");
                     }
                 }
 
-                return sortedResults;
+                // ✅ ШАГ 3: СОРТИРУЕМ ПО РЕЛЕВАНТНОСТИ (ОТ САМОГО ПОДХОДЯЩЕГО)
+                supplierBestProducts = supplierBestProducts
+                    .OrderByDescending(r => r.Relevance)
+                    .ThenByDescending(p => p.Product.HasPrice)
+                    .ThenBy(p => p.Product.ProductName.Length)
+                    .ToList();
+
+                Console.WriteLine($"✅ Найдено {supplierBestProducts.Count} лучших товаров от {supplierBestProducts.Select(r => r.Supplier).Distinct().Count()} поставщиков");
+
+                // ✅ ШАГ 4: ФОРМИРУЕМ ФИНАЛЬНЫЙ СПИСОК С ГАРАНТИЕЙ 3+ ПОСТАВЩИКОВ
+                var finalResults = new List<ProductWithSupplierRelevance>();
+                var usedSuppliers = new HashSet<string>();
+                var maxProductsPerSupplier = 3; // Максимум 3 товара от одного поставщика
+
+                // ✅ ПРАВИЛО 1: ГАРАНТИРУЕМ МИНИМУМ 3 РАЗНЫХ ПОСТАВЩИКА
+                // Берем самый релевантный товар от каждого поставщика
+                foreach (var supplierGroup in supplierBestProducts.GroupBy(p => p.Supplier))
+                {
+                    var bestFromSupplier = supplierGroup.OrderByDescending(p => p.Relevance).First();
+                    finalResults.Add(bestFromSupplier);
+                    usedSuppliers.Add(supplierGroup.Key);
+
+                    if (usedSuppliers.Count >= 3 && finalResults.Count >= 5)
+                        break;
+                }
+
+                Console.WriteLine($"📦 Гарантировано {usedSuppliers.Count} поставщиков, {finalResults.Count} товаров");
+
+                // ✅ ПРАВИЛО 2: ДОБИРАЕМ ДО 10 ТОВАРОВ, СОБЛЮДАЯ ЛИМИТ ПО ПОСТАВЩИКАМ
+                foreach (var product in supplierBestProducts.Where(p => !finalResults.Contains(p)))
+                {
+                    if (finalResults.Count >= maxResults) // ✅ ФИКСИРОВАННЫЙ ЛИМИТ 10
+                        break;
+
+                    // Проверяем, не превысили ли лимит для этого поставщика
+                    var supplierCount = finalResults.Count(r => r.Supplier == product.Supplier);
+                    if (supplierCount < maxProductsPerSupplier)
+                    {
+                        finalResults.Add(product);
+                    }
+                }
+
+                // ✅ ПРАВИЛО 3: ЕСЛИ ВСЕ РАВНО МЕНЬШЕ 3 ПОСТАВЩИКОВ - ДОБАВЛЯЕМ ЕЩЕ
+                if (usedSuppliers.Count < 3)
+                {
+                    Console.WriteLine($"⚠️  Меньше 3 поставщиков ({usedSuppliers.Count})! Ищем дополнительные...");
+
+                    // Ищем еще поставщиков
+                    var remainingSuppliers = allSuppliers
+                        .Where(s => !usedSuppliers.Contains(s))
+                        .Take(3 - usedSuppliers.Count);
+
+                    foreach (var supplier in remainingSuppliers)
+                    {
+                        if (finalResults.Count >= maxResults)
+                            break;
+
+                        var supplierProducts = allProducts
+                            .Where(p => p.CategoryName == supplier)
+                            .ToList();
+
+                        var bestProduct = FindBestProductForSupplier(supplierProducts, query);
+                        if (bestProduct != null)
+                        {
+                            var relevance = CalculateDeepRelevance(bestProduct, query);
+                            finalResults.Add(new ProductWithSupplierRelevance
+                            {
+                                Product = bestProduct,
+                                Supplier = supplier,
+                                Relevance = relevance
+                            });
+                            usedSuppliers.Add(supplier);
+                            Console.WriteLine($"   ➕ Дополнительный поставщик: {supplier}");
+                        }
+                    }
+                }
+
+                // ✅ ШАГ 5: ФИНАЛЬНАЯ СОРТИРОВКА И ОГРАНИЧЕНИЕ
+                var resultProducts = finalResults
+                    .OrderByDescending(r => r.Relevance) // ✅ СОРТИРОВКА ОТ САМОГО ПОДХОДЯЩЕГО
+                    .ThenByDescending(p => p.Product.HasPrice)
+                    .ThenBy(p => p.Product.ProductName.Length)
+                    .Take(maxResults) // ✅ ТОЧНО 10 ТОВАРОВ
+                    .Select(r => r.Product)
+                    .ToList();
+
+                Console.WriteLine($"🎯 ФИНАЛЬНО: {resultProducts.Count} товаров от {usedSuppliers.Count} поставщиков");
+
+                // Выводим все результаты
+                for (int i = 0; i < resultProducts.Count; i++)
+                {
+                    var product = resultProducts[i];
+                    var supplier = product.CategoryName ?? "БЕЗ ПОСТАВЩИКА";
+                    Console.WriteLine($"   {i + 1}. [{supplier}] {product.ProductName}");
+                }
+
+                // Статистика по поставщикам
+                var supplierStats = resultProducts
+                    .GroupBy(p => p.CategoryName ?? "БЕЗ ПОСТАВЩИКА")
+                    .Select(g => new { Supplier = g.Key, Count = g.Count() })
+                    .OrderByDescending(g => g.Count);
+
+                Console.WriteLine($"📊 Статистика поставщиков в результатах:");
+                foreach (var stat in supplierStats)
+                {
+                    Console.WriteLine($"   {stat.Supplier}: {stat.Count} товаров");
+                }
+
+                return resultProducts;
             }
             catch (Exception ex)
             {
@@ -182,65 +214,158 @@ namespace ManagerApp.Data.Search
             }
         }
 
-        // Извлечение значимых частей из запроса
-        private List<string> ExtractSearchParts(string query)
+        // ✅ МЕТОД ДЛЯ ПОИСКА САМОГО ПОХОЖЕГО ТОВАРА ОТ ПОСТАВЩИКА
+        private ProductWithCategoryInfo FindBestProductForSupplier(
+            List<ProductWithCategoryInfo> supplierProducts,
+            string query)
+        {
+            if (!supplierProducts.Any())
+                return null;
+
+            var queryLower = query.ToLower();
+            var searchWords = ExtractSearchWords(queryLower);
+
+            ProductWithCategoryInfo bestProduct = null;
+            int bestRelevance = -1;
+
+            foreach (var product in supplierProducts)
+            {
+                var relevance = CalculateDeepRelevance(product, queryLower, searchWords);
+
+                if (relevance > bestRelevance)
+                {
+                    bestRelevance = relevance;
+                    bestProduct = product;
+                }
+            }
+
+            return bestProduct;
+        }
+
+        // ✅ ГЛУБОКИЙ РАСЧЕТ РЕЛЕВАНТНОСТИ
+        private int CalculateDeepRelevance(ProductWithCategoryInfo product, string query)
+        {
+            var searchWords = ExtractSearchWords(query);
+            return CalculateDeepRelevance(product, query, searchWords);
+        }
+
+        private int CalculateDeepRelevance(ProductWithCategoryInfo product, string query, List<string> searchWords)
+        {
+            var productName = product.ProductName?.ToLower() ?? "";
+            var categoryName = product.CategoryName?.ToLower() ?? "";
+
+            int relevance = 0;
+
+            // 1. ТОЧНОЕ СОВПАДЕНИЕ (максимальный балл)
+            if (productName == query)
+                relevance += 1000;
+
+            // 2. СОДЕРЖИТ ВЕСЬ ЗАПРОС
+            if (productName.Contains(query))
+                relevance += 800;
+
+            // 3. ВСЕ СЛОВА ИЗ ЗАПРОСА
+            if (searchWords.All(word => productName.Contains(word)))
+                relevance += 600;
+
+            // 4. БОЛЬШИНСТВО СЛОВ
+            int matchingWords = searchWords.Count(word => productName.Contains(word));
+            if (matchingWords > 0)
+                relevance += matchingWords * 100;
+
+            // 5. СОВПАДЕНИЕ С УЧЕТОМ РАЗНЫХ ВАРИАНТОВ НАПИСАНИЯ
+            var normalizedProductName = NormalizeText(productName);
+            var normalizedQuery = NormalizeText(query);
+
+            if (normalizedProductName.Contains(normalizedQuery))
+                relevance += 400;
+
+            // 6. СОВПАДЕНИЕ ЧИСЕЛ (сечения, диаметры)
+            var queryNumbers = ExtractNumbers(query);
+            var productNumbers = ExtractNumbers(productName);
+
+            foreach (var number in queryNumbers)
+            {
+                if (productNumbers.Contains(number))
+                    relevance += 150;
+            }
+
+            // 7. СОВПАДЕНИЕ МАРКИРОВОК (ВВГ, ППТ и т.д.)
+            var queryMarkings = ExtractMarkings(query);
+            var productMarkings = ExtractMarkings(productName);
+
+            foreach (var marking in queryMarkings)
+            {
+                if (productMarkings.Contains(marking))
+                    relevance += 200;
+            }
+
+            // 8. ДОПОЛНИТЕЛЬНЫЕ БАЛЛЫ
+            if (product.HasPrice)
+                relevance += 50;
+
+            if (productName.Length < 100) // Короткие названия предпочтительнее
+                relevance += 30;
+
+            return relevance;
+        }
+
+        // ✅ НОРМАЛИЗАЦИЯ ТЕКСТА (для поиска разных вариантов написания)
+        private string NormalizeText(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return string.Empty;
+
+            // Убираем пробелы, дефисы, приводим к нижнему регистру
+            var normalized = text.ToLower()
+                .Replace(" ", "")
+                .Replace("-", "")
+                .Replace("нг(а)", "нг")
+                .Replace("нг(а)-", "нг")
+                .Replace("нг-ls", "нгls")
+                .Replace("нг(а)-ls", "нгls");
+
+            return normalized;
+        }
+
+        // ✅ ИЗВЛЕЧЕНИЕ ПОИСКОВЫХ СЛОВ
+        private List<string> ExtractSearchWords(string query)
         {
             if (string.IsNullOrWhiteSpace(query))
                 return new List<string>();
 
-            // Просто разбиваем по всем разделителям
-            var parts = query.Split(new[] { ' ', ',', '.', '-', '_', '/', '\\', '(', ')', '[', ']' },
-                                 StringSplitOptions.RemoveEmptyEntries)
-                           .Select(p => p.Trim().ToLower())
-                           .Where(p => p.Length >= 2) // Не берем слишком короткие
-                           .ToList();
+            // Разбиваем на слова, убираем общие слова
+            var words = query.Split(new[] { ' ', ',', '.', '-', '_', '/', '\\', '(', ')', '[', ']', 'х', '×' },
+                                  StringSplitOptions.RemoveEmptyEntries)
+                            .Select(p => p.Trim().ToLower())
+                            .Where(p => p.Length >= 2)
+                            .ToList();
 
-            // Фильтруем совсем общие слова
+            // Фильтруем общие слова
             var commonWords = new HashSet<string>
             {
-                "и", "в", "на", "с", "по", "для", "из", "от", "до",
-                "шт", "уп", "комплект", "набор", "метров", "штук"
+                "кабель", "кабельный", "кабельная", "кабельное",
+                "провод", "проводной", "провода", "проводная",
+                "силовой", "монтажный", "установочный",
+                "м", "мм", "кв", "квадратный", "квадрат"
             };
 
-            return parts.Where(p => !commonWords.Contains(p)).ToList();
+            return words.Where(w => !commonWords.Contains(w)).ToList();
         }
 
-        // Простой расчет релевантности
-        private int CalculateRelevance(ProductWithCategoryInfo product, List<string> searchParts)
+        // ✅ ИЗВЛЕЧЕНИЕ МАРКИРОВОК (ВВГ, ППТ, АВВГ и т.д.)
+        private List<string> ExtractMarkings(string text)
         {
-            var productName = product.ProductName?.ToLower() ?? "";
-            var categoryName = product.CategoryName?.ToLower() ?? "";
-            var fullText = productName + " " + categoryName;
+            var markings = new List<string>();
 
-            int relevance = 0;
-
-            // 1. За каждую совпавшую часть +10 баллов
-            foreach (var part in searchParts)
+            // Ищем маркировки типа ВВГ, ППТ, АВВГ (2-4 заглавные буквы подряд)
+            var markingMatches = System.Text.RegularExpressions.Regex.Matches(text.ToUpper(), @"[А-ЯЁ]{2,4}");
+            foreach (System.Text.RegularExpressions.Match match in markingMatches)
             {
-                if (productName.Contains(part)) relevance += 10;
-                else if (categoryName.Contains(part)) relevance += 5;
+                markings.Add(match.Value);
             }
 
-            // 2. Бонус за совпадение всех частей
-            bool hasAllParts = searchParts.All(p => fullText.Contains(p));
-            if (hasAllParts) relevance += 30;
-
-            // 3. Бонус за совпадение первых двух частей
-            if (searchParts.Count >= 2)
-            {
-                bool hasFirst = productName.Contains(searchParts[0]);
-                bool hasSecond = productName.Contains(searchParts[1]);
-
-                if (hasFirst && hasSecond) relevance += 20;
-                else if (hasFirst) relevance += 10;
-                else if (hasSecond) relevance += 10;
-            }
-
-            // 4. Бонусы
-            if (product.HasPrice) relevance += 5;
-            if (productName.Length < 60) relevance += 3; // Короткие названия лучше
-
-            return relevance;
+            return markings.Distinct().ToList();
         }
 
         // Извлечение чисел из строки
@@ -254,7 +379,7 @@ namespace ManagerApp.Data.Search
 
             foreach (char c in text)
             {
-                if (char.IsDigit(c))
+                if (char.IsDigit(c) || c == '.' || c == ',')
                 {
                     currentNumber.Append(c);
                 }
@@ -274,45 +399,20 @@ namespace ManagerApp.Data.Search
             return numbers;
         }
 
-        // Добавление в множество с проверкой дубликатов
-        private void AddToSet(HashSet<ProductWithCategoryInfo> set, IEnumerable<ProductWithCategoryInfo> items)
+        // Вспомогательный класс для хранения товара с релевантностью
+        private class ProductWithSupplierRelevance
         {
-            foreach (var item in items)
-            {
-                set.Add(item);
-            }
+            public ProductWithCategoryInfo Product { get; set; }
+            public string Supplier { get; set; }
+            public int Relevance { get; set; }
         }
 
-        // БЫСТРЫЙ ПОИСК ДЛЯ КОМБОБОКСОВ
+        // Остальные методы остаются без изменений
         public async Task<List<ProductWithCategoryInfo>> QuickSearchAsync(string searchQuery, int maxResults = 5)
         {
             try
             {
-                var allProducts = await GetAllProductsAsync();
-
-                if (allProducts == null || !allProducts.Any())
-                    return new List<ProductWithCategoryInfo>();
-
-                var query = searchQuery.Trim().ToLower();
-
-                // Простой поиск по вхождению слов
-                var words = ExtractSearchParts(query);
-
-                if (!words.Any())
-                    return new List<ProductWithCategoryInfo>();
-
-                var results = allProducts
-                    .Where(p =>
-                    {
-                        var name = p.ProductName?.ToLower() ?? "";
-                        return words.Any(w => name.Contains(w));
-                    })
-                    .OrderByDescending(p => p.HasPrice)
-                    .ThenBy(p => p.ProductName?.Length ?? int.MaxValue)
-                    .Take(maxResults)
-                    .ToList();
-
-                return results;
+                return await FindSimilarProductsAsync(searchQuery, maxResults);
             }
             catch (Exception ex)
             {
@@ -321,7 +421,6 @@ namespace ManagerApp.Data.Search
             }
         }
 
-        // Остальные методы остаются без изменений
         public async Task<string> SearchProductAsync(string productName)
         {
             try

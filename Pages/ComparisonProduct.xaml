@@ -408,6 +408,7 @@
                                                   ItemsSource="{Binding BitrixProducts}"
                                                   DisplayMemberPath="ProductName"
                                                   SelectedItem="{Binding SelectedBitrixProduct, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                      MaxDropDownHeight="400" 
                                                   IsEditable="True"
                                                   HorizontalAlignment="Stretch"
                                                   VerticalAlignment="Center"

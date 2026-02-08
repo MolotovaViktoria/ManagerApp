@@ -43,6 +43,92 @@ namespace ManagerApp.Pages
             }
         }
 
+        // Метод загрузки продуктов
+        private async void LoadProductsFromManager()
+        {
+            _isLoading = true;
+
+            try
+            {
+                var products = ProductSelectionManager.GetProducts();
+
+                if (products == null || products.Count == 0)
+                {
+                    LoadSampleData();
+                }
+                else
+                {
+                    ProductItems.Clear();
+
+                    foreach (var product in products.Distinct(StringComparer.OrdinalIgnoreCase))
+                    {
+                        var item = new ProductItemViewModel
+                        {
+                            OriginalProduct = product,
+                            BitrixProducts = new ObservableCollection<Data.ScharedData.BitrixProductViewModel>(),
+                            SelectedBitrixProduct = null
+                        };
+
+                        item.AddCommand = new RelayCommand(AddProduct);
+                        item.RemoveCommand = new RelayCommand(RemoveProductItem);
+
+                        ProductItems.Add(item);
+                    }
+
+                    await SmartSearchForAllProductsAsync();
+                }
+            }
+            finally
+            {
+                _isLoading = false;
+            }
+        }
+
+        // Метод загрузки тестовых данных
+        private void LoadSampleData()
+        {
+            var sampleProducts = new List<string>();
+
+            foreach (var product in sampleProducts)
+            {
+                var item = new ProductItemViewModel
+                {
+                    OriginalProduct = product,
+                    BitrixProducts = new ObservableCollection<Data.ScharedData.BitrixProductViewModel>(),
+                    SelectedBitrixProduct = null
+                };
+
+                item.AddCommand = new RelayCommand(AddProduct);
+                item.RemoveCommand = new RelayCommand(RemoveProductItem);
+
+                ProductItems.Add(item);
+            }
+        }
+
+        // Метод поиска для всех продуктов
+        private async Task SmartSearchForAllProductsAsync()
+        {
+            if (!ProductItems.Any()) return;
+
+            try
+            {
+                var searchTasks = new List<Task>();
+
+                foreach (var item in ProductItems)
+                {
+                    if (string.IsNullOrWhiteSpace(item.OriginalProduct)) continue;
+
+                    searchTasks.Add(SmartSearchProductsAsync(item, item.OriginalProduct));
+                }
+
+                await Task.WhenAll(searchTasks);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при автопоиске: {ex.Message}");
+            }
+        }
+
         #region Обработчики кнопок
 
         private async void BtnQuickAdd_Click(object sender, RoutedEventArgs e)
@@ -173,90 +259,7 @@ namespace ManagerApp.Pages
 
         #endregion
 
-        #region УЛУЧШЕННЫЙ ПОИСК ТОВАРОВ
-
-        private async void LoadProductsFromManager()
-        {
-            _isLoading = true;
-
-            try
-            {
-                var products = ProductSelectionManager.GetProducts();
-
-                if (products == null || products.Count == 0)
-                {
-                    LoadSampleData();
-                }
-                else
-                {
-                    ProductItems.Clear();
-
-                    foreach (var product in products.Distinct(StringComparer.OrdinalIgnoreCase))
-                    {
-                        var item = new ProductItemViewModel
-                        {
-                            OriginalProduct = product,
-                            BitrixProducts = new ObservableCollection<Data.ScharedData.BitrixProductViewModel>(),
-                            SelectedBitrixProduct = null
-                        };
-
-                        item.AddCommand = new RelayCommand(AddProduct);
-                        item.RemoveCommand = new RelayCommand(RemoveProductItem);
-
-                        ProductItems.Add(item);
-                    }
-
-                    await SmartSearchForAllProductsAsync();
-                }
-            }
-            finally
-            {
-                _isLoading = false;
-            }
-        }
-
-        private void LoadSampleData()
-        {
-            var sampleProducts = new List<string>();
-
-            foreach (var product in sampleProducts)
-            {
-                var item = new ProductItemViewModel
-                {
-                    OriginalProduct = product,
-                    BitrixProducts = new ObservableCollection<Data.ScharedData.BitrixProductViewModel>(),
-                    SelectedBitrixProduct = null
-                };
-
-                item.AddCommand = new RelayCommand(AddProduct);
-                item.RemoveCommand = new RelayCommand(RemoveProductItem);
-
-                ProductItems.Add(item);
-            }
-        }
-
-        private async Task SmartSearchForAllProductsAsync()
-        {
-            if (!ProductItems.Any()) return;
-
-            try
-            {
-                var searchTasks = new List<Task>();
-
-                foreach (var item in ProductItems)
-                {
-                    if (string.IsNullOrWhiteSpace(item.OriginalProduct)) continue;
-
-                    searchTasks.Add(SmartSearchProductsAsync(item, item.OriginalProduct));
-                }
-
-                await Task.WhenAll(searchTasks);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Ошибка при автопоиске: {ex.Message}");
-            }
-        }
+        #region ПРОСТОЙ ПОИСК ЧЕРЕЗ BitrixProductMatcher
 
         private async Task SmartSearchProductsAsync(ProductItemViewModel item, string searchText)
         {
@@ -275,11 +278,13 @@ namespace ManagerApp.Pages
                     return;
                 }
 
-                var allResults = new List<Data.ScharedData.BitrixProductViewModel>();
-                // Основной поиск
-                var searchResults = await _productMatcher.FindSimilarProductsAsync(searchText, maxResults: 10);
-                // Преобразуем ProductWithCategoryInfo в BitrixProductViewModel
-                var convertedResults = searchResults.Select(p => new Data.ScharedData.BitrixProductViewModel
+                Console.WriteLine($"🔍 Поиск через BitrixProductMatcher: '{searchText}'");
+
+                // ✅ ИСПОЛЬЗУЕМ ТОЛЬКО BitrixProductMatcher для поиска
+                var searchResults = await _productMatcher.FindSimilarProductsAsync(searchText, 50);
+
+                // Конвертируем результаты в BitrixProductViewModel
+                var bitrixProducts = searchResults.Select(p => new Data.ScharedData.BitrixProductViewModel
                 {
                     ProductId = p.ProductId,
                     ProductName = p.ProductName,
@@ -289,103 +294,39 @@ namespace ManagerApp.Pages
                     SectionId = p.SectionId
                 }).ToList();
 
-                allResults.AddRange(convertedResults);
+                Console.WriteLine($"✅ Найдено {bitrixProducts.Count} товаров через BitrixProductMatcher");
 
-                // Если мало результатов, ищем по словам
-                if (allResults.Count < 3)
+                if (bitrixProducts.Any())
                 {
-                    var words = searchText.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                    foreach (var word in words.Where(w => w.Length > 2))
-                    {
-                        var wordResults = await _productMatcher.FindSimilarProductsAsync(word, maxResults: 5);
-                        var convertedWordResults = wordResults.Select(p => new Data.ScharedData.BitrixProductViewModel
-                        {
-                            ProductId = p.ProductId,
-                            ProductName = p.ProductName,
-                            CategoryName = p.CategoryName,
-                            Price = p.Price,
-                            HasPrice = p.HasPrice,
-                            SectionId = p.SectionId
-                        }).ToList();
-
-                        allResults.AddRange(convertedWordResults.Where(r => !allResults.Any(er => er.ProductId == r.ProductId)));
-                    }
+                    _searchCache[cacheKey] = bitrixProducts;
                 }
 
-                var rankedResults = RankProducts(allResults, searchText)
-                    .Take(10)
-                    .ToList();
-
-                if (rankedResults.Any())
-                {
-                    _searchCache[cacheKey] = rankedResults;
-                }
-
-                await UpdateProductsListAsync(item, rankedResults);
-
-                await TryAutoSelectBestMatchAsync(item, rankedResults, searchText);
+                await UpdateProductsListAsync(item, bitrixProducts);
+                await TryAutoSelectBestMatchAsync(item, bitrixProducts, searchText);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Ошибка при умном поиске: {ex.Message}");
+                Console.WriteLine($"❌ Ошибка при поиске: {ex.Message}");
             }
         }
 
-        private List<Data.ScharedData.BitrixProductViewModel> RankProducts(List<Data.ScharedData.BitrixProductViewModel> products, string searchQuery)
+        // Метод форматирования имени для отображения
+        private string FormatProductNameForDisplay(Data.ScharedData.BitrixProductViewModel product)
         {
-            if (!products.Any()) return products;
+            var sb = new StringBuilder();
 
-            var searchQueryLower = searchQuery.ToLower().Trim();
-            var words = searchQueryLower.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            sb.Append(product.ProductName);
 
-            return products
-                .Select(p => new
-                {
-                    Product = p,
-                    Score = CalculateRelevanceScore(p, searchQueryLower, words)
-                })
-                .Where(x => x.Score > 0)
-                .OrderByDescending(x => x.Score)
-                .Select(x => x.Product)
-                .ToList();
-        }
+            if (!string.IsNullOrEmpty(product.CategoryName))
+                sb.Append($" ({product.CategoryName})");
 
-        private double CalculateRelevanceScore(Data.ScharedData.BitrixProductViewModel product, string searchQuery, string[] searchWords)
-        {
-            double score = 0;
-
-            if (product == null || string.IsNullOrEmpty(product.ProductName)) return 0;
-
-            string productNameLower = product.ProductName.ToLower();
-
-            // 1. Точное совпадение
-            if (productNameLower == searchQuery)
-                score += 100;
-
-            // 2. Содержит весь поисковый запрос
-            if (productNameLower.Contains(searchQuery))
-                score += 80;
-
-            // 3. Совпадение всех слов
-            if (searchWords.All(word => productNameLower.Contains(word)))
-                score += 60;
-
-            // 4. Совпадение большинства слов
-            int matchingWords = searchWords.Count(word => productNameLower.Contains(word));
-            if (matchingWords > 0)
-                score += matchingWords * 15;
-
-            // 5. Начинается с поискового запроса
-            if (productNameLower.StartsWith(searchQuery))
-                score += 30;
-
-            // 6. Учитываем наличие цены
             if (product.HasPrice && product.Price > 0)
-                score += 10;
+                sb.Append($" - {product.Price:#,##0.00} ₽");
 
-            return Math.Max(0, score);
+            return sb.ToString();
         }
 
+        // Метод обновления списка товаров
         private async Task UpdateProductsListAsync(ProductItemViewModel item, List<Data.ScharedData.BitrixProductViewModel> products)
         {
             await Application.Current.Dispatcher.InvokeAsync(() =>
@@ -414,36 +355,17 @@ namespace ManagerApp.Pages
                     return;
                 }
 
+                // ✅ Добавляем ВСЕ найденные товары
                 foreach (var product in products)
                 {
-                    item.BitrixProducts.Add(new Data.ScharedData.BitrixProductViewModel
-                    {
-                        ProductId = product.ProductId,
-                        ProductName = FormatProductNameForDisplay(product),
-                        CategoryName = product.CategoryName,
-                        Price = product.Price,
-                        HasPrice = product.HasPrice,
-                        SectionId = product.SectionId
-                    });
+                    item.BitrixProducts.Add(product);
                 }
+
+                Console.WriteLine($"✅ В комбобокс добавлено {item.BitrixProducts.Count} товаров");
             });
         }
 
-        private string FormatProductNameForDisplay(Data.ScharedData.BitrixProductViewModel product)
-        {
-            var sb = new StringBuilder();
-
-            sb.Append(product.ProductName);
-
-            if (!string.IsNullOrEmpty(product.CategoryName))
-                sb.Append($" ({product.CategoryName})");
-
-            if (product.HasPrice && product.Price > 0)
-                sb.Append($" - {product.Price:#,##0.00} ₽");
-
-            return sb.ToString();
-        }
-
+        // Метод авто-выбора лучшего совпадения
         private async Task TryAutoSelectBestMatchAsync(ProductItemViewModel item, List<Data.ScharedData.BitrixProductViewModel> results, string searchText)
         {
             if (!results.Any() || item.SelectedBitrixProduct != null)
@@ -451,7 +373,7 @@ namespace ManagerApp.Pages
 
             var bestMatch = results.FirstOrDefault();
 
-            if (bestMatch != null && IsGoodAutoMatch(bestMatch, searchText))
+            if (bestMatch != null)
             {
                 await Task.Delay(300);
 
@@ -467,32 +389,7 @@ namespace ManagerApp.Pages
             }
         }
 
-        private bool IsGoodAutoMatch(Data.ScharedData.BitrixProductViewModel product, string searchText)
-        {
-            if (product == null || string.IsNullOrEmpty(product.ProductName))
-                return false;
-
-            string productNameLower = product.ProductName.ToLower();
-            string searchLower = searchText.ToLower();
-
-            // 1. Точное совпадение
-            if (productNameLower == searchLower)
-                return true;
-
-            // 2. Содержит весь поисковый запрос
-            if (productNameLower.Contains(searchLower))
-                return true;
-
-            // 3. Все слова из запроса присутствуют
-            var searchWords = searchLower.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            if (searchWords.All(word => productNameLower.Contains(word)))
-                return true;
-
-            // 4. Высокая релевантность
-            var score = CalculateRelevanceScore(product, searchLower, searchWords);
-            return score >= 80;
-        }
-
+        // Обработчики для ComboBox
         private async void ComboBox_DropDownOpened(object sender, EventArgs e)
         {
             var comboBox = sender as ComboBox;
