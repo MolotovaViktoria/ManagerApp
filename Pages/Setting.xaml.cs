@@ -16,7 +16,11 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-
+using Microsoft.Win32;
+using System.Linq;
+using System.Collections.Generic;
+using ManagerApp.Data.StructureList;
+using Excel = Microsoft.Office.Interop.Excel;
 namespace ManagerApp.Pages
 {
     public partial class Setting : Page, INotifyPropertyChanged
@@ -582,34 +586,7 @@ namespace ManagerApp.Pages
         }
 
 
-        // Добавьте метод для сохранения в settings.txt (для обратной совместимости)
-        private void SaveOCRPathToSettingsFile(string path)
-        {
-            try
-            {
-                var lines = new List<string>();
-
-                if (File.Exists(SettingsFileName))
-                {
-                    lines = File.ReadAllLines(SettingsFileName).ToList();
-                }
-
-                // Удаляем старую запись OCRPATH если есть
-                lines.RemoveAll(line => line.StartsWith("OCRPATH="));
-
-                // Добавляем новую запись
-                lines.Add($"OCRPATH={path}");
-
-                File.WriteAllLines(SettingsFileName, lines);
-            }
-            catch (Exception ex)
-            {
-                // Не блокируем основной поток если ошибка в дополнительном файле
-                Console.WriteLine($"Ошибка сохранения OCR пути в settings.txt: {ex.Message}");
-            }
-        }
-
-        // Обновите метод ApplyOCRPath (добавьте вызов SaveOCRPathToFile):
+     
 
 
         // Обновите метод btnSave_Click:
@@ -1147,6 +1124,268 @@ namespace ManagerApp.Pages
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
+        private async void btnExportPrices_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // Проверяем наличие кеша
+                if (!BitrixCache.IsCacheReady())
+                {
+                    var result = MessageBox.Show(
+                        "Кеш данных не загружен. Хотите загрузить данные перед выгрузкой?",
+                        "Загрузка данных",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        await BitrixCache.InitializeAsync(true);
+                    }
+                    else
+                    {
+                        return;
+                    }
+                }
+
+                // Создаем окно ожидания
+                var waitingWindow = new WaitingWindow("Выгрузка прайсов", "Подготовка данных...");
+                waitingWindow.Owner = Window.GetWindow(this);
+
+                // Используем BackgroundWorker для асинхронной операции
+                var worker = new System.ComponentModel.BackgroundWorker
+                {
+                    WorkerReportsProgress = true,
+                    WorkerSupportsCancellation = false
+                };
+
+                List<ProductWithLowerSection> allProducts = null;
+                Dictionary<string, List<ProductWithLowerSection>> productsBySupplier = null;
+
+                worker.DoWork += (s, args) =>
+                {
+                    try
+                    {
+                        worker.ReportProgress(10, "Загрузка данных из кеша...");
+
+                        // Получаем все товары с нижними разделами
+                        var task = Task.Run(async () => await BitrixCache.GetAllProductsWithLowerSections());
+                        task.Wait();
+                        allProducts = task.Result;
+
+                        if (allProducts == null || !allProducts.Any())
+                        {
+                            args.Result = new ExportResult
+                            {
+                                Success = false,
+                                Message = "Нет данных для выгрузки"
+                            };
+                            return;
+                        }
+
+                        worker.ReportProgress(40, "Группировка по поставщикам...");
+
+                        // Группируем товары по нижним разделам (поставщикам)
+                        productsBySupplier = allProducts
+                            .Where(p => !string.IsNullOrEmpty(p.LowerSectionName))
+                            .GroupBy(p => p.LowerSectionName)
+                            .ToDictionary(g => g.Key, g => g.ToList());
+
+                        worker.ReportProgress(70, "Формирование Excel файла...");
+
+                        // Создаем Excel файл
+                        var excelApp = new Microsoft.Office.Interop.Excel.Application();
+                        var workbook = excelApp.Workbooks.Add();
+                        int sheetIndex = 1;
+
+                        foreach (var supplier in productsBySupplier)
+                        {
+                            worker.ReportProgress(70 + (sheetIndex * 30 / productsBySupplier.Count),
+                                $"Обработка поставщика: {supplier.Key}...");
+
+                            // Добавляем новый лист или используем первый
+                            Excel.Worksheet worksheet;
+                            if (sheetIndex == 1)
+                            {
+                                worksheet = (Excel.Worksheet)workbook.Worksheets[1];
+                            }
+                            else
+                            {
+                                worksheet = (Excel.Worksheet)workbook.Worksheets.Add(After: workbook.Worksheets[workbook.Worksheets.Count]);
+                            }
+
+                            // Называем лист именем поставщика (обрезаем если слишком длинное)
+                            string sheetName = supplier.Key.Length > 30 ? supplier.Key.Substring(0, 30) : supplier.Key;
+                            worksheet.Name = sheetName;
+
+                            // Заголовки
+                            worksheet.Cells[1, 1] = "ID товара";
+                            worksheet.Cells[1, 2] = "Наименование";
+                            worksheet.Cells[1, 3] = "Код";
+                            worksheet.Cells[1, 4] = "Цена";
+                            worksheet.Cells[1, 5] = "Категория";
+                            worksheet.Cells[1, 6] = "Поставщик";
+
+                            // Выделяем заголовки
+                            var headerRange = worksheet.Range[worksheet.Cells[1, 1], worksheet.Cells[1, 6]];
+                            headerRange.Font.Bold = true;
+                            headerRange.Interior.Color = System.Drawing.Color.LightGray;
+                            headerRange.Borders.LineStyle = Microsoft.Office.Interop.Excel.XlLineStyle.xlContinuous;
+
+                            // Заполняем данные
+                            int row = 2;
+                            foreach (var product in supplier.Value)
+                            {
+                                worksheet.Cells[row, 1] = product.ProductId;
+                                worksheet.Cells[row, 2] = product.ProductName;
+                                worksheet.Cells[row, 3] = product.Code;
+                                worksheet.Cells[row, 4] = product.HasPrice ? product.Price.ToString("F2") : "Нет цены";
+                                worksheet.Cells[row, 5] = product.CategoryPath;
+                                worksheet.Cells[row, 6] = product.LowerSectionName;
+                                row++;
+                            }
+
+                            // Автоподбор ширины колонок
+                            var usedRange = worksheet.UsedRange;
+                            usedRange.Columns.AutoFit();
+
+                            // Применяем форматирование к ценам
+                            var priceRange = worksheet.Range[worksheet.Cells[2, 4], worksheet.Cells[row - 1, 4]];
+                            priceRange.NumberFormat = "#,##0.00";
+
+                            sheetIndex++;
+                        }
+
+                        worker.ReportProgress(95, "Подготовка к сохранению...");
+
+                        args.Result = new ExportResult
+                        {
+                            Success = true,
+                            Message = "Файл успешно создан",
+                            ExcelApp = excelApp,
+                            Workbook = workbook,
+                            ProductsCount = allProducts.Count,
+                            SuppliersCount = productsBySupplier.Count
+                        };
+                    }
+                    catch (Exception ex)
+                    {
+                        args.Result = new ExportResult
+                        {
+                            Success = false,
+                            Message = ex.Message,
+                            Exception = ex
+                        };
+                    }
+                };
+
+                worker.RunWorkerCompleted += (s, args) =>
+                {
+                    waitingWindow.Close();
+
+                    if (args.Result is ExportResult result)
+                    {
+                        if (result.Success && result.Workbook != null)
+                        {
+                            try
+                            {
+                                // Настраиваем диалог сохранения файла
+                                var saveFileDialog = new Microsoft.Win32.SaveFileDialog
+                                {
+                                    Filter = "Excel файлы (*.xlsx)|*.xlsx|Все файлы (*.*)|*.*",
+                                    DefaultExt = "xlsx",
+                                    FileName = $"Прайсы_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx",
+                                    Title = "Сохранить файл с прайсами"
+                                };
+
+                                // Показываем диалог
+                                if (saveFileDialog.ShowDialog() == true)
+                                {
+                                    result.Workbook.SaveAs(saveFileDialog.FileName);
+                                    result.Workbook.Close();
+                                    result.ExcelApp.Quit();
+
+                                    // Освобождаем COM объекты
+                                    System.Runtime.InteropServices.Marshal.ReleaseComObject(result.Workbook);
+                                    System.Runtime.InteropServices.Marshal.ReleaseComObject(result.ExcelApp);
+
+                                    MessageBox.Show(
+                                        $"✅ Файл успешно сохранен!\n\n" +
+                                        $"📊 Всего товаров: {result.ProductsCount}\n" +
+                                        $"🏢 Поставщиков: {result.SuppliersCount}\n" +
+                                        $"📁 Файл: {saveFileDialog.FileName}",
+                                        "Выгрузка завершена",
+                                        MessageBoxButton.OK,
+                                        MessageBoxImage.Information);
+
+                                    // Предлагаем открыть файл
+                                    var openResult = MessageBox.Show(
+                                        "Открыть файл?",
+                                        "Открыть файл",
+                                        MessageBoxButton.YesNo,
+                                        MessageBoxImage.Question);
+
+                                    if (openResult == MessageBoxResult.Yes)
+                                    {
+                                        System.Diagnostics.Process.Start(saveFileDialog.FileName);
+                                    }
+                                }
+                                else
+                                {
+                                    // Пользователь отменил сохранение
+                                    result.Workbook.Close();
+                                    result.ExcelApp.Quit();
+
+                                    System.Runtime.InteropServices.Marshal.ReleaseComObject(result.Workbook);
+                                    System.Runtime.InteropServices.Marshal.ReleaseComObject(result.ExcelApp);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                MessageBox.Show(
+                                    $"❌ Ошибка при сохранении файла:\n{ex.Message}",
+                                    "Ошибка",
+                                    MessageBoxButton.OK,
+                                    MessageBoxImage.Error);
+                            }
+                        }
+                        else
+                        {
+                            MessageBox.Show(
+                                $"❌ Ошибка при создании файла:\n{result.Message}",
+                                "Ошибка",
+                                MessageBoxButton.OK,
+                                MessageBoxImage.Error);
+                        }
+                    }
+                };
+
+                waitingWindow.Show();
+                worker.RunWorkerAsync();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"❌ Ошибка:\n{ex.Message}",
+                    "Ошибка",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+
+        // Вспомогательный класс для результатов экспорта
+        public class ExportResult
+        {
+            public bool Success { get; set; }
+            public string Message { get; set; }
+            public Exception Exception { get; set; }
+            public Microsoft.Office.Interop.Excel.Application ExcelApp { get; set; }
+            public Microsoft.Office.Interop.Excel.Workbook Workbook { get; set; }
+            public int ProductsCount { get; set; }
+            public int SuppliersCount { get; set; }
+        }
+
+
     }
 
     // Класс для хранения данных сотрудника
