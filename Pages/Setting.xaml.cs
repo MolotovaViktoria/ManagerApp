@@ -1,14 +1,21 @@
-﻿using ManagerApp.Classes.Read.ReadPicture;
+﻿using ClosedXML.Excel;
+using ManagerApp.Classes.Read.ReadPicture;
 using ManagerApp.Classes.Setting;
 using ManagerApp.Data.GetInfo;
+using ManagerApp.Data.StructureList;
+using Microsoft.Win32;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
+using System.Collections.Generic;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Linq;
+using System.Net.Http;
 using System.Reflection;
 using System.Text;
 using System.Threading;
@@ -16,10 +23,6 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using Microsoft.Win32;
-using System.Linq;
-using System.Collections.Generic;
-using ManagerApp.Data.StructureList;
 using Excel = Microsoft.Office.Interop.Excel;
 namespace ManagerApp.Pages
 {
@@ -1129,28 +1132,11 @@ namespace ManagerApp.Pages
         {
             try
             {
-                // Проверяем наличие кеша
-                if (!BitrixCache.IsCacheReady())
-                {
-                    var result = MessageBox.Show(
-                        "Кеш данных не загружен. Хотите загрузить данные перед выгрузкой?",
-                        "Загрузка данных",
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Question);
-
-                    if (result == MessageBoxResult.Yes)
-                    {
-                        await BitrixCache.InitializeAsync(true);
-                    }
-                    else
-                    {
-                        return;
-                    }
-                }
-
                 // Создаем окно ожидания
-                var waitingWindow = new WaitingWindow("Выгрузка прайсов", "Подготовка данных...");
+                var waitingWindow = new WaitingWindowExcel("Выгрузка прайсов", "Подготовка данных...");
                 waitingWindow.Owner = Window.GetWindow(this);
+                waitingWindow.Show();
+                waitingWindow.UpdateProgress(0, "Инициализация...");
 
                 // Используем BackgroundWorker для асинхронной операции
                 var worker = new System.ComponentModel.BackgroundWorker
@@ -1161,17 +1147,43 @@ namespace ManagerApp.Pages
 
                 List<ProductWithLowerSection> allProducts = null;
                 Dictionary<string, List<ProductWithLowerSection>> productsBySupplier = null;
+                Dictionary<string, decimal?> purchasingPrices = null;
 
                 worker.DoWork += (s, args) =>
                 {
                     try
                     {
-                        worker.ReportProgress(10, "Загрузка данных из кеша...");
+                        // Шаг 1: Проверяем наличие кеша
+                        worker.ReportProgress(5, "Проверка кеша...");
 
-                        // Получаем все товары с нижними разделами
-                        var task = Task.Run(async () => await BitrixCache.GetAllProductsWithLowerSections());
-                        task.Wait();
-                        allProducts = task.Result;
+                        if (!BitrixCache.IsCacheReady())
+                        {
+                            worker.ReportProgress(10, "Кеш не готов. Загрузка...");
+
+                            // Загружаем кеш если его нет
+                            var initTask = Task.Run(async () => await BitrixCache.InitializeAsync(false));
+                            initTask.Wait();
+
+                            if (!initTask.Result)
+                            {
+                                args.Result = new ExportResult
+                                {
+                                    Success = false,
+                                    Message = "Не удалось загрузить кеш данных"
+                                };
+                                return;
+                            }
+                        }
+                        else
+                        {
+                            worker.ReportProgress(15, "Кеш уже загружен");
+                        }
+
+                        // Шаг 2: Получаем товары ИЗ ФАЙЛОВОГО КЕША (как в EditPricePage)
+                        worker.ReportProgress(20, "Загрузка товаров из файлового кеша...");
+
+                        // ИСПОЛЬЗУЕМ ТОТ ЖЕ МЕТОД, ЧТО И В EditPricePage
+                        allProducts = GetProductsFromFileCache();
 
                         if (allProducts == null || !allProducts.Any())
                         {
@@ -1183,90 +1195,111 @@ namespace ManagerApp.Pages
                             return;
                         }
 
-                        worker.ReportProgress(40, "Группировка по поставщикам...");
+                        worker.ReportProgress(30, $"Загружено {allProducts.Count} товаров из кеша");
 
-                        // Группируем товары по нижним разделам (поставщикам)
+                        // Шаг 3: Группировка по поставщикам
+                        worker.ReportProgress(35, "Группировка по поставщикам...");
+
                         productsBySupplier = allProducts
                             .Where(p => !string.IsNullOrEmpty(p.LowerSectionName))
                             .GroupBy(p => p.LowerSectionName)
                             .ToDictionary(g => g.Key, g => g.ToList());
 
-                        worker.ReportProgress(70, "Формирование Excel файла...");
+                        worker.ReportProgress(40, $"Найдено {productsBySupplier.Count} поставщиков");
 
-                        // Создаем Excel файл
-                        var excelApp = new Microsoft.Office.Interop.Excel.Application();
-                        var workbook = excelApp.Workbooks.Add();
-                        int sheetIndex = 1;
+                        // Шаг 4: Получение закупочных цен (ЧЕРЕЗ API - как вы хотели)
+                        worker.ReportProgress(45, "Получение закупочных цен через API...");
+                        purchasingPrices = GetPurchasingPricesBatchWithProgress(allProducts, worker);
 
-                        foreach (var supplier in productsBySupplier)
+                        // Шаг 5: Создание Excel файла
+                        worker.ReportProgress(70, "Создание Excel файла...");
+
+                        string tempFile = System.IO.Path.GetTempFileName() + ".xlsx";
+
+                        using (var workbook = new XLWorkbook())
                         {
-                            worker.ReportProgress(70 + (sheetIndex * 30 / productsBySupplier.Count),
-                                $"Обработка поставщика: {supplier.Key}...");
+                            int sheetIndex = 1;
+                            int totalSuppliers = productsBySupplier.Count;
 
-                            // Добавляем новый лист или используем первый
-                            Excel.Worksheet worksheet;
-                            if (sheetIndex == 1)
+                            foreach (var supplier in productsBySupplier)
                             {
-                                worksheet = (Excel.Worksheet)workbook.Worksheets[1];
+                                int progress = 70 + (sheetIndex * 25 / totalSuppliers);
+                                worker.ReportProgress(progress, $"Обработка поставщика {sheetIndex}/{totalSuppliers}: {TruncateString(supplier.Key, 30)}");
+
+                                // Создаем новый лист
+                                string sheetName = TruncateString(supplier.Key, 30);
+
+                                // Очищаем имя от недопустимых символов
+                                foreach (char c in System.IO.Path.GetInvalidFileNameChars())
+                                {
+                                    sheetName = sheetName.Replace(c, '_');
+                                }
+
+                                var worksheet = workbook.Worksheets.Add(sheetName);
+
+                                // Заголовки (БЕЗ КАТЕГОРИИ)
+                                worksheet.Cell(1, 1).Value = "Наименование";
+                                worksheet.Cell(1, 2).Value = "Закупочная цена";
+                                worksheet.Cell(1, 3).Value = "Цена продажи";
+                                worksheet.Cell(1, 4).Value = "Поставщик";
+
+                                // Стиль заголовков
+                                var headerRange = worksheet.Range(1, 1, 1, 4);
+                                headerRange.Style.Font.Bold = true;
+                                headerRange.Style.Fill.BackgroundColor = XLColor.LightGray;
+                                headerRange.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+
+                                // Заполняем данные
+                                int row = 2;
+                                foreach (var product in supplier.Value)
+                                {
+                                    decimal? purchasingPrice = purchasingPrices != null && purchasingPrices.ContainsKey(product.ProductId)
+                                        ? purchasingPrices[product.ProductId]
+                                        : null;
+
+                                    worksheet.Cell(row, 1).Value = product.ProductName ?? "";
+
+                                    if (purchasingPrice.HasValue && purchasingPrice.Value > 0)
+                                    {
+                                        worksheet.Cell(row, 2).Value = purchasingPrice.Value;
+                                        worksheet.Cell(row, 2).Style.NumberFormat.Format = "#,##0.00";
+                                    }
+                                    else
+                                    {
+                                        worksheet.Cell(row, 2).Value = "Нет данных";
+                                    }
+
+                                    if (product.HasPrice && product.Price > 0)
+                                    {
+                                        worksheet.Cell(row, 3).Value = product.Price;
+                                        worksheet.Cell(row, 3).Style.NumberFormat.Format = "#,##0.00";
+                                    }
+                                    else
+                                    {
+                                        worksheet.Cell(row, 3).Value = "Нет цены";
+                                    }
+
+                                    worksheet.Cell(row, 4).Value = product.LowerSectionName ?? "";
+                                    row++;
+                                }
+
+                                worksheet.Columns().AdjustToContents();
+                                sheetIndex++;
                             }
-                            else
+
+                            worker.ReportProgress(95, "Сохранение файла...");
+                            workbook.SaveAs(tempFile);
+
+                            args.Result = new ExportResult
                             {
-                                worksheet = (Excel.Worksheet)workbook.Worksheets.Add(After: workbook.Worksheets[workbook.Worksheets.Count]);
-                            }
-
-                            // Называем лист именем поставщика (обрезаем если слишком длинное)
-                            string sheetName = supplier.Key.Length > 30 ? supplier.Key.Substring(0, 30) : supplier.Key;
-                            worksheet.Name = sheetName;
-
-                            // Заголовки
-                            worksheet.Cells[1, 1] = "ID товара";
-                            worksheet.Cells[1, 2] = "Наименование";
-                            worksheet.Cells[1, 3] = "Код";
-                            worksheet.Cells[1, 4] = "Цена";
-                            worksheet.Cells[1, 5] = "Категория";
-                            worksheet.Cells[1, 6] = "Поставщик";
-
-                            // Выделяем заголовки
-                            var headerRange = worksheet.Range[worksheet.Cells[1, 1], worksheet.Cells[1, 6]];
-                            headerRange.Font.Bold = true;
-                            headerRange.Interior.Color = System.Drawing.Color.LightGray;
-                            headerRange.Borders.LineStyle = Microsoft.Office.Interop.Excel.XlLineStyle.xlContinuous;
-
-                            // Заполняем данные
-                            int row = 2;
-                            foreach (var product in supplier.Value)
-                            {
-                                worksheet.Cells[row, 1] = product.ProductId;
-                                worksheet.Cells[row, 2] = product.ProductName;
-                                worksheet.Cells[row, 3] = product.Code;
-                                worksheet.Cells[row, 4] = product.HasPrice ? product.Price.ToString("F2") : "Нет цены";
-                                worksheet.Cells[row, 5] = product.CategoryPath;
-                                worksheet.Cells[row, 6] = product.LowerSectionName;
-                                row++;
-                            }
-
-                            // Автоподбор ширины колонок
-                            var usedRange = worksheet.UsedRange;
-                            usedRange.Columns.AutoFit();
-
-                            // Применяем форматирование к ценам
-                            var priceRange = worksheet.Range[worksheet.Cells[2, 4], worksheet.Cells[row - 1, 4]];
-                            priceRange.NumberFormat = "#,##0.00";
-
-                            sheetIndex++;
+                                Success = true,
+                                Message = "Файл успешно создан",
+                                TempFilePath = tempFile,
+                                ProductsCount = allProducts.Count,
+                                SuppliersCount = productsBySupplier.Count,
+                                PurchasingPricesLoaded = purchasingPrices?.Count ?? 0
+                            };
                         }
-
-                        worker.ReportProgress(95, "Подготовка к сохранению...");
-
-                        args.Result = new ExportResult
-                        {
-                            Success = true,
-                            Message = "Файл успешно создан",
-                            ExcelApp = excelApp,
-                            Workbook = workbook,
-                            ProductsCount = allProducts.Count,
-                            SuppliersCount = productsBySupplier.Count
-                        };
                     }
                     catch (Exception ex)
                     {
@@ -1279,17 +1312,21 @@ namespace ManagerApp.Pages
                     }
                 };
 
+                worker.ProgressChanged += (s, progressArgs) =>
+                {
+                    waitingWindow.UpdateProgress(progressArgs.ProgressPercentage, progressArgs.UserState?.ToString());
+                };
+
                 worker.RunWorkerCompleted += (s, args) =>
                 {
                     waitingWindow.Close();
 
                     if (args.Result is ExportResult result)
                     {
-                        if (result.Success && result.Workbook != null)
+                        if (result.Success && !string.IsNullOrEmpty(result.TempFilePath))
                         {
                             try
                             {
-                                // Настраиваем диалог сохранения файла
                                 var saveFileDialog = new Microsoft.Win32.SaveFileDialog
                                 {
                                     Filter = "Excel файлы (*.xlsx)|*.xlsx|Все файлы (*.*)|*.*",
@@ -1298,27 +1335,25 @@ namespace ManagerApp.Pages
                                     Title = "Сохранить файл с прайсами"
                                 };
 
-                                // Показываем диалог
                                 if (saveFileDialog.ShowDialog() == true)
                                 {
-                                    result.Workbook.SaveAs(saveFileDialog.FileName);
-                                    result.Workbook.Close();
-                                    result.ExcelApp.Quit();
+                                    File.Copy(result.TempFilePath, saveFileDialog.FileName, true);
+                                    try { File.Delete(result.TempFilePath); } catch { }
 
-                                    // Освобождаем COM объекты
-                                    System.Runtime.InteropServices.Marshal.ReleaseComObject(result.Workbook);
-                                    System.Runtime.InteropServices.Marshal.ReleaseComObject(result.ExcelApp);
+                                    string priceLoadInfo = result.PurchasingPricesLoaded > 0
+                                        ? $"💰 Загружено закупочных цен: {result.PurchasingPricesLoaded} из {result.ProductsCount}\n"
+                                        : "⚠️ Закупочные цены не загружены\n";
 
                                     MessageBox.Show(
                                         $"✅ Файл успешно сохранен!\n\n" +
                                         $"📊 Всего товаров: {result.ProductsCount}\n" +
                                         $"🏢 Поставщиков: {result.SuppliersCount}\n" +
+                                        $"{priceLoadInfo}" +
                                         $"📁 Файл: {saveFileDialog.FileName}",
                                         "Выгрузка завершена",
                                         MessageBoxButton.OK,
                                         MessageBoxImage.Information);
 
-                                    // Предлагаем открыть файл
                                     var openResult = MessageBox.Show(
                                         "Открыть файл?",
                                         "Открыть файл",
@@ -1327,62 +1362,353 @@ namespace ManagerApp.Pages
 
                                     if (openResult == MessageBoxResult.Yes)
                                     {
-                                        System.Diagnostics.Process.Start(saveFileDialog.FileName);
+                                        try { System.Diagnostics.Process.Start(saveFileDialog.FileName); } catch { }
                                     }
                                 }
                                 else
                                 {
-                                    // Пользователь отменил сохранение
-                                    result.Workbook.Close();
-                                    result.ExcelApp.Quit();
-
-                                    System.Runtime.InteropServices.Marshal.ReleaseComObject(result.Workbook);
-                                    System.Runtime.InteropServices.Marshal.ReleaseComObject(result.ExcelApp);
+                                    try { File.Delete(result.TempFilePath); } catch { }
                                 }
                             }
                             catch (Exception ex)
                             {
-                                MessageBox.Show(
-                                    $"❌ Ошибка при сохранении файла:\n{ex.Message}",
-                                    "Ошибка",
-                                    MessageBoxButton.OK,
-                                    MessageBoxImage.Error);
+                                MessageBox.Show($"❌ Ошибка при сохранении файла:\n{ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
                             }
                         }
                         else
                         {
-                            MessageBox.Show(
-                                $"❌ Ошибка при создании файла:\n{result.Message}",
-                                "Ошибка",
-                                MessageBoxButton.OK,
-                                MessageBoxImage.Error);
+                            MessageBox.Show($"❌ Ошибка при создании файла:\n{result.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
                         }
                     }
                 };
 
-                waitingWindow.Show();
                 worker.RunWorkerAsync();
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
-                    $"❌ Ошибка:\n{ex.Message}",
-                    "Ошибка",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                MessageBox.Show($"❌ Ошибка:\n{ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
-        // Вспомогательный класс для результатов экспорта
+        // НОВЫЙ МЕТОД: Получение товаров из файлового кеша (как в EditPricePage)
+        // НОВЫЙ МЕТОД: Получение товаров из файлового кеша (как в EditPricePage)
+        private List<ProductWithLowerSection> GetProductsFromFileCache()
+        {
+            try
+            {
+                // Получаем товары из кеша
+                var products = CacheFileManager.LoadProductsFromFile<List<ProductWithCategoryInfo>>().GetAwaiter().GetResult();
+
+                if (products == null || !products.Any())
+                    return new List<ProductWithLowerSection>();
+
+                // Получаем категории через рефлексию
+                var categories = GetCategoriesFromCache();
+                var categoryDict = categories?.ToDictionary(c => c.SelectionId, c => c)
+                    ?? new Dictionary<string, Category>();
+
+                var result = new List<ProductWithLowerSection>();
+
+                foreach (var product in products)
+                {
+                    try
+                    {
+                        string lowerSectionName = "Без категории";
+                        string lowerSectionId = null;
+                        string fullPath = "Без категории";
+
+                        if (!string.IsNullOrEmpty(product.SectionId) &&
+                            categoryDict.TryGetValue(product.SectionId, out var category))
+                        {
+                            // ВАЖНО: LowerSectionName - это имя категории (поставщик)
+                            lowerSectionName = category.Name;
+                            lowerSectionId = category.SelectionId;
+                            fullPath = BuildCategoryPath(category.SelectionId, categoryDict);
+                        }
+
+                        result.Add(new ProductWithLowerSection
+                        {
+                            ProductId = product.ProductId,
+                            ProductName = product.ProductName,
+                            LowerSectionId = lowerSectionId,
+                            LowerSectionName = lowerSectionName,  // ← ЭТО ПОСТАВЩИК!
+                            CategoryPath = fullPath,               // ← ЭТО ПОЛНЫЙ ПУТЬ
+                            Price = product.Price,
+                            HasPrice = product.HasPrice,
+                            Code = product.ProductCode ?? "",
+                            Measure = product.Measure,
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Ошибка обработки товара: {ex.Message}");
+                    }
+                }
+
+                Console.WriteLine($"[GetProductsFromFileCache] Загружено {result.Count} товаров");
+                Console.WriteLine($"[GetProductsFromFileCache] Пример: первый товар поставщик='{result.FirstOrDefault()?.LowerSectionName}'");
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GetProductsFromFileCache] Ошибка: {ex.Message}");
+                return new List<ProductWithLowerSection>();
+            }
+        }
+        // Вспомогательный метод для получения категорий из кеша
+        // Вспомогательный метод для получения категорий из кеша
+        private List<Category> GetCategoriesFromCache()
+        {
+            try
+            {
+                // Сначала пробуем получить через рефлексию
+                var fieldInfo = typeof(BitrixCache).GetField("_allCategories",
+                    System.Reflection.BindingFlags.NonPublic |
+                    System.Reflection.BindingFlags.Static);
+
+                if (fieldInfo != null)
+                {
+                    var categories = fieldInfo.GetValue(null) as List<Category>;
+                    if (categories != null && categories.Any())
+                    {
+                        Console.WriteLine($"[GetCategoriesFromCache] Получено {categories.Count} категорий через рефлексию");
+                        return categories;
+                    }
+                }
+
+                // Если не получилось, пробуем загрузить из файла
+                Console.WriteLine("[GetCategoriesFromCache] Пробуем загрузить категории из файла...");
+
+                // Путь к файлу с категориями (скорее всего он есть)
+                string cacheDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "ManagerApp", "Cache");
+
+                string categoriesFile = Path.Combine(cacheDir, "categories_cache.json");
+
+                if (File.Exists(categoriesFile))
+                {
+                    string json = File.ReadAllText(categoriesFile);
+                    var categories = JsonConvert.DeserializeObject<List<Category>>(json);
+                    if (categories != null && categories.Any())
+                    {
+                        Console.WriteLine($"[GetCategoriesFromCache] Загружено {categories.Count} категорий из файла");
+                        return categories;
+                    }
+                }
+
+                // Если все else fails, используем BitrixService для загрузки
+                Console.WriteLine("[GetCategoriesFromCache] Загружаем категории через BitrixService...");
+                var task = Task.Run(async () => await new BitrixService().GetСategories());
+                task.Wait();
+                var loadedCategories = task.Result;
+
+                if (loadedCategories != null && loadedCategories.Any())
+                {
+                    Console.WriteLine($"[GetCategoriesFromCache] Загружено {loadedCategories.Count} категорий из API");
+
+                    // Сохраняем в кеш для будущих раз
+                    try
+                    {
+                        File.WriteAllText(categoriesFile, JsonConvert.SerializeObject(loadedCategories));
+                    }
+                    catch { }
+
+                    return loadedCategories;
+                }
+
+                Console.WriteLine("[GetCategoriesFromCache] НЕ УДАЛОСЬ загрузить категории!");
+                return new List<Category>();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GetCategoriesFromCache] Ошибка: {ex.Message}");
+                return new List<Category>();
+            }
+        }
+
+        // Вспомогательный метод для построения пути категории
+        private string BuildCategoryPath(string categoryId, Dictionary<string, Category> categoryDict)
+        {
+            if (string.IsNullOrEmpty(categoryId) || !categoryDict.ContainsKey(categoryId))
+                return "Без категории";
+
+            var pathParts = new List<string>();
+            var currentId = categoryId;
+            var visited = new HashSet<string>();
+
+            while (!string.IsNullOrEmpty(currentId) && categoryDict.TryGetValue(currentId, out var category))
+            {
+                if (visited.Contains(currentId))
+                    break;
+                visited.Add(currentId);
+
+                pathParts.Insert(0, category.Name);
+                currentId = category.ParentId;
+
+                if (pathParts.Count > 10)
+                    break;
+            }
+
+            return pathParts.Count > 0 ? string.Join(" → ", pathParts) : "Без категории";
+        }
+
+        // Вспомогательный метод для обрезки строк
+        private string TruncateString(string str, int maxLength)
+        {
+            if (string.IsNullOrEmpty(str)) return str;
+            return str.Length <= maxLength ? str : str.Substring(0, maxLength);
+        }
+
+        // Метод для пакетного получения закупочных цен с прогрессом (ЧЕРЕЗ API)
+        private Dictionary<string, decimal?> GetPurchasingPricesBatchWithProgress(
+            List<ProductWithLowerSection> products,
+            System.ComponentModel.BackgroundWorker worker)
+        {
+            var result = new Dictionary<string, decimal?>();
+
+            if (products == null || !products.Any())
+                return result;
+
+            try
+            {
+                var productIds = products
+                    .Where(p => !string.IsNullOrEmpty(p.ProductId) && p.ProductId != "0")
+                    .Select(p => p.ProductId)
+                    .Distinct()
+                    .ToList();
+
+                if (!productIds.Any())
+                    return result;
+
+                int totalProducts = productIds.Count;
+
+                const int batchSize = 50;
+                var batches = new List<List<string>>();
+
+                for (int i = 0; i < productIds.Count; i += batchSize)
+                {
+                    batches.Add(productIds.Skip(i).Take(batchSize).ToList());
+                }
+
+                int processedCount = 0;
+                int totalBatches = batches.Count;
+
+                for (int batchIndex = 0; batchIndex < batches.Count; batchIndex++)
+                {
+                    var batch = batches[batchIndex];
+
+                    try
+                    {
+                        int progressPercent = (processedCount * 100 / totalProducts); // Проценты только от загруженных цен
+                        string progressMessage = $"Загрузка цен: {processedCount} из {totalProducts}";
+                        worker.ReportProgress(progressPercent, progressMessage);
+
+                        var batchPrices = GetPurchasingPricesBatchAsync(batch).GetAwaiter().GetResult();
+
+                        foreach (var kvp in batchPrices)
+                        {
+                            result[kvp.Key] = kvp.Value;
+                        }
+
+                        processedCount += batch.Count;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Ошибка при обработке батча: {ex.Message}");
+                    }
+                }
+
+                worker.ReportProgress(65, $"Загрузка цен завершена. Загружено: {result.Count} из {totalProducts}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка в GetPurchasingPricesBatch: {ex.Message}");
+            }
+
+            return result;
+        }
+
+        // Асинхронный метод для получения цен батча (ЧЕРЕЗ API)
+        private async Task<Dictionary<string, decimal?>> GetPurchasingPricesBatchAsync(List<string> productIds)
+        {
+            var result = new Dictionary<string, decimal?>();
+
+            if (productIds == null || !productIds.Any())
+                return result;
+
+            try
+            {
+                using (var httpClient = new HttpClient())
+                {
+                    httpClient.Timeout = TimeSpan.FromSeconds(60);
+
+                    var batch = new Dictionary<string, string>();
+
+                    foreach (var id in productIds)
+                    {
+                        batch[$"product_{id}"] = $"catalog.product.get?id={id}";
+                    }
+
+                    var batchRequest = new
+                    {
+                        halt = 0,
+                        cmd = batch
+                    };
+
+                    var json = JsonConvert.SerializeObject(batchRequest);
+                    var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+                    string apiUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/batch.json";
+                    var response = await httpClient.PostAsync(apiUrl, content);
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var responseJson = await response.Content.ReadAsStringAsync();
+                        var batchResponse = JObject.Parse(responseJson);
+
+                        var resultObj = batchResponse["result"]?["result"];
+                        if (resultObj != null)
+                        {
+                            foreach (var id in productIds)
+                            {
+                                try
+                                {
+                                    var productData = resultObj[$"product_{id}"]?["product"];
+                                    if (productData != null)
+                                    {
+                                        var purchasingPrice = productData["purchasingPrice"]?.Value<decimal?>();
+                                        result[id] = purchasingPrice;
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine($"Ошибка парсинга для товара {id}: {ex.Message}");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка в GetPurchasingPricesBatchAsync: {ex.Message}");
+            }
+
+            return result;
+        }
+
+        // Класс для результатов экспорта
         public class ExportResult
         {
             public bool Success { get; set; }
             public string Message { get; set; }
             public Exception Exception { get; set; }
-            public Microsoft.Office.Interop.Excel.Application ExcelApp { get; set; }
-            public Microsoft.Office.Interop.Excel.Workbook Workbook { get; set; }
+            public string TempFilePath { get; set; }
             public int ProductsCount { get; set; }
             public int SuppliersCount { get; set; }
+            public int PurchasingPricesLoaded { get; set; }
         }
 
 
