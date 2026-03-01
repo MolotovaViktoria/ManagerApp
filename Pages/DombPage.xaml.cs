@@ -1,19 +1,19 @@
 ﻿using ManagerApp.Classes.Read;
+using ManagerApp.Data.ScharedData;
+using ManagerApp.Data.StructureList;
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 
 namespace ManagerApp.Pages
 {
@@ -22,6 +22,10 @@ namespace ManagerApp.Pages
     /// </summary>
     public partial class DombPage : Page
     {
+        // Информация для доступа к AI
+        private const string ApiToken = "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCIsImtpZCI6IjFrYnhacFJNQGJSI0tSbE1xS1lqIn0.eyJ1c2VyIjoibXoxNjUxODMiLCJ0eXBlIjoiYXBpX2tleSIsImFwaV9rZXlfaWQiOiIxZmI0YWQ0NS0zYjBjLTRiMGQtODJjZS02NzQ0NzFkYWVhYTkiLCJpYXQiOjE3NzIzNzg2Mzl9.K0nQulksfXGzqPYOeudwSVbS2cv0ryHqRsVbElmNg87FuA8BOdUeBq5mPQCr-H0h3cXgg62CJNTfa1ULBd3yCC0y4POj2KbIe_gX_y1May08SC0YP9dQyFEhBgmtcIgOBAg-PvGwlOkkFnjKPxCjOsEkYe2Uf2NaSFqn3yjfZYydxrLTSk4DNlro0zZi7AbAEJvlrefj3fwDdSV3IJIQMApffWhlFpxiqQhmGURMlWdvREadoGY-rtmaZYFVOuZccJeKznQ5bmlZ4KgfRKViacAfVL6zDMP3jLQlWY7aw0ujOG13DUfrwAHSGWXXM-t6CaMQI4DHGjUzHHlZrXZ8h7565am41xxsaE0Alxi7y5vLQrkQvyhEXlWC9Ris3jIaKcIUCMvVrYQCIzPxUurEoKrnEZ8GlZM29mJXexFX_5BP0god0fY08sVZ2IgEu2kTiUJpthO3WyDxQLk3ALAQySYgrkx4YRM-h1YqK8nKnM6vy_E1sA0Jh3mcuVYHyZkS";
+        private const string ApiUrl = "https://agent.timeweb.cloud/api/v1/cloud-ai/agents/7ed67ebb-f658-4716-ac81-35422c12cb21/v1/chat/completions";
+
         public DombPage()
         {
             InitializeComponent();
@@ -64,21 +68,21 @@ namespace ManagerApp.Pages
         }
 
         // Обработчик события Drop
-        private void DropArea_Drop(object sender, DragEventArgs e)
+        private async void DropArea_Drop(object sender, DragEventArgs e)
         {
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
                 string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
                 if (files.Length > 0)
                 {
-                    ProcessFile(files[0]);
+                    await ProcessFileAsync(files[0]);
                 }
             }
             DropArea.Opacity = 1.0;
         }
 
         // Метод загрузки файла через диалог
-        private void LoadFile()
+        private async void LoadFile()
         {
             OpenFileDialog openFileDialog = new OpenFileDialog
             {
@@ -89,7 +93,7 @@ namespace ManagerApp.Pages
 
             if (openFileDialog.ShowDialog() == true)
             {
-                ProcessFile(openFileDialog.FileName);
+                await ProcessFileAsync(openFileDialog.FileName);
             }
         }
 
@@ -151,45 +155,162 @@ namespace ManagerApp.Pages
             return filter;
         }
 
-        private void ProcessFile(string filePath)
+        private async Task ProcessFileAsync(string filePath)
         {
             // Получаем расширение файла
             string extension = System.IO.Path.GetExtension(filePath)?.ToLower();
 
-            // Определяем, какой тип файла и открываем соответствующую страницу
-            if (FormatLists.ExcelFormatList.Contains(extension))
+            try
             {
-                // Excel файлы
-                ExcelFile excelFilePage = new ExcelFile(filePath);
-                this.NavigationService.Navigate(excelFilePage);
+                // Показываем индикатор загрузки (можно добавить визуальный элемент)
+                Mouse.OverrideCursor = Cursors.Wait;
+
+                // Читаем текст из файла
+                string fileText = await ReadFileTextAsync(filePath, extension);
+
+                if (string.IsNullOrWhiteSpace(fileText))
+                {
+                    MessageBox.Show("Не удалось извлечь текст из файла или файл пуст.",
+                        "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                // Отправляем текст в AI и получаем список товаров
+                List<string> products = await ExtractProductsFromTextAsync(fileText);
+
+                if (products == null || products.Count == 0)
+                {
+                    MessageBox.Show("Не удалось извлечь товары из текста заявки.",
+                        "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                // Сохраняем товары в менеджер
+                ProductSelectionManager.SetProducts(products);
+
+                // Переходим на страницу сравнения товаров
+                ComparisonProduct comparisonPage = new ComparisonProduct(products);
+                this.NavigationService.Navigate(comparisonPage);
             }
-            else if (FormatLists.PdfFormatList.Contains(extension) ||
-                     FormatLists.WordFormatList.Contains(extension))
+            catch (Exception ex)
             {
-                // PDF или Word файлы
-                WorldPdfFile worldPdfFilePage = new WorldPdfFile();
-                worldPdfFilePage.LoadFile(filePath);
-                this.NavigationService.Navigate(worldPdfFilePage);
-            }
-            else if (FormatLists.ImageFormatList.Contains(extension))
-            {
-                // Файлы изображений
-                ProcessImageFile(filePath);
-            }
-            else
-            {
-                MessageBox.Show($"Неподдерживаемый формат файла: {extension}",
+                MessageBox.Show($"Ошибка при обработке файла: {ex.Message}",
                     "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                Mouse.OverrideCursor = null;
             }
         }
 
-        // Обработка файла изображения
+        private async Task<string> ReadFileTextAsync(string filePath, string extension)
+        {
+            return await Task.Run(() =>
+            {
+                ReadRequst reader = new ReadRequst();
+
+                if (FormatLists.ExcelFormatList.Contains(extension) ||
+                    FormatLists.PdfFormatList.Contains(extension) ||
+                    FormatLists.WordFormatList.Contains(extension))
+                {
+                    return reader.ReadFileAll(filePath);
+                }
+                else if (FormatLists.ImageFormatList.Contains(extension))
+                {
+                    // Для изображений возвращаем пустую строку или можно добавить OCR
+                    return string.Empty;
+                }
+
+                return string.Empty;
+            });
+        }
+
+        private async Task<List<string>> ExtractProductsFromTextAsync(string text)
+        {
+            try
+            {
+                using (HttpClient client = new HttpClient())
+                {
+                    // Настраиваем заголовки
+                    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {ApiToken}");
+
+                    // Формируем запрос к AI
+                    var requestBody = new
+                    {
+                        model = "gpt-4o-mini",
+                        messages = new[]
+                        {
+                    new
+                    {
+                        role = "user",
+                        content = $"Изучи внимательно текст заявки. Напиши наименование товаров. Каждое - с новой строки.\n\nТекст заявки:\n{text}"
+                    }
+                },
+                        temperature = 0.3,
+                        max_tokens = 1000
+                    };
+
+                    string jsonRequest = JsonSerializer.Serialize(requestBody);
+                    var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+
+                    // Отправляем запрос
+                    HttpResponseMessage response = await client.PostAsync(ApiUrl, content);
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        string jsonResponse = await response.Content.ReadAsStringAsync();
+
+                        // Используем JsonDocument в блоке using со скобками
+                        using (JsonDocument doc = JsonDocument.Parse(jsonResponse))
+                        {
+                            // Извлекаем текст ответа из структуры
+                            if (doc.RootElement.TryGetProperty("choices", out JsonElement choices) &&
+                                choices.GetArrayLength() > 0)
+                            {
+                                var firstChoice = choices[0];
+                                if (firstChoice.TryGetProperty("message", out JsonElement message) &&
+                                    message.TryGetProperty("content", out JsonElement contentElement))
+                                {
+                                    string aiResponse = contentElement.GetString();
+
+                                    // Разбиваем ответ на строки и очищаем от лишних пробелов
+                                    var products = aiResponse
+                                        .Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+                                        .Select(p => p.Trim())
+                                        .Where(p => !string.IsNullOrWhiteSpace(p))
+                                        .ToList();
+
+                                    return products;
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        string errorResponse = await response.Content.ReadAsStringAsync();
+                        throw new Exception($"Ошибка API: {response.StatusCode}\n{errorResponse}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Ошибка при обращении к AI: {ex.Message}", ex);
+            }
+
+            return new List<string>();
+        }
+
+        private void ProcessFile(string filePath)
+        {
+            // Этот метод больше не используется, оставляем для совместимости
+            // Теперь используется асинхронная версия ProcessFileAsync
+        }
+
         // Обработка файла изображения
         private void ProcessImageFile(string filePath)
         {
             try
             {
-                // ПРОСТО Создаем и открываем страницу для обработки изображения
                 PngPage pngPage = new PngPage(filePath);
                 this.NavigationService.Navigate(pngPage);
             }
@@ -251,7 +372,5 @@ namespace ManagerApp.Pages
                    FormatLists.ExcelFormatList.Contains(extension) ||
                    FormatLists.ImageFormatList.Contains(extension);
         }
-
-        // Удалены старые методы меню (оставлены только те, что нужны для загрузки файлов)
     }
 }
