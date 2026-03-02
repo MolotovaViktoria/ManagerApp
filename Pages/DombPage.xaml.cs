@@ -4,6 +4,8 @@ using ManagerApp.Data.StructureList;
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
+using System.Data;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
@@ -14,6 +16,12 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+
+// Добавляем using для работы с Excel
+using ClosedXML.Excel;
+using NPOI.HSSF.UserModel;
+using NPOI.SS.UserModel;
+using NPOI.XSSF.UserModel;
 
 namespace ManagerApp.Pages
 {
@@ -162,11 +170,36 @@ namespace ManagerApp.Pages
 
             try
             {
-                // Показываем индикатор загрузки (можно добавить визуальный элемент)
+                // Показываем индикатор загрузки
                 Mouse.OverrideCursor = Cursors.Wait;
 
-                // Читаем текст из файла
-                string fileText = await ReadFileTextAsync(filePath, extension);
+                string fileText = "";
+
+                // Для Excel файлов используем NPOI и ClosedXML
+                if (FormatLists.ExcelFormatList.Contains(extension))
+                {
+                    fileText = await ReadExcelFileAsync(filePath);
+                }
+                else if (FormatLists.PdfFormatList.Contains(extension) ||
+                         FormatLists.WordFormatList.Contains(extension))
+                {
+                    // Для PDF и Word используем существующий метод
+                    ReadRequst reader = new ReadRequst();
+                    fileText = await Task.Run(() => reader.ReadFileAll(filePath));
+                }
+                else if (FormatLists.ImageFormatList.Contains(extension))
+                {
+                    // Для изображений переходим на PngPage
+                    PngPage pngPage = new PngPage(filePath);
+                    this.NavigationService.Navigate(pngPage);
+                    return;
+                }
+                else
+                {
+                    MessageBox.Show($"Неподдерживаемый формат файла: {extension}",
+                        "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
 
                 if (string.IsNullOrWhiteSpace(fileText))
                 {
@@ -203,26 +236,144 @@ namespace ManagerApp.Pages
             }
         }
 
-        private async Task<string> ReadFileTextAsync(string filePath, string extension)
+        /// <summary>
+        /// Чтение Excel файла с использованием NPOI и ClosedXML (как в классе ExcelFile)
+        /// </summary>
+        private async Task<string> ReadExcelFileAsync(string filePath)
         {
             return await Task.Run(() =>
             {
-                ReadRequst reader = new ReadRequst();
+                StringBuilder result = new StringBuilder();
+                string extension = Path.GetExtension(filePath).ToLower();
 
-                if (FormatLists.ExcelFormatList.Contains(extension) ||
-                    FormatLists.PdfFormatList.Contains(extension) ||
-                    FormatLists.WordFormatList.Contains(extension))
+                try
                 {
-                    return reader.ReadFileAll(filePath);
+                    if (extension == ".xls")
+                    {
+                        // Для старых .xls файлов используем NPOI HSSF
+                        ReadXlsFileWithNpoi(filePath, result);
+                    }
+                    else if (extension == ".xlsx" || extension == ".xlsm" || extension == ".xlsb")
+                    {
+                        // Для новых .xlsx файлов используем ClosedXML
+                        ReadXlsxFileWithClosedXml(filePath, result);
+                    }
+                    else
+                    {
+                        result.Append("Неподдерживаемый формат Excel файла");
+                    }
                 }
-                else if (FormatLists.ImageFormatList.Contains(extension))
+                catch (Exception ex)
                 {
-                    // Для изображений возвращаем пустую строку или можно добавить OCR
-                    return string.Empty;
+                    Console.WriteLine($"Ошибка при чтении Excel: {ex.Message}");
+                    result.Append($"Ошибка чтения Excel: {ex.Message}");
                 }
 
-                return string.Empty;
+                return result.ToString();
             });
+        }
+
+        /// <summary>
+        /// Чтение .xls файлов с помощью NPOI HSSF
+        /// </summary>
+        private void ReadXlsFileWithNpoi(string filePath, StringBuilder result)
+        {
+            IWorkbook workbook;
+
+            using (FileStream file = new FileStream(filePath, FileMode.Open, FileAccess.Read))
+            {
+                workbook = new HSSFWorkbook(file);
+            }
+
+            for (int i = 0; i < workbook.NumberOfSheets; i++)
+            {
+                ISheet sheet = workbook.GetSheetAt(i);
+                result.AppendLine($"=== Лист: {sheet.SheetName} ===");
+                result.AppendLine();
+
+                if (sheet.PhysicalNumberOfRows == 0)
+                    continue;
+
+                // Читаем заголовки из первой строки
+                IRow headerRow = sheet.GetRow(0);
+                if (headerRow != null)
+                {
+                    for (int col = headerRow.FirstCellNum; col < headerRow.LastCellNum; col++)
+                    {
+                        ICell cell = headerRow.GetCell(col);
+                        string headerText = cell != null ? cell.ToString() : $"Column {col + 1}";
+                        result.Append(headerText);
+                        if (col < headerRow.LastCellNum - 1)
+                            result.Append("\t");
+                    }
+                    result.AppendLine();
+                }
+
+                // Читаем данные со 2-й строки
+                for (int row = 1; row <= sheet.LastRowNum; row++)
+                {
+                    IRow dataRow = sheet.GetRow(row);
+                    if (dataRow == null) continue;
+
+                    for (int col = dataRow.FirstCellNum; col < dataRow.LastCellNum; col++)
+                    {
+                        ICell cell = dataRow.GetCell(col);
+                        string cellValue = cell != null ? cell.ToString() : "";
+                        result.Append(cellValue);
+                        if (col < dataRow.LastCellNum - 1)
+                            result.Append("\t");
+                    }
+                    result.AppendLine();
+                }
+                result.AppendLine();
+                result.AppendLine();
+            }
+        }
+
+        /// <summary>
+        /// Чтение .xlsx файлов с помощью ClosedXML
+        /// </summary>
+        private void ReadXlsxFileWithClosedXml(string filePath, StringBuilder result)
+        {
+            using (var workbook = new XLWorkbook(filePath))
+            {
+                foreach (var worksheet in workbook.Worksheets)
+                {
+                    result.AppendLine($"=== Лист: {worksheet.Name} ===");
+                    result.AppendLine();
+
+                    var range = worksheet.RangeUsed();
+                    if (range == null) continue;
+
+                    // Читаем заголовки из первой строки
+                    var firstRow = range.FirstRow();
+                    for (int col = 1; col <= range.ColumnCount(); col++)
+                    {
+                        string headerText = firstRow.Cell(col).GetString();
+                        if (string.IsNullOrEmpty(headerText))
+                            headerText = $"Column {col}";
+                        result.Append(headerText);
+                        if (col < range.ColumnCount())
+                            result.Append("\t");
+                    }
+                    result.AppendLine();
+
+                    // Читаем данные со 2-й строки
+                    for (int row = 2; row <= range.RowCount(); row++)
+                    {
+                        for (int col = 1; col <= range.ColumnCount(); col++)
+                        {
+                            string cellValue = worksheet.Cell(row, col).GetString();
+                            result.Append(cellValue);
+                            if (col < range.ColumnCount())
+                                result.Append("\t");
+                        }
+                        result.AppendLine();
+                    }
+                    result.AppendLine();
+                    result.AppendLine();
+                }
+            }
         }
 
         private async Task<List<string>> ExtractProductsFromTextAsync(string text)
@@ -240,12 +391,21 @@ namespace ManagerApp.Pages
                         model = "gpt-4o-mini",
                         messages = new[]
                         {
-                    new
-                    {
-                        role = "user",
-                        content = $"Изучи внимательно текст заявки. Напиши наименование товаров. Каждое - с новой строки.\n\nТекст заявки:\n{text}"
-                    }
-                },
+                            new
+                            {
+                                role = "user",
+                                content = $"Проанализируй текст заявки и выдели список товаров. Товары могут быть указаны в виде таблицы, списка или простого текста.\n\n" +
+          $"Правила:\n" +
+          $"1. В каждой заявке обязательно есть товары (их не может быть 0)\n" +
+          $"2. Названия товаров могут находиться в разных частях документа: в таблицах, списках, абзацах\n" +
+
+          $"3. Игнорируй техническую информацию: даты, номера документов, реквизиты, адреса, телефоны\n" +
+
+          $"4. Выведи ТОЛЬКО названия товаров, каждое с новой строки\n" +
+          $"5. НЕ добавляй никаких пояснений, предисловий или комментариев\n\n" +
+          $"Текст заявки:\n{text}"
+                            }
+                        },
                         temperature = 0.3,
                         max_tokens = 1000
                     };
@@ -277,7 +437,7 @@ namespace ManagerApp.Pages
                                     var products = aiResponse
                                         .Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
                                         .Select(p => p.Trim())
-                                        .Where(p => !string.IsNullOrWhiteSpace(p))
+                                        .Where(p => !string.IsNullOrWhiteSpace(p) && !p.StartsWith("```"))
                                         .ToList();
 
                                     return products;
@@ -303,7 +463,6 @@ namespace ManagerApp.Pages
         private void ProcessFile(string filePath)
         {
             // Этот метод больше не используется, оставляем для совместимости
-            // Теперь используется асинхронная версия ProcessFileAsync
         }
 
         // Обработка файла изображения
