@@ -4,7 +4,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Net.Http;
+using System.Text.Json;
 
 namespace ManagerApp.Data.Search
 {
@@ -14,6 +17,34 @@ namespace ManagerApp.Data.Search
         private DateTime _cacheTimestamp;
         private readonly TimeSpan _cacheDuration = TimeSpan.FromMinutes(30);
         private readonly object _cacheLock = new object();
+
+        // Информация для доступа к AI
+        private const string ApiToken = "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCIsImtpZCI6IjFrYnhacFJNQGJSI0tSbE1xS1lqIn0.eyJ1c2VyIjoibXoxNjUxODMiLCJ0eXBlIjoiYXBpX2tleSIsImFwaV9rZXlfaWQiOiIxZmI0YWQ0NS0zYjBjLTRiMGQtODJjZS02NzQ0NzFkYWVhYTkiLCJpYXQiOjE3NzIzNzg2Mzl9.K0nQulksfXGzqPYOeudwSVbS2cv0ryHqRsVbElmNg87FuA8BOdUeBq5mPQCr-H0h3cXgg62CJNTfa1ULBd3yCC0y4POj2KbIe_gX_y1May08SC0YP9dQyFEhBgmtcIgOBAg-PvGwlOkkFnjKPxCjOsEkYe2Uf2NaSFqn3yjfZYydxrLTSk4DNlro0zZi7AbAEJvlrefj3fwDdSV3IJIQMApffWhlFpxiqQhmGURMlWdvREadoGY-rtmaZYFVOuZccJeKznQ5bmlZ4KgfRKViacAfVL6zDMP3jLQlWY7aw0ujOG13DUfrwAHSGWXXM-t6CaMQI4DHGjUzHHlZrXZ8h7565am41xxsaE0Alxi7y5vLQrkQvyhEXlWC9Ris3jIaKcIUCMvVrYQCIzPxUurEoKrnEZ8GlZM29mJXexFX_5BP0god0fY08sVZ2IgEu2kTiUJpthO3WyDxQLk3ALAQySYgrkx4YRM-h1YqK8nKnM6vy_E1sA0Jh3mcuVYHyZkS";
+        private const string ApiUrl = "https://agent.timeweb.cloud/api/v1/cloud-ai/agents/7ed67ebb-f658-4716-ac81-35422c12cb21/v1/chat/completions";
+
+        // Список стоп-слов для кабелей и проводов (то, что НЕ должно быть в названии)
+        private readonly HashSet<string> _cableStopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "удлинитель", "катушк", "бухт", "барабан", "кабель-канал", "кабель роут",
+            "гирлянд", "светильник", "розетк", "выключатель", "автомат", "узо",
+            "щит", "дин-рейк", "шин", "led", "светодиод", "ламп", "люстр", "бра",
+            "писсуар", "сифон", "унитаз", "раковин", "смеситель", "душ", "ванн",
+            "перенос", "удлинитель-шнур", "сетевой фильтр", "шнур"
+        };
+
+        // Список обязательных ключевых слов для кабелей и проводов
+        private readonly HashSet<string> _cableRequiredKeywords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "провод", "кабель", "пвс", "ввг", "кг", "шввп", "сип", "вббшв",
+            "кпп", "кпс", "кввг", "кгвв", "кгпп", "пугв", "пув"
+        };
+
+        // ДОПОЛНИТЕЛЬНЫЕ СТОП-СЛОВА ДЛЯ КАБЕЛЕЙ
+        private readonly HashSet<string> _additionalCableStopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "шнур", "удлинитель", "переноска", "сетевой фильтр", "пилот", "разветвитель",
+            "тройник", "адаптер", "переходник", "кабель-канал", "кабель роут", "кабель роутер"
+        };
 
         public BitrixProductMatcher()
         {
@@ -43,169 +74,44 @@ namespace ManagerApp.Data.Search
             return products;
         }
 
-        // ✅ ИСПРАВЛЕННЫЙ МЕТОД: 10 ТОВАРОВ, МИНИМУМ 3 ПОСТАВЩИКА
+        // ОСНОВНОЙ МЕТОД ПОИСКА
         public async Task<List<ProductWithCategoryInfo>> FindSimilarProductsAsync(
             string searchQuery,
-            int maxResults = 10) // ✅ ФИКСИРУЕМ 10 ТОВАРОВ
+            int maxResults = 50)
         {
             if (string.IsNullOrWhiteSpace(searchQuery))
                 return new List<ProductWithCategoryInfo>();
 
             try
             {
-                // Получаем все товары
                 var allProducts = await GetAllProductsAsync();
-
                 if (allProducts == null || !allProducts.Any())
                     return new List<ProductWithCategoryInfo>();
 
                 var query = searchQuery.Trim();
                 Console.WriteLine($"🔍 Поиск: '{query}'");
 
-                // ✅ ШАГ 1: НАХОДИМ ВСЕ ПОСТАВЩИКОВ В БАЗЕ
-                var allSuppliers = allProducts
-                    .Where(p => !string.IsNullOrEmpty(p.CategoryName))
-                    .Select(p => p.CategoryName)
-                    .Distinct()
-                    .ToList();
+                // Пытаемся использовать AI с повторными попытками
+                string productType = await DetermineProductTypeWithAIRetry(query, maxRetries: 3);
 
-                Console.WriteLine($"📊 Всего поставщиков в базе: {allSuppliers.Count}");
-
-                // ✅ ШАГ 2: ДЛЯ КАЖДОГО ПОСТАВЩИКА НАХОДИМ САМЫЙ ПОХОЖИЙ ТОВАР
-                var supplierBestProducts = new List<ProductWithSupplierRelevance>();
-
-                foreach (var supplier in allSuppliers)
+                if (!string.IsNullOrEmpty(productType) &&
+                    (productType.Contains("кабель") || productType.Contains("провод")))
                 {
-                    var supplierProducts = allProducts
-                        .Where(p => p.CategoryName == supplier)
-                        .ToList();
-
-                    // ✅ НАХОДИМ САМЫЙ ПОХОЖИЙ ТОВАР ОТ ЭТОГО ПОСТАВЩИКА
-                    var bestProduct = FindBestProductForSupplier(supplierProducts, query);
-
-                    if (bestProduct != null)
-                    {
-                        var relevance = CalculateDeepRelevance(bestProduct, query);
-                        supplierBestProducts.Add(new ProductWithSupplierRelevance
-                        {
-                            Product = bestProduct,
-                            Supplier = supplier,
-                            Relevance = relevance
-                        });
-
-                        Console.WriteLine($"   📦 {supplier}: '{bestProduct.ProductName}' (релевантность: {relevance})");
-                    }
+                    Console.WriteLine($"📌 AI определил как: {productType}");
+                    return await SearchCableOrWireAsync(allProducts, query, maxResults);
                 }
 
-                // ✅ ШАГ 3: СОРТИРУЕМ ПО РЕЛЕВАНТНОСТИ (ОТ САМОГО ПОДХОДЯЩЕГО)
-                supplierBestProducts = supplierBestProducts
-                    .OrderByDescending(r => r.Relevance)
-                    .ThenByDescending(p => p.Product.HasPrice)
-                    .ThenBy(p => p.Product.ProductName.Length)
-                    .ToList();
+                // Если AI не сработал или определил другое, используем резервный метод
+                Console.WriteLine("📌 Используем резервный метод определения");
 
-                Console.WriteLine($"✅ Найдено {supplierBestProducts.Count} лучших товаров от {supplierBestProducts.Select(r => r.Supplier).Distinct().Count()} поставщиков");
-
-                // ✅ ШАГ 4: ФОРМИРУЕМ ФИНАЛЬНЫЙ СПИСОК С ГАРАНТИЕЙ 3+ ПОСТАВЩИКОВ
-                var finalResults = new List<ProductWithSupplierRelevance>();
-                var usedSuppliers = new HashSet<string>();
-                var maxProductsPerSupplier = 3; // Максимум 3 товара от одного поставщика
-
-                // ✅ ПРАВИЛО 1: ГАРАНТИРУЕМ МИНИМУМ 3 РАЗНЫХ ПОСТАВЩИКА
-                // Берем самый релевантный товар от каждого поставщика
-                foreach (var supplierGroup in supplierBestProducts.GroupBy(p => p.Supplier))
+                if (HasSectionPattern(query))
                 {
-                    var bestFromSupplier = supplierGroup.OrderByDescending(p => p.Relevance).First();
-                    finalResults.Add(bestFromSupplier);
-                    usedSuppliers.Add(supplierGroup.Key);
-
-                    if (usedSuppliers.Count >= 3 && finalResults.Count >= 5)
-                        break;
+                    return await SearchCableOrWireAsync(allProducts, query, maxResults);
                 }
-
-                Console.WriteLine($"📦 Гарантировано {usedSuppliers.Count} поставщиков, {finalResults.Count} товаров");
-
-                // ✅ ПРАВИЛО 2: ДОБИРАЕМ ДО 10 ТОВАРОВ, СОБЛЮДАЯ ЛИМИТ ПО ПОСТАВЩИКАМ
-                foreach (var product in supplierBestProducts.Where(p => !finalResults.Contains(p)))
+                else
                 {
-                    if (finalResults.Count >= maxResults) // ✅ ФИКСИРОВАННЫЙ ЛИМИТ 10
-                        break;
-
-                    // Проверяем, не превысили ли лимит для этого поставщика
-                    var supplierCount = finalResults.Count(r => r.Supplier == product.Supplier);
-                    if (supplierCount < maxProductsPerSupplier)
-                    {
-                        finalResults.Add(product);
-                    }
+                    return await SearchGeneralProductAsync(allProducts, query, maxResults);
                 }
-
-                // ✅ ПРАВИЛО 3: ЕСЛИ ВСЕ РАВНО МЕНЬШЕ 3 ПОСТАВЩИКОВ - ДОБАВЛЯЕМ ЕЩЕ
-                if (usedSuppliers.Count < 3)
-                {
-                    Console.WriteLine($"⚠️  Меньше 3 поставщиков ({usedSuppliers.Count})! Ищем дополнительные...");
-
-                    // Ищем еще поставщиков
-                    var remainingSuppliers = allSuppliers
-                        .Where(s => !usedSuppliers.Contains(s))
-                        .Take(3 - usedSuppliers.Count);
-
-                    foreach (var supplier in remainingSuppliers)
-                    {
-                        if (finalResults.Count >= maxResults)
-                            break;
-
-                        var supplierProducts = allProducts
-                            .Where(p => p.CategoryName == supplier)
-                            .ToList();
-
-                        var bestProduct = FindBestProductForSupplier(supplierProducts, query);
-                        if (bestProduct != null)
-                        {
-                            var relevance = CalculateDeepRelevance(bestProduct, query);
-                            finalResults.Add(new ProductWithSupplierRelevance
-                            {
-                                Product = bestProduct,
-                                Supplier = supplier,
-                                Relevance = relevance
-                            });
-                            usedSuppliers.Add(supplier);
-                            Console.WriteLine($"   ➕ Дополнительный поставщик: {supplier}");
-                        }
-                    }
-                }
-
-                // ✅ ШАГ 5: ФИНАЛЬНАЯ СОРТИРОВКА И ОГРАНИЧЕНИЕ
-                var resultProducts = finalResults
-                    .OrderByDescending(r => r.Relevance) // ✅ СОРТИРОВКА ОТ САМОГО ПОДХОДЯЩЕГО
-                    .ThenByDescending(p => p.Product.HasPrice)
-                    .ThenBy(p => p.Product.ProductName.Length)
-                    .Take(maxResults) // ✅ ТОЧНО 10 ТОВАРОВ
-                    .Select(r => r.Product)
-                    .ToList();
-
-                Console.WriteLine($"🎯 ФИНАЛЬНО: {resultProducts.Count} товаров от {usedSuppliers.Count} поставщиков");
-
-                // Выводим все результаты
-                for (int i = 0; i < resultProducts.Count; i++)
-                {
-                    var product = resultProducts[i];
-                    var supplier = product.CategoryName ?? "БЕЗ ПОСТАВЩИКА";
-                    Console.WriteLine($"   {i + 1}. [{supplier}] {product.ProductName}");
-                }
-
-                // Статистика по поставщикам
-                var supplierStats = resultProducts
-                    .GroupBy(p => p.CategoryName ?? "БЕЗ ПОСТАВЩИКА")
-                    .Select(g => new { Supplier = g.Key, Count = g.Count() })
-                    .OrderByDescending(g => g.Count);
-
-                Console.WriteLine($"📊 Статистика поставщиков в результатах:");
-                foreach (var stat in supplierStats)
-                {
-                    Console.WriteLine($"   {stat.Supplier}: {stat.Count} товаров");
-                }
-
-                return resultProducts;
             }
             catch (Exception ex)
             {
@@ -214,200 +120,659 @@ namespace ManagerApp.Data.Search
             }
         }
 
-        // ✅ МЕТОД ДЛЯ ПОИСКА САМОГО ПОХОЖЕГО ТОВАРА ОТ ПОСТАВЩИКА
-        private ProductWithCategoryInfo FindBestProductForSupplier(
-            List<ProductWithCategoryInfo> supplierProducts,
-            string query)
+        // ОПРЕДЕЛЕНИЕ ТИПА ТОВАРА С ПОМОЩЬЮ AI (С ПОВТОРНЫМИ ПОПЫТКАМИ)
+        private async Task<string> DetermineProductTypeWithAIRetry(string query, int maxRetries = 3)
         {
-            if (!supplierProducts.Any())
-                return null;
+            int attempt = 0;
+            int delayMs = 1000; // Начальная задержка 1 секунда
 
-            var queryLower = query.ToLower();
-            var searchWords = ExtractSearchWords(queryLower);
-
-            ProductWithCategoryInfo bestProduct = null;
-            int bestRelevance = -1;
-
-            foreach (var product in supplierProducts)
+            while (attempt < maxRetries)
             {
-                var relevance = CalculateDeepRelevance(product, queryLower, searchWords);
-
-                if (relevance > bestRelevance)
+                try
                 {
-                    bestRelevance = relevance;
-                    bestProduct = product;
+                    attempt++;
+                    Console.WriteLine($"🔄 Попытка AI #{attempt}...");
+
+                    using (HttpClient client = new HttpClient())
+                    {
+                        client.Timeout = TimeSpan.FromSeconds(30); // Таймаут 30 секунд
+                        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {ApiToken}");
+
+                        var requestBody = new
+                        {
+                            model = "gpt-4o-mini",
+                            messages = new[]
+                            {
+                                new
+                                {
+                                    role = "user",
+                                    content = $"Определи тип товара по его названию. Ответь одним словом: 'кабель', 'провод' или 'другое'.\n\nТовар: {query}"
+                                }
+                            },
+                            temperature = 0.1,
+                            max_tokens = 10
+                        };
+
+                        string jsonRequest = JsonSerializer.Serialize(requestBody);
+                        var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+
+                        HttpResponseMessage response = await client.PostAsync(ApiUrl, content);
+
+                        if (response.IsSuccessStatusCode)
+                        {
+                            string jsonResponse = await response.Content.ReadAsStringAsync();
+
+                            using (JsonDocument doc = JsonDocument.Parse(jsonResponse))
+                            {
+                                if (doc.RootElement.TryGetProperty("choices", out JsonElement choices) &&
+                                    choices.GetArrayLength() > 0)
+                                {
+                                    var firstChoice = choices[0];
+                                    if (firstChoice.TryGetProperty("message", out JsonElement message) &&
+                                        message.TryGetProperty("content", out JsonElement contentElement))
+                                    {
+                                        string result = contentElement.GetString().Trim().ToLower();
+                                        Console.WriteLine($"✅ AI ответил: {result}");
+                                        return result;
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            string errorResponse = await response.Content.ReadAsStringAsync();
+                            Console.WriteLine($"⚠️ AI ошибка {response.StatusCode}: {errorResponse}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"⚠️ AI исключение: {ex.Message}");
+                }
+
+                // Если это не последняя попытка, ждем перед следующей
+                if (attempt < maxRetries)
+                {
+                    Console.WriteLine($"⏳ Ожидание {delayMs / 1000} сек перед следующей попыткой...");
+                    await Task.Delay(delayMs);
+                    delayMs *= 2; // Увеличиваем задержку (backoff)
                 }
             }
 
-            return bestProduct;
+            Console.WriteLine("❌ AI недоступен после всех попыток");
+            return null;
         }
 
-        // ✅ ГЛУБОКИЙ РАСЧЕТ РЕЛЕВАНТНОСТИ
-        private int CalculateDeepRelevance(ProductWithCategoryInfo product, string query)
+        // ПРОВЕРКА НАЛИЧИЯ СЕЧЕНИЯ В ЗАПРОСЕ
+        private bool HasSectionPattern(string query)
         {
-            var searchWords = ExtractSearchWords(query);
-            return CalculateDeepRelevance(product, query, searchWords);
-        }
-
-        private int CalculateDeepRelevance(ProductWithCategoryInfo product, string query, List<string> searchWords)
-        {
-            var productName = product.ProductName?.ToLower() ?? "";
-            var categoryName = product.CategoryName?.ToLower() ?? "";
-
-            int relevance = 0;
-
-            // 1. ТОЧНОЕ СОВПАДЕНИЕ (максимальный балл)
-            if (productName == query)
-                relevance += 1000;
-
-            // 2. СОДЕРЖИТ ВЕСЬ ЗАПРОС
-            if (productName.Contains(query))
-                relevance += 800;
-
-            // 3. ВСЕ СЛОВА ИЗ ЗАПРОСА
-            if (searchWords.All(word => productName.Contains(word)))
-                relevance += 600;
-
-            // 4. БОЛЬШИНСТВО СЛОВ
-            int matchingWords = searchWords.Count(word => productName.Contains(word));
-            if (matchingWords > 0)
-                relevance += matchingWords * 100;
-
-            // 5. СОВПАДЕНИЕ С УЧЕТОМ РАЗНЫХ ВАРИАНТОВ НАПИСАНИЯ
-            var normalizedProductName = NormalizeText(productName);
-            var normalizedQuery = NormalizeText(query);
-
-            if (normalizedProductName.Contains(normalizedQuery))
-                relevance += 400;
-
-            // 6. СОВПАДЕНИЕ ЧИСЕЛ (сечения, диаметры)
-            var queryNumbers = ExtractNumbers(query);
-            var productNumbers = ExtractNumbers(productName);
-
-            foreach (var number in queryNumbers)
+            var sectionPatterns = new[]
             {
-                if (productNumbers.Contains(number))
-                    relevance += 150;
+                @"\d+[×хx*]\d+[.,]?\d*",  // 3×2,5, 3х2.5
+                @"\d+\s*[×хx*]\s*\d+[.,]?\d*" // 3 × 2,5 с пробелами
+            };
+
+            foreach (var pattern in sectionPatterns)
+            {
+                if (Regex.IsMatch(query, pattern))
+                {
+                    return true;
+                }
             }
 
-            // 7. СОВПАДЕНИЕ МАРКИРОВОК (ВВГ, ППТ и т.д.)
-            var queryMarkings = ExtractMarkings(query);
-            var productMarkings = ExtractMarkings(productName);
-
-            foreach (var marking in queryMarkings)
-            {
-                if (productMarkings.Contains(marking))
-                    relevance += 200;
-            }
-
-            // 8. ДОПОЛНИТЕЛЬНЫЕ БАЛЛЫ
-            if (product.HasPrice)
-                relevance += 50;
-
-            if (productName.Length < 100) // Короткие названия предпочтительнее
-                relevance += 30;
-
-            return relevance;
+            return false;
         }
 
-        // ✅ НОРМАЛИЗАЦИЯ ТЕКСТА (для поиска разных вариантов написания)
-        private string NormalizeText(string text)
+        // ПОИСК ДЛЯ КАБЕЛЕЙ И ПРОВОДОВ (УЛУЧШЕННАЯ ВЕРСИЯ)
+        private async Task<List<ProductWithCategoryInfo>> SearchCableOrWireAsync(
+            List<ProductWithCategoryInfo> allProducts,
+            string query,
+            int maxResults)
+        {
+            // Извлекаем модель и сечение
+            var extractedData = ExtractModelAndSectionAdvanced(query);
+            string expectedModel = extractedData.Model;
+            string expectedSection = extractedData.Section;
+            string normalizedExpectedSection = NormalizeSection(expectedSection);
+
+            Console.WriteLine($"📊 Извлечено: Модель='{expectedModel}', Сечение='{expectedSection}'");
+
+            if (string.IsNullOrEmpty(expectedSection))
+            {
+                Console.WriteLine("❌ Не удалось извлечь сечение");
+                return new List<ProductWithCategoryInfo>();
+            }
+
+            // Определяем тип искомого товара (кабель или провод)
+            bool searchForCable = query.ToLower().Contains("кабель");
+            bool searchForWire = query.ToLower().Contains("провод") || query.ToLower().Contains("пвс");
+
+            // Анализируем товары
+            var exactMatches = new List<CableAnalysis>();
+            var possibleMatches = new List<CableAnalysis>();
+
+            foreach (var product in allProducts)
+            {
+                string productName = product.ProductName ?? "";
+
+                // Проверяем, что товар действительно является кабелем/проводом
+                if (!IsCableOrWireProduct(productName))
+                {
+                    continue;
+                }
+
+                // Дополнительная проверка типа товара
+                bool isCable = productName.ToLower().Contains("кабель");
+                bool isWire = productName.ToLower().Contains("провод") ||
+                              productName.ToLower().Contains("пвс") ||
+                              productName.ToLower().Contains("пугв");
+
+                // Если ищем кабель, а товар - провод/шнур - пропускаем
+                if (searchForCable && !isCable)
+                {
+                    continue;
+                }
+
+                // Если ищем провод, а товар - кабель - пропускаем
+                if (searchForWire && !isWire)
+                {
+                    continue;
+                }
+
+                var analysis = AnalyzeCableProductAdvanced(product, expectedModel, normalizedExpectedSection);
+                if (analysis != null)
+                {
+                    if (analysis.HasExactModel && analysis.HasExactSection)
+                    {
+                        exactMatches.Add(analysis);
+                    }
+                    else if (analysis.HasExactSection)
+                    {
+                        possibleMatches.Add(analysis);
+                    }
+                }
+            }
+
+            Console.WriteLine($"✅ Точных совпадений (модель+сечение): {exactMatches.Count}");
+            Console.WriteLine($"✅ Совпадений только по сечению: {possibleMatches.Count}");
+
+            // Функция для определения приоритета поставщика
+            bool IsEnergoprom(string supplier)
+            {
+                return !string.IsNullOrEmpty(supplier) &&
+                       supplier.IndexOf("Энергопром", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+
+            // Функция для приоритета точного соответствия типа
+            bool IsExactTypeMatch(string productName)
+            {
+                string lowerName = productName.ToLower();
+
+                if (searchForCable)
+                    return lowerName.Contains("кабель") &&
+                           !lowerName.Contains("шнур") &&
+                           !lowerName.Contains("удлинитель") &&
+                           !lowerName.Contains("провод");
+
+                if (searchForWire)
+                    return (lowerName.Contains("провод") || lowerName.Contains("пвс")) &&
+                           !lowerName.Contains("шнур") &&
+                           !lowerName.Contains("удлинитель") &&
+                           !lowerName.Contains("кабель");
+
+                return true;
+            }
+
+            // Сортируем точные совпадения
+            exactMatches = exactMatches
+                .OrderByDescending(p => IsExactTypeMatch(p.Product.ProductName))
+                .ThenByDescending(p => IsEnergoprom(p.Product.CategoryName))
+                .ThenByDescending(p => p.Relevance)
+                .ThenByDescending(p => p.Product.HasPrice)
+                .ToList();
+
+            // Сортируем возможные совпадения
+            possibleMatches = possibleMatches
+                .OrderByDescending(p => IsExactTypeMatch(p.Product.ProductName))
+                .ThenByDescending(p => IsEnergoprom(p.Product.CategoryName))
+                .ThenByDescending(p => p.Relevance)
+                .ThenByDescending(p => p.Product.HasPrice)
+                .ToList();
+
+            // Формируем результат
+            List<ProductWithCategoryInfo> resultProducts;
+
+            if (exactMatches.Any())
+            {
+                resultProducts = exactMatches
+                    .Select(p => p.Product)
+                    .Take(maxResults)
+                    .ToList();
+                Console.WriteLine($"📌 Найдено товаров с точным совпадением модели+сечения: {resultProducts.Count}");
+            }
+            else if (possibleMatches.Any())
+            {
+                resultProducts = possibleMatches
+                    .Select(p => p.Product)
+                    .Take(maxResults)
+                    .ToList();
+                Console.WriteLine($"📌 Найдено товаров только по сечению: {resultProducts.Count}");
+            }
+            else
+            {
+                Console.WriteLine("❌ Не найдено подходящих товаров");
+                return new List<ProductWithCategoryInfo>();
+            }
+
+            // Выводим результаты
+            for (int i = 0; i < Math.Min(10, resultProducts.Count); i++)
+            {
+                var product = resultProducts[i];
+                var analysis = i < exactMatches.Count ? exactMatches[i] : possibleMatches[i - exactMatches.Count];
+                string matchType = analysis.HasExactModel ? "✅ МОДЕЛЬ+СЕЧЕНИЕ" : "📐 ТОЛЬКО СЕЧЕНИЕ";
+                string energopromMark = IsEnergoprom(product.CategoryName) ? " [ЭНЕРГОПРОМ]" : "";
+                string typeMark = IsExactTypeMatch(product.ProductName) ? "" : " ⚠️ НЕ СООТВЕТСТВУЕТ ТИПУ";
+                Console.WriteLine($"   {i + 1}. [{matchType}{energopromMark}{typeMark}] [{product.CategoryName}] {product.ProductName}");
+            }
+
+            return resultProducts;
+        }
+
+        // ОБНОВЛЕННАЯ ПРОВЕРКА, ЯВЛЯЕТСЯ ЛИ ТОВАР КАБЕЛЕМ/ПРОВОДОМ
+        private bool IsCableOrWireProduct(string productName)
+        {
+            if (string.IsNullOrEmpty(productName))
+                return false;
+
+            string lowerName = productName.ToLower();
+
+            // Сначала проверяем дополнительные стоп-слова
+            foreach (var stopWord in _additionalCableStopWords)
+            {
+                if (lowerName.Contains(stopWord))
+                {
+                    return false;
+                }
+            }
+
+            // Проверяем основные стоп-слова
+            foreach (var stopWord in _cableStopWords)
+            {
+                if (lowerName.Contains(stopWord))
+                {
+                    return false;
+                }
+            }
+
+            // Проверяем на обязательные ключевые слова
+            foreach (var keyword in _cableRequiredKeywords)
+            {
+                if (lowerName.Contains(keyword))
+                {
+                    return true;
+                }
+            }
+
+            // Проверяем на наличие сечения
+            if (HasSectionPattern(productName))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        // РАСШИРЕННОЕ ИЗВЛЕЧЕНИЕ МОДЕЛИ И СЕЧЕНИЯ
+        private (string Model, string Section) ExtractModelAndSectionAdvanced(string query)
+        {
+            string model = "";
+            string section = "";
+
+            // Паттерны для сечения
+            var sectionPatterns = new[]
+            {
+                @"(\d+)[×хx*](\d+[.,]?\d*)",
+                @"(\d+)\s*[×хx*]\s*(\d+[.,]?\d*)"
+            };
+
+            foreach (var pattern in sectionPatterns)
+            {
+                var match = Regex.Match(query, pattern);
+                if (match.Success)
+                {
+                    string first = match.Groups[1].Value;
+                    string second = match.Groups[2].Value;
+                    section = $"{first}×{second}";
+
+                    // Удаляем сечение для поиска модели
+                    string queryWithoutSection = Regex.Replace(query, pattern, "").Trim();
+
+                    // Ищем модель
+                    model = ExtractCableModelAdvanced(queryWithoutSection);
+                    break;
+                }
+            }
+
+            return (model, section);
+        }
+
+        // РАСШИРЕННОЕ ИЗВЛЕЧЕНИЕ МОДЕЛИ КАБЕЛЯ
+        private string ExtractCableModelAdvanced(string text)
         {
             if (string.IsNullOrEmpty(text))
-                return string.Empty;
+                return "";
 
-            // Убираем пробелы, дефисы, приводим к нижнему регистру
-            var normalized = text.ToLower()
-                .Replace(" ", "")
-                .Replace("-", "")
-                .Replace("нг(а)", "нг")
-                .Replace("нг(а)-", "нг")
-                .Replace("нг-ls", "нгls")
-                .Replace("нг(а)-ls", "нгls");
+            // Приоритетный список марок кабелей
+            var cablePatterns = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                // ВВГ семейство
+                { @"ВВГ[ -]?П?нг\([А]\)[-]?LS", "ВВГ-Пнг(А)-LS" },
+                { @"ВВГнг\(А\)[-]?LS", "ВВГнг(А)-LS" },
+                { @"ВВГ[ -]?П?нг\([А]\)[-]?FRLS", "ВВГ-Пнг(А)-FRLS" },
+                { @"ВВГнг\(А\)[-]?FRLS", "ВВГнг(А)-FRLS" },
+                { @"ВВГ[ -]?П?нг[-]?LS", "ВВГ-Пнг-LS" },
+                { @"ВВГнг[-]?LS", "ВВГнг-LS" },
+                { @"ВВГ[ -]?П?нг\([А]\)", "ВВГ-Пнг(А)" },
+                { @"ВВГнг\(А\)", "ВВГнг(А)" },
+                { @"ВВГ[ -]?П?нг", "ВВГ-Пнг" },
+                { @"ВВГнг", "ВВГнг" },
+                { @"ВВГ", "ВВГ" },
+                
+                // ПВС семейство
+                { @"ПВС", "ПВС" },
+                
+                // КГ семейство
+                { @"КГ(?:ТП)?(?:ВВ)?(?:ПП)?нг\([А]\)[-]?(?:LS|HF|FRHF)?", "КГ" },
+                { @"КГ(?:ТП)?(?:ВВ)?(?:ПП)?нг[-]?(?:LS|HF|FRHF)?", "КГ" },
+                { @"КГ(?:-ХЛ)?", "КГ" },
+                
+                // Другие
+                { @"ШВВП", "ШВВП" },
+                { @"ВБбШв", "ВБбШв" },
+                { @"СИП", "СИП" }
+            };
+
+            foreach (var kvp in cablePatterns)
+            {
+                if (Regex.IsMatch(text, kvp.Key, RegexOptions.IgnoreCase))
+                {
+                    var match = Regex.Match(text, kvp.Key, RegexOptions.IgnoreCase);
+                    return match.Value;
+                }
+            }
+
+            return "";
+        }
+
+        // НОРМАЛИЗАЦИЯ МОДЕЛИ
+        private string NormalizeModel(string model)
+        {
+            if (string.IsNullOrEmpty(model))
+                return "";
+
+            // Убираем все небуквенные символы
+            string normalized = Regex.Replace(model.ToLower(), @"[^а-яa-z]", "");
+
+            // Нормализуем распространенные варианты
+            normalized = normalized
+                .Replace("нг", "нг")
+                .Replace("ls", "ls")
+                .Replace("frls", "frls")
+                .Replace("ввг", "ввг")
+                .Replace("пвс", "пвс")
+                .Replace("кг", "кг");
 
             return normalized;
         }
 
-        // ✅ ИЗВЛЕЧЕНИЕ ПОИСКОВЫХ СЛОВ
-        private List<string> ExtractSearchWords(string query)
+        // НОРМАЛИЗАЦИЯ СЕЧЕНИЯ
+        private string NormalizeSection(string section)
         {
-            if (string.IsNullOrWhiteSpace(query))
-                return new List<string>();
+            if (string.IsNullOrEmpty(section))
+                return "";
 
-            // Разбиваем на слова, убираем общие слова
-            var words = query.Split(new[] { ' ', ',', '.', '-', '_', '/', '\\', '(', ')', '[', ']', 'х', '×' },
-                                  StringSplitOptions.RemoveEmptyEntries)
-                            .Select(p => p.Trim().ToLower())
-                            .Where(p => p.Length >= 2)
-                            .ToList();
+            // Заменяем разделители на ×
+            section = Regex.Replace(section, @"[хx*]", "×");
 
-            // Фильтруем общие слова
-            var commonWords = new HashSet<string>
+            // Заменяем запятые на точки в числах
+            section = Regex.Replace(section, @"(\d+),(\d+)", "$1.$2");
+
+            return section;
+        }
+
+        // РАСШИРЕННЫЙ АНАЛИЗ КАБЕЛЬНОГО ТОВАРА
+        private CableAnalysis AnalyzeCableProductAdvanced(ProductWithCategoryInfo product, string expectedModel, string expectedSection)
+        {
+            if (product == null || string.IsNullOrEmpty(product.ProductName))
+                return null;
+
+            string productName = product.ProductName ?? "";
+            var analysis = new CableAnalysis
             {
-                "кабель", "кабельный", "кабельная", "кабельное",
-                "провод", "проводной", "провода", "проводная",
-                "силовой", "монтажный", "установочный",
-                "м", "мм", "кв", "квадратный", "квадрат"
+                Product = product,
+                HasExactModel = false,
+                HasExactSection = false,
+                Relevance = 0
             };
 
-            return words.Where(w => !commonWords.Contains(w)).ToList();
-        }
+            // Извлекаем сечение из названия товара
+            string productSection = ExtractSectionFromText(productName);
 
-        // ✅ ИЗВЛЕЧЕНИЕ МАРКИРОВОК (ВВГ, ППТ, АВВГ и т.д.)
-        private List<string> ExtractMarkings(string text)
-        {
-            var markings = new List<string>();
-
-            // Ищем маркировки типа ВВГ, ППТ, АВВГ (2-4 заглавные буквы подряд)
-            var markingMatches = System.Text.RegularExpressions.Regex.Matches(text.ToUpper(), @"[А-ЯЁ]{2,4}");
-            foreach (System.Text.RegularExpressions.Match match in markingMatches)
+            // Проверяем сечение
+            if (!string.IsNullOrEmpty(productSection) && CompareSections(productSection, expectedSection))
             {
-                markings.Add(match.Value);
+                analysis.HasExactSection = true;
+                analysis.Relevance += 500;
             }
 
-            return markings.Distinct().ToList();
-        }
+            if (!analysis.HasExactSection)
+                return null;
 
-        // Извлечение чисел из строки
-        private List<string> ExtractNumbers(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text))
-                return new List<string>();
-
-            var numbers = new List<string>();
-            var currentNumber = new StringBuilder();
-
-            foreach (char c in text)
+            // Проверяем модель
+            if (!string.IsNullOrEmpty(expectedModel))
             {
-                if (char.IsDigit(c) || c == '.' || c == ',')
+                string productModel = ExtractCableModelAdvanced(productName);
+                string normalizedExpected = NormalizeModel(expectedModel);
+                string normalizedProduct = NormalizeModel(productModel);
+
+                if (!string.IsNullOrEmpty(normalizedProduct) && normalizedProduct == normalizedExpected)
                 {
-                    currentNumber.Append(c);
-                }
-                else if (currentNumber.Length > 0)
-                {
-                    numbers.Add(currentNumber.ToString());
-                    currentNumber.Clear();
+                    analysis.HasExactModel = true;
+                    analysis.Relevance += 1000;
                 }
             }
 
-            // Последнее число
-            if (currentNumber.Length > 0)
+            // Штрафуем за стоп-слова
+            string lowerName = productName.ToLower();
+            foreach (var stopWord in _cableStopWords)
             {
-                numbers.Add(currentNumber.ToString());
+                if (lowerName.Contains(stopWord))
+                {
+                    analysis.Relevance -= 500;
+                }
             }
 
-            return numbers;
+            // Бонус за цену
+            if (product.HasPrice && product.Price > 0)
+                analysis.Relevance += 50;
+
+            return analysis;
         }
 
-        // Вспомогательный класс для хранения товара с релевантностью
-        private class ProductWithSupplierRelevance
+        // СРАВНЕНИЕ СЕЧЕНИЙ
+        private bool CompareSections(string section1, string section2)
+        {
+            if (string.IsNullOrEmpty(section1) || string.IsNullOrEmpty(section2))
+                return false;
+
+            try
+            {
+                var match1 = Regex.Match(section1, @"(\d+)[×хx*](\d+[.,]?\d*)");
+                var match2 = Regex.Match(section2, @"(\d+)[×хx*](\d+[.,]?\d*)");
+
+                if (match1.Success && match2.Success)
+                {
+                    // Безопасное парсинг количества жил
+                    if (!int.TryParse(match1.Groups[1].Value, out int count1) ||
+                        !int.TryParse(match2.Groups[1].Value, out int count2))
+                    {
+                        return false;
+                    }
+
+                    if (count1 != count2)
+                        return false;
+
+                    // Безопасный парсинг сечения
+                    string sectionValue1 = match1.Groups[2].Value.Replace(',', '.');
+                    string sectionValue2 = match2.Groups[2].Value.Replace(',', '.');
+
+                    if (!double.TryParse(sectionValue1, System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out double value1) ||
+                        !double.TryParse(sectionValue2, System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out double value2))
+                    {
+                        return false;
+                    }
+
+                    return Math.Abs(value1 - value2) < 0.01;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка сравнения сечений: {ex.Message}");
+            }
+
+            return section1 == section2;
+        }
+
+        // ИЗВЛЕЧЕНИЕ СЕЧЕНИЯ ИЗ ТЕКСТА
+        private string ExtractSectionFromText(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return "";
+
+            try
+            {
+                var sectionPatterns = new[]
+                {
+                    @"(\d+)[×хx*](\d+[.,]?\d*)"
+                };
+
+                foreach (var pattern in sectionPatterns)
+                {
+                    var match = Regex.Match(text, pattern);
+                    if (match.Success)
+                    {
+                        return $"{match.Groups[1].Value}×{match.Groups[2].Value}";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка извлечения сечения: {ex.Message}");
+            }
+
+            return "";
+        }
+
+        // ПОИСК ДЛЯ ОБЫЧНЫХ ТОВАРОВ
+        private async Task<List<ProductWithCategoryInfo>> SearchGeneralProductAsync(
+            List<ProductWithCategoryInfo> allProducts,
+            string query,
+            int maxResults)
+        {
+            Console.WriteLine($"📊 Общий поиск для: '{query}'");
+
+            var analyzedProducts = new List<GeneralAnalysis>();
+
+            foreach (var product in allProducts)
+            {
+                var analysis = AnalyzeGeneralProduct(product, query);
+                if (analysis != null && analysis.Relevance >= 60)
+                {
+                    analyzedProducts.Add(analysis);
+                }
+            }
+
+            Console.WriteLine($"📊 Найдено товаров с релевантностью >60%: {analyzedProducts.Count}");
+
+            // Группируем по поставщикам
+            var groupedBySupplier = analyzedProducts
+                .GroupBy(p => p.Product.CategoryName ?? "БЕЗ ПОСТАВЩИКА")
+                .SelectMany(g => g.OrderByDescending(p => p.Relevance).Take(3))
+                .OrderByDescending(p => p.Relevance)
+                .ThenByDescending(p => p.Product.HasPrice)
+                .Take(maxResults)
+                .ToList();
+
+            var suppliers = groupedBySupplier
+                .Select(p => p.Product.CategoryName ?? "БЕЗ ПОСТАВЩИКА")
+                .Distinct()
+                .ToList();
+
+            Console.WriteLine($"📊 Поставщиков в результате: {suppliers.Count}");
+
+            return groupedBySupplier.Select(p => p.Product).ToList();
+        }
+
+        // АНАЛИЗ ОБЫЧНОГО ТОВАРА
+        private GeneralAnalysis AnalyzeGeneralProduct(ProductWithCategoryInfo product, string query)
+        {
+            if (product == null || string.IsNullOrEmpty(product.ProductName))
+                return null;
+
+            string productName = product.ProductName ?? "";
+            string queryLower = query.ToLower();
+            string productLower = productName.ToLower();
+
+            int relevance = 0;
+
+            // Точное совпадение
+            if (productLower == queryLower)
+            {
+                relevance = 100;
+            }
+            // Содержит весь запрос
+            else if (productLower.Contains(queryLower))
+            {
+                relevance = 95;
+            }
+            else
+            {
+                var queryWords = queryLower.Split(new[] { ' ', ',', '.', '-', '(', ')' },
+                    StringSplitOptions.RemoveEmptyEntries)
+                    .Where(w => w.Length > 1)
+                    .ToList();
+
+                if (queryWords.Any())
+                {
+                    int matches = queryWords.Count(word => productLower.Contains(word));
+                    relevance = (int)((double)matches / queryWords.Count * 100);
+                }
+            }
+
+            if (product.HasPrice && product.Price > 0)
+                relevance = Math.Min(100, relevance + 5);
+
+            return relevance >= 60 ? new GeneralAnalysis { Product = product, Relevance = relevance } : null;
+        }
+
+        // ВСПОМОГАТЕЛЬНЫЕ КЛАССЫ
+        private class CableAnalysis
         {
             public ProductWithCategoryInfo Product { get; set; }
-            public string Supplier { get; set; }
+            public bool HasExactModel { get; set; }
+            public bool HasExactSection { get; set; }
             public int Relevance { get; set; }
         }
 
-        // Остальные методы остаются без изменений
+        private class GeneralAnalysis
+        {
+            public ProductWithCategoryInfo Product { get; set; }
+            public int Relevance { get; set; }
+        }
+
+        // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
         public async Task<List<ProductWithCategoryInfo>> QuickSearchAsync(string searchQuery, int maxResults = 5)
         {
             try
