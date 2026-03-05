@@ -19,7 +19,13 @@ namespace ManagerApp.Data.Search
         private readonly object _cacheLock = new object();
 
         // Информация для доступа к AI
-        private const string ApiToken = "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCIsImtpZCI6IjFrYnhacFJNQGJSI0tSbE1xS1lqIn0.eyJ1c2VyIjoibXoxNjUxODMiLCJ0eXBlIjoiYXBpX2tleSIsImFwaV9rZXlfaWQiOiIxZmI0YWQ0NS0zYjBjLTRiMGQtODJjZS02NzQ0NzFkYWVhYTkiLCJpYXQiOjE3NzIzNzg2Mzl9.K0nQulksfXGzqPYOeudwSVbS2cv0ryHqRsVbElmNg87FuA8BOdUeBq5mPQCr-H0h3cXgg62CJNTfa1ULBd3yCC0y4POj2KbIe_gX_y1May08SC0YP9dQyFEhBgmtcIgOBAg-PvGwlOkkFnjKPxCjOsEkYe2Uf2NaSFqn3yjfZYydxrLTSk4DNlro0zZi7AbAEJvlrefj3fwDdSV3IJIQMApffWhlFpxiqQhmGURMlWdvREadoGY-rtmaZYFVOuZccJeKznQ5bmlZ4KgfRKViacAfVL6zDMP3jLQlWY7aw0ujOG13DUfrwAHSGWXXM-t6CaMQI4DHGjUzHHlZrXZ8h7565am41xxsaE0Alxi7y5vLQrkQvyhEXlWC9Ris3jIaKcIUCMvVrYQCIzPxUurEoKrnEZ8GlZM29mJXexFX_5BP0god0fY08sVZ2IgEu2kTiUJpthO3WyDxQLk3ALAQySYgrkx4YRM-h1YqK8nKnM6vy_E1sA0Jh3mcuVYHyZkS";
+        // Информация для доступа к AI - ОСНОВНОЙ
+        private const string PrimaryApiToken = "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCIsImtpZCI6IjFrYnhacFJNQGJSI0tSbE1xS1lqIn0.eyJ1c2VyIjoibXoxNjUxODMiLCJ0eXBlIjoiYXBpX2tleSIsImFwaV9rZXlfaWQiOiIxZmI0YWQ0NS0zYjBjLTRiMGQtODJjZS02NzQ0NzFkYWVhYTkiLCJpYXQiOjE3NzIzNzg2Mzl9.K0nQulksfXGzqPYOeudwSVbS2cv0ryHqRsVbElmNg87FuA8BOdUeBq5mPQCr-H0h3cXgg62CJNTfa1ULBd3yCC0y4POj2KbIe_gX_y1May08SC0YP9dQyFEhBgmtcIgOBAg-PvGwlOkkFnjKPxCjOsEkYe2Uf2NaSFqn3yjfZYydxrLTSk4DNlro0zZi7AbAEJvlrefj3fwDdSV3IJIQMApffWhlFpxiqQhmGURMlWdvREadoGY-rtmaZYFVOuZccJeKznQ5bmlZ4KgfRKViacAfVL6zDMP3jLQlWY7aw0ujOG13DUfrwAHSGWXXM-t6CaMQI4DHGjUzHHlZrXZ8h7565am41xxsaE0Alxi7y5vLQrkQvyhEXlWC9Ris3jIaKcIUCMvVrYQCIzPxUurEoKrnEZ8GlZM29mJXexFX_5BP0god0fY08sVZ2IgEu2kTiUJpthO3WyDxQLk3ALAQySYgrkx4YRM-h1YqK8nKnM6vy_E1sA0Jh3mcuVYHyZkS";
+        private const string PrimaryApiUrl = "https://agent.timeweb.cloud/api/v1/cloud-ai/agents/7ed67ebb-f658-4716-ac81-35422c12cb21/v1/chat/completions";
+
+        // Информация для доступа к AI - ЗАПАСНОЙ
+        private const string BackupApiToken = "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCIsImtpZCI6IjFrYnhacFJNQGJSI0tSbE1xS1lqIn0.eyJ1c2VyIjoibXoxNjUxODMiLCJ0eXBlIjoiYXBpX2tleSIsImFwaV9rZXlfaWQiOiI1ZjVmOGU0OC00ZjAyLTQwOTEtYTlkNC0zZmZjYmZiNGU3NGMiLCJpYXQiOjE3NzI3MTg4OTB9.zj0oLSbBNc6ZZgNfcJn8zsdtpSuYHvsdI7IwKjZqUa-9DGLfSq0cyGUxJmi-YcS2zpDal09gpkOhRLMssMJ29WWCNLWjt8mG92B5-MG9T8y6pAcg2s-wDOusO07jYWomR7eXWml8CvODB3hahArcOM6R_FqUNj1PUGnFNFz0JiIl1yu1idT0SfUO-iGam1aclujeX09PMKXUPcN33gOGXrdWTiFAG7vywZCv-vOaSDEsHH7tlVPggns0BbdgOOzrBqR8f1CiGFlvoo_xNr14sf1hvyDvAK5zf5qQl_JL2M7weSK9KUt3vpCqFoaLzgRp4ikQEX_08nKqf3I-cD_SgpDUhCAR8TgCTvsfjD3ABEgfGDfmuTld_MY2wqhLfPyWi1fr4TYiThcoyeGwL_U6mNnPz_lQUvm-zHem2oYAU3FyvKy2W-wO4YFu-DcZKjz_OY59aGM3l62SOxjh96n2eCSjdv9FF6Gu3344G9RumRzftDaTBUOJULVuu-_W4SiE";
+        private const string BackupApiUrl = "https://agent.timeweb.cloud/api/v1/cloud-ai/agents/db9009b9-7858-4e0a-8568-d2bc975dbbe8/v1/chat/completions";
         private const string ApiUrl = "https://agent.timeweb.cloud/api/v1/cloud-ai/agents/7ed67ebb-f658-4716-ac81-35422c12cb21/v1/chat/completions";
 
         // Список стоп-слов для кабелей и проводов (то, что НЕ должно быть в названии)
@@ -74,81 +80,50 @@ namespace ManagerApp.Data.Search
             return products;
         }
 
-        // ОСНОВНОЙ МЕТОД ПОИСКА
-        public async Task<List<ProductWithCategoryInfo>> FindSimilarProductsAsync(
-            string searchQuery,
-            int maxResults = 50)
+
+
+private async Task<string> DetermineProductTypeWithAIRetry(string query, int maxRetries = 3)
         {
-            if (string.IsNullOrWhiteSpace(searchQuery))
-                return new List<ProductWithCategoryInfo>();
+            // Пробуем основной AI
+            string result = await TryDetermineProductTypeWithAI(query, PrimaryApiToken, PrimaryApiUrl, "основной");
+            if (!string.IsNullOrEmpty(result))
+                return result;
 
-            try
-            {
-                var allProducts = await GetAllProductsAsync();
-                if (allProducts == null || !allProducts.Any())
-                    return new List<ProductWithCategoryInfo>();
+            // Если основной не сработал, пробуем запасной
+            Console.WriteLine("🔄 Переключаемся на запасной AI провайдер...");
+            result = await TryDetermineProductTypeWithAI(query, BackupApiToken, BackupApiUrl, "запасной");
 
-                var query = searchQuery.Trim();
-                Console.WriteLine($"🔍 Поиск: '{query}'");
-
-                // Пытаемся использовать AI с повторными попытками
-                string productType = await DetermineProductTypeWithAIRetry(query, maxRetries: 3);
-
-                if (!string.IsNullOrEmpty(productType) &&
-                    (productType.Contains("кабель") || productType.Contains("провод")))
-                {
-                    Console.WriteLine($"📌 AI определил как: {productType}");
-                    return await SearchCableOrWireAsync(allProducts, query, maxResults);
-                }
-
-                // Если AI не сработал или определил другое, используем резервный метод
-                Console.WriteLine("📌 Используем резервный метод определения");
-
-                if (HasSectionPattern(query))
-                {
-                    return await SearchCableOrWireAsync(allProducts, query, maxResults);
-                }
-                else
-                {
-                    return await SearchGeneralProductAsync(allProducts, query, maxResults);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"❌ Ошибка: {ex.Message}");
-                return new List<ProductWithCategoryInfo>();
-            }
+            return result;
         }
-
-        // ОПРЕДЕЛЕНИЕ ТИПА ТОВАРА С ПОМОЩЬЮ AI (С ПОВТОРНЫМИ ПОПЫТКАМИ)
-        private async Task<string> DetermineProductTypeWithAIRetry(string query, int maxRetries = 3)
+        // Вспомогательный метод для попытки определения типа через конкретный AI
+        private async Task<string> TryDetermineProductTypeWithAI(string query, string apiToken, string apiUrl, string providerName)
         {
             int attempt = 0;
-            int delayMs = 1000; // Начальная задержка 1 секунда
+            int delayMs = 1000;
 
-            while (attempt < maxRetries)
+            while (attempt < 2) // Для каждого провайдера делаем 2 попытки
             {
                 try
                 {
                     attempt++;
-                    Console.WriteLine($"🔄 Попытка AI #{attempt}...");
+                    Console.WriteLine($"🔄 {providerName} AI попытка #{attempt}...");
 
                     using (HttpClient client = new HttpClient())
                     {
-                        client.Timeout = TimeSpan.FromSeconds(30); // Таймаут 30 секунд
-                        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {ApiToken}");
+                        client.Timeout = TimeSpan.FromSeconds(30);
+                        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiToken}");
 
                         var requestBody = new
                         {
                             model = "gpt-4o-mini",
                             messages = new[]
                             {
-                                new
-                                {
-                                    role = "user",
-                                    content = $"Определи тип товара по его названию. Ответь одним словом: 'кабель', 'провод' или 'другое'.\n\nТовар: {query}"
-                                }
-                            },
+                        new
+                        {
+                            role = "user",
+                            content = $"Определи тип товара по его названию. Ответь одним словом: 'кабель', 'провод' или 'другое'.\n\nТовар: {query}"
+                        }
+                    },
                             temperature = 0.1,
                             max_tokens = 10
                         };
@@ -156,7 +131,7 @@ namespace ManagerApp.Data.Search
                         string jsonRequest = JsonSerializer.Serialize(requestBody);
                         var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
 
-                        HttpResponseMessage response = await client.PostAsync(ApiUrl, content);
+                        HttpResponseMessage response = await client.PostAsync(apiUrl, content);
 
                         if (response.IsSuccessStatusCode)
                         {
@@ -172,7 +147,7 @@ namespace ManagerApp.Data.Search
                                         message.TryGetProperty("content", out JsonElement contentElement))
                                     {
                                         string result = contentElement.GetString().Trim().ToLower();
-                                        Console.WriteLine($"✅ AI ответил: {result}");
+                                        Console.WriteLine($"✅ {providerName} AI ответил: {result}");
                                         return result;
                                     }
                                 }
@@ -181,25 +156,24 @@ namespace ManagerApp.Data.Search
                         else
                         {
                             string errorResponse = await response.Content.ReadAsStringAsync();
-                            Console.WriteLine($"⚠️ AI ошибка {response.StatusCode}: {errorResponse}");
+                            Console.WriteLine($"⚠️ {providerName} AI ошибка {response.StatusCode}: {errorResponse}");
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"⚠️ AI исключение: {ex.Message}");
+                    Console.WriteLine($"⚠️ {providerName} AI исключение: {ex.Message}");
                 }
 
-                // Если это не последняя попытка, ждем перед следующей
-                if (attempt < maxRetries)
+                if (attempt < 2)
                 {
                     Console.WriteLine($"⏳ Ожидание {delayMs / 1000} сек перед следующей попыткой...");
                     await Task.Delay(delayMs);
-                    delayMs *= 2; // Увеличиваем задержку (backoff)
+                    delayMs *= 2;
                 }
             }
 
-            Console.WriteLine("❌ AI недоступен после всех попыток");
+            Console.WriteLine($"❌ {providerName} AI недоступен после всех попыток");
             return null;
         }
 
@@ -224,159 +198,7 @@ namespace ManagerApp.Data.Search
         }
 
         // ПОИСК ДЛЯ КАБЕЛЕЙ И ПРОВОДОВ (УЛУЧШЕННАЯ ВЕРСИЯ)
-        private async Task<List<ProductWithCategoryInfo>> SearchCableOrWireAsync(
-            List<ProductWithCategoryInfo> allProducts,
-            string query,
-            int maxResults)
-        {
-            // Извлекаем модель и сечение
-            var extractedData = ExtractModelAndSectionAdvanced(query);
-            string expectedModel = extractedData.Model;
-            string expectedSection = extractedData.Section;
-            string normalizedExpectedSection = NormalizeSection(expectedSection);
 
-            Console.WriteLine($"📊 Извлечено: Модель='{expectedModel}', Сечение='{expectedSection}'");
-
-            if (string.IsNullOrEmpty(expectedSection))
-            {
-                Console.WriteLine("❌ Не удалось извлечь сечение");
-                return new List<ProductWithCategoryInfo>();
-            }
-
-            // Определяем тип искомого товара (кабель или провод)
-            bool searchForCable = query.ToLower().Contains("кабель");
-            bool searchForWire = query.ToLower().Contains("провод") || query.ToLower().Contains("пвс");
-
-            // Анализируем товары
-            var exactMatches = new List<CableAnalysis>();
-            var possibleMatches = new List<CableAnalysis>();
-
-            foreach (var product in allProducts)
-            {
-                string productName = product.ProductName ?? "";
-
-                // Проверяем, что товар действительно является кабелем/проводом
-                if (!IsCableOrWireProduct(productName))
-                {
-                    continue;
-                }
-
-                // Дополнительная проверка типа товара
-                bool isCable = productName.ToLower().Contains("кабель");
-                bool isWire = productName.ToLower().Contains("провод") ||
-                              productName.ToLower().Contains("пвс") ||
-                              productName.ToLower().Contains("пугв");
-
-                // Если ищем кабель, а товар - провод/шнур - пропускаем
-                if (searchForCable && !isCable)
-                {
-                    continue;
-                }
-
-                // Если ищем провод, а товар - кабель - пропускаем
-                if (searchForWire && !isWire)
-                {
-                    continue;
-                }
-
-                var analysis = AnalyzeCableProductAdvanced(product, expectedModel, normalizedExpectedSection);
-                if (analysis != null)
-                {
-                    if (analysis.HasExactModel && analysis.HasExactSection)
-                    {
-                        exactMatches.Add(analysis);
-                    }
-                    else if (analysis.HasExactSection)
-                    {
-                        possibleMatches.Add(analysis);
-                    }
-                }
-            }
-
-            Console.WriteLine($"✅ Точных совпадений (модель+сечение): {exactMatches.Count}");
-            Console.WriteLine($"✅ Совпадений только по сечению: {possibleMatches.Count}");
-
-            // Функция для определения приоритета поставщика
-            bool IsEnergoprom(string supplier)
-            {
-                return !string.IsNullOrEmpty(supplier) &&
-                       supplier.IndexOf("Энергопром", StringComparison.OrdinalIgnoreCase) >= 0;
-            }
-
-            // Функция для приоритета точного соответствия типа
-            bool IsExactTypeMatch(string productName)
-            {
-                string lowerName = productName.ToLower();
-
-                if (searchForCable)
-                    return lowerName.Contains("кабель") &&
-                           !lowerName.Contains("шнур") &&
-                           !lowerName.Contains("удлинитель") &&
-                           !lowerName.Contains("провод");
-
-                if (searchForWire)
-                    return (lowerName.Contains("провод") || lowerName.Contains("пвс")) &&
-                           !lowerName.Contains("шнур") &&
-                           !lowerName.Contains("удлинитель") &&
-                           !lowerName.Contains("кабель");
-
-                return true;
-            }
-
-            // Сортируем точные совпадения
-            exactMatches = exactMatches
-                .OrderByDescending(p => IsExactTypeMatch(p.Product.ProductName))
-                .ThenByDescending(p => IsEnergoprom(p.Product.CategoryName))
-                .ThenByDescending(p => p.Relevance)
-                .ThenByDescending(p => p.Product.HasPrice)
-                .ToList();
-
-            // Сортируем возможные совпадения
-            possibleMatches = possibleMatches
-                .OrderByDescending(p => IsExactTypeMatch(p.Product.ProductName))
-                .ThenByDescending(p => IsEnergoprom(p.Product.CategoryName))
-                .ThenByDescending(p => p.Relevance)
-                .ThenByDescending(p => p.Product.HasPrice)
-                .ToList();
-
-            // Формируем результат
-            List<ProductWithCategoryInfo> resultProducts;
-
-            if (exactMatches.Any())
-            {
-                resultProducts = exactMatches
-                    .Select(p => p.Product)
-                    .Take(maxResults)
-                    .ToList();
-                Console.WriteLine($"📌 Найдено товаров с точным совпадением модели+сечения: {resultProducts.Count}");
-            }
-            else if (possibleMatches.Any())
-            {
-                resultProducts = possibleMatches
-                    .Select(p => p.Product)
-                    .Take(maxResults)
-                    .ToList();
-                Console.WriteLine($"📌 Найдено товаров только по сечению: {resultProducts.Count}");
-            }
-            else
-            {
-                Console.WriteLine("❌ Не найдено подходящих товаров");
-                return new List<ProductWithCategoryInfo>();
-            }
-
-            // Выводим результаты
-            for (int i = 0; i < Math.Min(10, resultProducts.Count); i++)
-            {
-                var product = resultProducts[i];
-                var analysis = i < exactMatches.Count ? exactMatches[i] : possibleMatches[i - exactMatches.Count];
-                string matchType = analysis.HasExactModel ? "✅ МОДЕЛЬ+СЕЧЕНИЕ" : "📐 ТОЛЬКО СЕЧЕНИЕ";
-                string energopromMark = IsEnergoprom(product.CategoryName) ? " [ЭНЕРГОПРОМ]" : "";
-                string typeMark = IsExactTypeMatch(product.ProductName) ? "" : " ⚠️ НЕ СООТВЕТСТВУЕТ ТИПУ";
-                Console.WriteLine($"   {i + 1}. [{matchType}{energopromMark}{typeMark}] [{product.CategoryName}] {product.ProductName}");
-            }
-
-            return resultProducts;
-        }
 
         // ОБНОВЛЕННАЯ ПРОВЕРКА, ЯВЛЯЕТСЯ ЛИ ТОВАР КАБЕЛЕМ/ПРОВОДОМ
         private bool IsCableOrWireProduct(string productName)
@@ -820,6 +642,239 @@ namespace ManagerApp.Data.Search
             {
                 _allProductsCache = null;
             }
+        }
+
+
+        // ОСНОВНОЙ МЕТОД ПОИСКА
+        public async Task<List<ProductWithCategoryInfo>> FindSimilarProductsAsync(
+            string searchQuery,
+            int maxResults = 50)
+        {
+            if (string.IsNullOrWhiteSpace(searchQuery))
+                return new List<ProductWithCategoryInfo>();
+
+            try
+            {
+                var allProducts = await GetAllProductsAsync();
+                if (allProducts == null || !allProducts.Any())
+                    return new List<ProductWithCategoryInfo>();
+
+                var query = searchQuery.Trim();
+                Console.WriteLine($"🔍 Поиск: '{query}'");
+
+                // Пытаемся использовать AI с повторными попытками
+                string productType = await DetermineProductTypeWithAIRetry(query, maxRetries: 3);
+
+                if (!string.IsNullOrEmpty(productType) &&
+                    (productType.Contains("кабель") || productType.Contains("провод")))
+                {
+                    Console.WriteLine($"📌 AI определил как: {productType}");
+
+                    // Проверяем, есть ли сечение в запросе
+                    if (HasSectionPattern(query))
+                    {
+                        return await SearchCableOrWireAsync(allProducts, query, maxResults);
+                    }
+                    else
+                    {
+                        Console.WriteLine("⚠️ AI определил как кабель/провод, но нет сечения - используем общий поиск");
+                        return await SearchGeneralProductAsync(allProducts, query, maxResults);
+                    }
+                }
+
+                // Если AI не сработал или определил другое, используем резервный метод
+                Console.WriteLine("📌 Используем резервный метод определения");
+
+                if (HasSectionPattern(query))
+                {
+                    // Извлекаем модель и сечение для проверки
+                    var extractedData = ExtractModelAndSectionAdvanced(query);
+
+                    // Если есть и модель, и сечение - используем поиск для кабелей
+                    if (!string.IsNullOrEmpty(extractedData.Section))
+                    {
+                        return await SearchCableOrWireAsync(allProducts, query, maxResults);
+                    }
+                    else
+                    {
+                        Console.WriteLine("⚠️ Есть сечение, но не удалось извлечь - используем общий поиск");
+                        return await SearchGeneralProductAsync(allProducts, query, maxResults);
+                    }
+                }
+                else
+                {
+                    // Нет сечения - используем общий поиск
+                    return await SearchGeneralProductAsync(allProducts, query, maxResults);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Ошибка: {ex.Message}");
+                return new List<ProductWithCategoryInfo>();
+            }
+        }
+
+        // ИСПРАВЛЕННЫЙ МЕТОД ПОИСКА ДЛЯ КАБЕЛЕЙ И ПРОВОДОВ
+        private async Task<List<ProductWithCategoryInfo>> SearchCableOrWireAsync(
+            List<ProductWithCategoryInfo> allProducts,
+            string query,
+            int maxResults)
+        {
+            // Извлекаем модель и сечение
+            var extractedData = ExtractModelAndSectionAdvanced(query);
+            string expectedModel = extractedData.Model;
+            string expectedSection = extractedData.Section;
+            string normalizedExpectedSection = NormalizeSection(expectedSection);
+
+            Console.WriteLine($"📊 Извлечено: Модель='{expectedModel}', Сечение='{expectedSection}'");
+
+            // Если нет сечения - сразу переходим к общему поиску
+            if (string.IsNullOrEmpty(expectedSection))
+            {
+                Console.WriteLine("⚠️ Сечение не найдено, переключаемся на общий поиск");
+                return await SearchGeneralProductAsync(allProducts, query, maxResults);
+            }
+
+            // Определяем тип искомого товара (кабель или провод)
+            bool searchForCable = query.ToLower().Contains("кабель");
+            bool searchForWire = query.ToLower().Contains("провод") || query.ToLower().Contains("пвс");
+
+            // Анализируем товары
+            var exactMatches = new List<CableAnalysis>();
+            var possibleMatches = new List<CableAnalysis>();
+
+            foreach (var product in allProducts)
+            {
+                string productName = product.ProductName ?? "";
+
+                // Проверяем, что товар действительно является кабелем/проводом
+                if (!IsCableOrWireProduct(productName))
+                {
+                    continue;
+                }
+
+                // Дополнительная проверка типа товара
+                bool isCable = productName.ToLower().Contains("кабель");
+                bool isWire = productName.ToLower().Contains("провод") ||
+                              productName.ToLower().Contains("пвс") ||
+                              productName.ToLower().Contains("пугв");
+
+                // Если ищем кабель, а товар - провод/шнур - пропускаем
+                if (searchForCable && !isCable)
+                {
+                    continue;
+                }
+
+                // Если ищем провод, а товар - кабель - пропускаем
+                if (searchForWire && !isWire)
+                {
+                    continue;
+                }
+
+                var analysis = AnalyzeCableProductAdvanced(product, expectedModel, normalizedExpectedSection);
+                if (analysis != null)
+                {
+                    if (analysis.HasExactModel && analysis.HasExactSection)
+                    {
+                        exactMatches.Add(analysis);
+                    }
+                    else if (analysis.HasExactSection)
+                    {
+                        possibleMatches.Add(analysis);
+                    }
+                }
+            }
+
+            Console.WriteLine($"✅ Точных совпадений (модель+сечение): {exactMatches.Count}");
+            Console.WriteLine($"✅ Совпадений только по сечению: {possibleMatches.Count}");
+
+            // Если нет никаких совпадений - используем общий поиск
+            if (!exactMatches.Any() && !possibleMatches.Any())
+            {
+                Console.WriteLine("⚠️ Нет совпадений для кабеля/провода, переключаемся на общий поиск");
+                return await SearchGeneralProductAsync(allProducts, query, maxResults);
+            }
+
+            // Функция для определения приоритета поставщика
+            bool IsEnergoprom(string supplier)
+            {
+                return !string.IsNullOrEmpty(supplier) &&
+                       supplier.IndexOf("Энергопром", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+
+            // Функция для приоритета точного соответствия типа
+            bool IsExactTypeMatch(string productName)
+            {
+                string lowerName = productName.ToLower();
+
+                if (searchForCable)
+                    return lowerName.Contains("кабель") &&
+                           !lowerName.Contains("шнур") &&
+                           !lowerName.Contains("удлинитель") &&
+                           !lowerName.Contains("провод");
+
+                if (searchForWire)
+                    return (lowerName.Contains("провод") || lowerName.Contains("пвс")) &&
+                           !lowerName.Contains("шнур") &&
+                           !lowerName.Contains("удлинитель") &&
+                           !lowerName.Contains("кабель");
+
+                return true;
+            }
+
+            // Сортируем точные совпадения
+            exactMatches = exactMatches
+                .OrderByDescending(p => IsExactTypeMatch(p.Product.ProductName))
+                .ThenByDescending(p => IsEnergoprom(p.Product.CategoryName))
+                .ThenByDescending(p => p.Relevance)
+                .ThenByDescending(p => p.Product.HasPrice)
+                .ToList();
+
+            // Сортируем возможные совпадения
+            possibleMatches = possibleMatches
+                .OrderByDescending(p => IsExactTypeMatch(p.Product.ProductName))
+                .ThenByDescending(p => IsEnergoprom(p.Product.CategoryName))
+                .ThenByDescending(p => p.Relevance)
+                .ThenByDescending(p => p.Product.HasPrice)
+                .ToList();
+
+            // Формируем результат
+            List<ProductWithCategoryInfo> resultProducts;
+
+            if (exactMatches.Any())
+            {
+                resultProducts = exactMatches
+                    .Select(p => p.Product)
+                    .Take(maxResults)
+                    .ToList();
+                Console.WriteLine($"📌 Найдено товаров с точным совпадением модели+сечения: {resultProducts.Count}");
+            }
+            else if (possibleMatches.Any())
+            {
+                resultProducts = possibleMatches
+                    .Select(p => p.Product)
+                    .Take(maxResults)
+                    .ToList();
+                Console.WriteLine($"📌 Найдено товаров только по сечению: {resultProducts.Count}");
+            }
+            else
+            {
+                Console.WriteLine("❌ Не найдено подходящих товаров");
+                return new List<ProductWithCategoryInfo>();
+            }
+
+            // Выводим результаты
+            for (int i = 0; i < Math.Min(10, resultProducts.Count); i++)
+            {
+                var product = resultProducts[i];
+                var analysis = i < exactMatches.Count ? exactMatches[i] : possibleMatches[i - exactMatches.Count];
+                string matchType = analysis.HasExactModel ? "✅ МОДЕЛЬ+СЕЧЕНИЕ" : "📐 ТОЛЬКО СЕЧЕНИЕ";
+                string energopromMark = IsEnergoprom(product.CategoryName) ? " [ЭНЕРГОПРОМ]" : "";
+                string typeMark = IsExactTypeMatch(product.ProductName) ? "" : " ⚠️ НЕ СООТВЕТСТВУЕТ ТИПУ";
+                Console.WriteLine($"   {i + 1}. [{matchType}{energopromMark}{typeMark}] [{product.CategoryName}] {product.ProductName}");
+            }
+
+            return resultProducts;
         }
     }
 }

@@ -14,150 +14,133 @@
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
+
         <!-- Панель шагов -->
         <Grid Grid.Row="0" 
-      Background="#F5F5F5"
-      Height="80"
-      Margin="0">
+              Background="#F5F5F5"
+              Height="80"
+              Margin="0">
             <!-- Центрирующий контейнер -->
             <StackPanel Orientation="Horizontal" 
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center">
-
-                <!-- Шаг 1: Загрузка заявки (активный) -->
-                <Border Background="#E2542A"
-                CornerRadius="6"
-                 Opacity="0.5"
-                Width="185"
-                Height="50"
-                Margin="0,0,15,0">
-                    <StackPanel Orientation="Horizontal" 
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center">
-                        <!-- Номер шага -->
+
+                <!-- Шаг 1: Загрузка заявки -->
+                <Border Background="#E2542A"
+                        CornerRadius="6"
+                        Opacity="0.5"
+                        Width="185"
+                        Height="50"
+                        Margin="0,0,15,0">
+                    <StackPanel Orientation="Horizontal" 
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
                         <Border Width="24"
-                        Height="24"
-                        CornerRadius="12"
-                        Background="White"
-                        Margin="0,0,8,0">
+                                Height="24"
+                                CornerRadius="12"
+                                Background="White"
+                                Margin="0,0,8,0">
                             <TextBlock Text="1"
-                               FontSize="12"
-                               FontWeight="Bold"
-                               Foreground="#E2542A"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"/>
+                                       FontSize="12"
+                                       FontWeight="Bold"
+                                       Foreground="#E2542A"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
                         </Border>
-
-                        <!-- Название шага -->
                         <TextBlock Text="Загрузка заявки"
-                           FontSize="13"
-                           FontWeight="Bold"
-                           Foreground="White"
-                           VerticalAlignment="Center"/>
+                                   FontSize="13"
+                                   FontWeight="Bold"
+                                   Foreground="White"
+                                   VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
-
-
-                <!-- Шаг 2: Сопоставление товаров (неактивный) -->
+                <!-- Шаг 2: Сопоставление товаров (активный) -->
                 <Border Background="#E2542A"
-                CornerRadius="6"
-                Width="185"
-                Height="50"
-
-                Margin="0,0,15,0">
+                        CornerRadius="6"
+                        Width="185"
+                        Height="50"
+                        Margin="0,0,15,0">
                     <StackPanel Orientation="Horizontal" 
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center">
-                        <!-- Номер шага -->
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
                         <Border Width="24"
-                        Height="24"
-                        CornerRadius="12"
-                        Background="White"
-                        Margin="0,0,8,0">
+                                Height="24"
+                                CornerRadius="12"
+                                Background="White"
+                                Margin="0,0,8,0">
                             <TextBlock Text="2"
-                               FontSize="12"
-                               FontWeight="Bold"
-                               Foreground="#E2542A"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"/>
+                                       FontSize="12"
+                                       FontWeight="Bold"
+                                       Foreground="#E2542A"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
                         </Border>
-
-                        <!-- Название шага -->
                         <TextBlock Text="Сопоставление товаров"
-                           FontSize="13"
-                           FontWeight="Medium"
-                           Foreground="White"
-                           VerticalAlignment="Center"/>
+                                   FontSize="13"
+                                   FontWeight="Bold"
+                                   Foreground="White"
+                                   VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
-
-                <!-- Шаг 3: Редактирование цены (неактивный) -->
+                <!-- Шаг 3: Редактирование цены -->
                 <Border Background="#E2542A"
-                CornerRadius="6"
-                Width="185"
-                Height="50"
-                                         Opacity="0.5"
-                Margin="0,0,15,0">
+                        CornerRadius="6"
+                        Width="185"
+                        Height="50"
+                        Opacity="0.5"
+                        Margin="0,0,15,0">
                     <StackPanel Orientation="Horizontal" 
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center">
-                        <!-- Номер шага -->
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
                         <Border Width="24"
-                        Height="24"
-                        CornerRadius="12"
-                        Background="White"
-                        Margin="0,0,8,0">
+                                Height="24"
+                                CornerRadius="12"
+                                Background="White"
+                                Margin="0,0,8,0">
                             <TextBlock Text="3"
-                               FontSize="12"
-                               FontWeight="Bold"
-                               Foreground="#E2542A"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"/>
+                                       FontSize="12"
+                                       FontWeight="Bold"
+                                       Foreground="#E2542A"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
                         </Border>
-
-                        <!-- Название шага -->
                         <TextBlock Text="Редактирование цены"
-                           FontSize="13"
-                           FontWeight="Medium"
-                           Foreground="White"
-                           VerticalAlignment="Center"/>
+                                   FontSize="13"
+                                   FontWeight="Medium"
+                                   Foreground="White"
+                                   VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
-
-                <!-- Шаг 4: Формирование счета (неактивный) -->
+                <!-- Шаг 4: Формирование счета -->
                 <Border Background="#E2542A"
-                CornerRadius="6"
-                                                                 Opacity="0.5"
-                Width="185"
-                Height="50"
-
-                Margin="0,0,0,0">
+                        CornerRadius="6"
+                        Opacity="0.5"
+                        Width="185"
+                        Height="50"
+                        Margin="0,0,0,0">
                     <StackPanel Orientation="Horizontal" 
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center">
-                        <!-- Номер шага -->
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
                         <Border Width="24"
-                        Height="24"
-                        CornerRadius="12"
-                        Background="White"
-                        Margin="0,0,8,0">
+                                Height="24"
+                                CornerRadius="12"
+                                Background="White"
+                                Margin="0,0,8,0">
                             <TextBlock Text="4"
-                               FontSize="12"
-                               FontWeight="Bold"
-                               Foreground="#E2542A"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"/>
+                                       FontSize="12"
+                                       FontWeight="Bold"
+                                       Foreground="#E2542A"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
                         </Border>
-
-                        <!-- Название шага -->
                         <TextBlock Text="Формирование счета"
-                           FontSize="13"
-                           FontWeight="Medium"
-                           Foreground="White"
-                           VerticalAlignment="Center"/>
+                                   FontSize="13"
+                                   FontWeight="Medium"
+                                   Foreground="White"
+                                   VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -171,6 +154,7 @@
                 Margin="20,10,20,10">
             <Grid>
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -193,16 +177,65 @@
                                    FontSize="18"
                                    FontWeight="Bold"
                                    Foreground="#333333"/>
+                    </Grid>
+                </Border>
 
-                        <!-- Панель управления товарами -->
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                          
+                <!-- 🔵 НОВАЯ ПАНЕЛЬ ПРОГРЕССА 🔵 -->
+                <Border x:Name="ProgressPanel" 
+                        Grid.Row="1"
+                        Background="#FFF3E0"
+                        BorderBrush="#E2542A"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Margin="15,10,15,5"
+                        Padding="10"
+                        Visibility="Collapsed">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Иконка -->
+                        <TextBlock Grid.Column="0" 
+                                   Text="⏳" 
+                                   FontSize="18" 
+                                   Margin="0,0,10,0"
+                                   VerticalAlignment="Center"/>
+
+                        <!-- Текст и прогресс -->
+                        <StackPanel Grid.Column="1" 
+                                    Orientation="Vertical"
+                                    Margin="0,0,10,0">
+                            <TextBlock x:Name="ProgressText" 
+                                       Text="Поиск товаров..." 
+                                       FontSize="13" 
+                                       FontWeight="SemiBold"
+                                       Foreground="#E2542A"
+                                       Margin="0,0,0,3"/>
+                            <ProgressBar x:Name="ProgressBar" 
+                                         Height="15" 
+                                         Minimum="0" 
+                                         Maximum="100" 
+                                         Value="0"
+                                         Foreground="#E2542A"
+                                         Background="#FFE0B2"/>
                         </StackPanel>
+
+                        <!-- Счетчик -->
+                        <TextBlock x:Name="ProgressCounter" 
+                                   Grid.Column="2" 
+                                   Text="0/0" 
+                                   FontSize="13" 
+                                   FontWeight="Bold"
+                                   Foreground="#E2542A"
+                                   VerticalAlignment="Center"/>
                     </Grid>
                 </Border>
 
                 <!-- Панель быстрого добавления -->
-                <Border Grid.Row="1"
+                <Border Grid.Row="2"
                         Background="#F9F9F9"
                         BorderBrush="#E0E0E0"
                         BorderThickness="0,0,0,1"
@@ -224,17 +257,16 @@
                                    Margin="0,0,10,0"/>
 
                         <TextBox x:Name="txtNewProduct"
-         Grid.Column="1"
-         Margin="0,0,10,0"
-         Padding="10,8"
-         FontSize="14"
-         VerticalContentAlignment="Center"
-         BorderBrush="#CCCCCC"
-         BorderThickness="1"
-         VerticalAlignment="Center"
-         KeyUp="TxtNewProduct_KeyUp"
-         TextChanged="TxtNewProduct_TextChanged">
-                            <!-- Добавить эту строку -->
+                                 Grid.Column="1"
+                                 Margin="0,0,10,0"
+                                 Padding="10,8"
+                                 FontSize="14"
+                                 VerticalContentAlignment="Center"
+                                 BorderBrush="#CCCCCC"
+                                 BorderThickness="1"
+                                 VerticalAlignment="Center"
+                                 KeyUp="TxtNewProduct_KeyUp"
+                                 TextChanged="TxtNewProduct_TextChanged">
                             <TextBox.Style>
                                 <Style TargetType="TextBox">
                                     <Setter Property="Border.CornerRadius" Value="4"/>
@@ -318,7 +350,7 @@
                 </Border>
 
                 <!-- Заголовки колонок -->
-                <Border Grid.Row="2"
+                <Border Grid.Row="3"
                         Background="#F0F0F0"
                         BorderBrush="#E0E0E0"
                         BorderThickness="0,0,0,1"
@@ -368,7 +400,7 @@
                 </Border>
 
                 <!-- Таблица товаров -->
-                <ScrollViewer Grid.Row="3"
+                <ScrollViewer Grid.Row="4"
                               VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled"
                               Padding="0">
@@ -395,11 +427,11 @@
                                                 BorderThickness="0,0,1,0"
                                                 Padding="10,0">
                                             <TextBox Text="{Binding OriginalProduct, Mode=TwoWay}"
-                                                       TextWrapping="Wrap"
-                                                       HorizontalAlignment="Center"
-                                                       VerticalAlignment="Center"
-                                                       FontSize="14"
-                                                       Foreground="#333333"/>
+                                                     TextWrapping="Wrap"
+                                                     HorizontalAlignment="Center"
+                                                     VerticalAlignment="Center"
+                                                     FontSize="14"
+                                                     Foreground="#333333"/>
                                         </Border>
 
                                         <!-- Колонка 2: Выбор товара из Bitrix -->
@@ -408,7 +440,7 @@
                                                   ItemsSource="{Binding BitrixProducts}"
                                                   DisplayMemberPath="ProductName"
                                                   SelectedItem="{Binding SelectedBitrixProduct, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                      MaxDropDownHeight="400" 
+                                                  MaxDropDownHeight="400" 
                                                   IsEditable="True"
                                                   HorizontalAlignment="Stretch"
                                                   VerticalAlignment="Center"
@@ -418,7 +450,6 @@
                                                   BorderBrush="#CCCCCC"
                                                   DropDownOpened="ComboBox_DropDownOpened"
                                                   KeyUp="ComboBox_KeyUp">
-                                            
                                             <ComboBox.Style>
                                                 <Style TargetType="ComboBox">
                                                     <Setter Property="Border.CornerRadius" Value="4"/>

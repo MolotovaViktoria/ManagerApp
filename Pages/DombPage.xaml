@@ -17,152 +17,148 @@
 
         <!-- Панель шагов -->
         <Grid Grid.Row="0" 
-      Background="#F5F5F5"
-      Height="80"
-      Margin="0">
+              Background="#F5F5F5"
+              Height="80"
+              Margin="0">
             <!-- Центрирующий контейнер -->
             <StackPanel Orientation="Horizontal" 
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center">
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
 
                 <!-- Шаг 1: Загрузка заявки (активный) -->
                 <Border Background="#E2542A"
-                CornerRadius="6"
-                Width="185"
-                Height="50"
-                Margin="0,0,15,0">
+                        CornerRadius="6"
+                        Width="185"
+                        Height="50"
+                        Margin="0,0,15,0">
                     <StackPanel Orientation="Horizontal" 
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center">
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
                         <!-- Номер шага -->
                         <Border Width="24"
-                        Height="24"
-                        CornerRadius="12"
-                        Background="White"
-                        Margin="0,0,8,0">
+                                Height="24"
+                                CornerRadius="12"
+                                Background="White"
+                                Margin="0,0,8,0">
                             <TextBlock Text="1"
-                               FontSize="12"
-                               FontWeight="Bold"
-                               Foreground="#E2542A"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"/>
+                                       FontSize="12"
+                                       FontWeight="Bold"
+                                       Foreground="#E2542A"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
                         </Border>
 
                         <!-- Название шага -->
                         <TextBlock Text="Загрузка заявки"
-                           FontSize="13"
-                           FontWeight="Bold"
-                           Foreground="White"
-                           VerticalAlignment="Center"/>
+                                   FontSize="13"
+                                   FontWeight="Bold"
+                                   Foreground="White"
+                                   VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
-              
-
                 <!-- Шаг 2: Сопоставление товаров (неактивный) -->
                 <Border Background="#E2542A"
-                CornerRadius="6"
-                Width="185"
-                Height="50"
-                Opacity="0.5"
-                Margin="0,0,15,0">
+                        CornerRadius="6"
+                        Width="185"
+                        Height="50"
+                        Opacity="0.5"
+                        Margin="0,0,15,0">
                     <StackPanel Orientation="Horizontal" 
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center">
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
                         <!-- Номер шага -->
                         <Border Width="24"
-                        Height="24"
-                        CornerRadius="12"
-                        Background="White"
-                        Margin="0,0,8,0">
+                                Height="24"
+                                CornerRadius="12"
+                                Background="White"
+                                Margin="0,0,8,0">
                             <TextBlock Text="2"
-                               FontSize="12"
-                               FontWeight="Bold"
-                               Foreground="#E2542A"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"/>
+                                       FontSize="12"
+                                       FontWeight="Bold"
+                                       Foreground="#E2542A"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
                         </Border>
 
                         <!-- Название шага -->
                         <TextBlock Text="Сопоставление товаров"
-                           FontSize="13"
-                           FontWeight="Medium"
-                           Foreground="White"
-                           VerticalAlignment="Center"/>
+                                   FontSize="13"
+                                   FontWeight="Medium"
+                                   Foreground="White"
+                                   VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
-
                 <!-- Шаг 3: Редактирование цены (неактивный) -->
                 <Border Background="#E2542A"
-                CornerRadius="6"
-                Width="185"
-                Height="50"
-                Opacity="0.5"
-                Margin="0,0,15,0">
+                        CornerRadius="6"
+                        Width="185"
+                        Height="50"
+                        Opacity="0.5"
+                        Margin="0,0,15,0">
                     <StackPanel Orientation="Horizontal" 
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center">
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
                         <!-- Номер шага -->
                         <Border Width="24"
-                        Height="24"
-                        CornerRadius="12"
-                        Background="White"
-                        Margin="0,0,8,0">
+                                Height="24"
+                                CornerRadius="12"
+                                Background="White"
+                                Margin="0,0,8,0">
                             <TextBlock Text="3"
-                               FontSize="12"
-                               FontWeight="Bold"
-                               Foreground="#E2542A"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"/>
+                                       FontSize="12"
+                                       FontWeight="Bold"
+                                       Foreground="#E2542A"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
                         </Border>
 
                         <!-- Название шага -->
                         <TextBlock Text="Редактирование цены"
-                           FontSize="13"
-                           FontWeight="Medium"
-                           Foreground="White"
-                           VerticalAlignment="Center"/>
+                                   FontSize="13"
+                                   FontWeight="Medium"
+                                   Foreground="White"
+                                   VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
-
                 <!-- Шаг 4: Формирование счета (неактивный) -->
                 <Border Background="#E2542A"
-                CornerRadius="6"
-                Width="185"
-                Height="50"
-                Opacity="0.5"
-                Margin="0,0,0,0">
+                        CornerRadius="6"
+                        Width="185"
+                        Height="50"
+                        Opacity="0.5"
+                        Margin="0,0,0,0">
                     <StackPanel Orientation="Horizontal" 
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center">
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center">
                         <!-- Номер шага -->
                         <Border Width="24"
-                        Height="24"
-                        CornerRadius="12"
-                        Background="White"
-                        Margin="0,0,8,0">
+                                Height="24"
+                                CornerRadius="12"
+                                Background="White"
+                                Margin="0,0,8,0">
                             <TextBlock Text="4"
-                               FontSize="12"
-                               FontWeight="Bold"
-                               Foreground="#E2542A"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"/>
+                                       FontSize="12"
+                                       FontWeight="Bold"
+                                       Foreground="#E2542A"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
                         </Border>
 
                         <!-- Название шага -->
                         <TextBlock Text="Формирование счета"
-                           FontSize="13"
-                           FontWeight="Medium"
-                           Foreground="White"
-                           VerticalAlignment="Center"/>
+                                   FontSize="13"
+                                   FontWeight="Medium"
+                                   Foreground="White"
+                                   VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
             </StackPanel>
         </Grid>
 
-        <!-- Контентная область для загрузки файла -->
+        <!-- Контентная область -->
         <Border Grid.Row="1"
                 Background="White"
                 BorderBrush="#E0E0E0"
@@ -171,94 +167,233 @@
                 VerticalAlignment="Stretch"
                 HorizontalAlignment="Stretch">
 
-            <Grid>
-                <!-- Основная область для загрузки файла -->
-                <Border Name="DropArea"
-                        Background="#FFF8F5"
-                        BorderBrush="#E2542A"
-                        BorderThickness="2"
-                        CornerRadius="12" 
-                        Margin="20"
-                        HorizontalAlignment="Stretch"
-                        VerticalAlignment="Stretch"
-                        Padding="40">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                <StackPanel Margin="20">
+                    <!-- Заголовок с переключателями -->
+                    <TextBlock Text="Выберите способ ввода заявки"
+                               FontSize="24"
+                               FontWeight="SemiBold"
+                               Foreground="#333333"
+                               HorizontalAlignment="Center"
+                               Margin="0,0,0,25"/>
 
-                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <!-- Иконка загрузки -->
-                        <Viewbox Width="96" Height="96" Margin="0,0,0,30">
-                            <Path Data="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"
-                                  Fill="#E2542A"
-                                  Stretch="Uniform"/>
-                        </Viewbox>
+                    <!-- Переключатели способов ввода -->
+                    <Border Background="#F5F5F5"
+                            CornerRadius="10"
+                            Padding="10"
+                            Margin="0,0,0,20">
+                        <StackPanel>
+                            <RadioButton Name="FileInputRadio"
+                                         Content="Загрузить файл"
+                                         FontSize="16"
+                                         Foreground="#333333"
+                                         Margin="10,10,10,5"
+                                         IsChecked="True"
+                                         Checked="InputMethod_Checked"/>
+                            <RadioButton Name="TextInputRadio"
+                                         Content="Вставить текст"
+                                         FontSize="16"
+                                         Foreground="#333333"
+                                         Margin="10,5,10,10"
+                                         Checked="InputMethod_Checked"/>
+                        </StackPanel>
+                    </Border>
 
-                        <!-- Текст инструкции -->
-                        <TextBlock Text="Перетащите файл заявки сюда или"
-                                   FontSize="20"
-                                   Foreground="#555555"
-                                   TextAlignment="Center"
-                                   Margin="0,0,0,15"/>
+                    <!-- Область загрузки файла (видна при выборе FileInputRadio) -->
+                    <Border Name="FileUploadArea"
+                            Background="#FFF8F5"
+                            BorderBrush="#E2542A"
+                            BorderThickness="2"
+                            CornerRadius="12" 
+                            Padding="40"
+                            Margin="0,0,0,20"
+                            Visibility="Visible">
 
-                        <!-- Кнопка выбора файла -->
-                        <Button Name="SelectFileButton"
-                                Content="Выберите файл"
-                                Background="#E2542A"
-                                Foreground="White"
-                                BorderBrush="#C44A24"
-                                Padding="30,15"
-                                FontSize="16"
-                                FontWeight="SemiBold"
-                                Cursor="Hand"
-                                HorizontalAlignment="Center"
-                                MinWidth="180"
-                                Click="SelectFileButton_Click">
-                            <Button.Style>
-                                <Style TargetType="Button">
-                                    <Setter Property="Template">
-                                        <Setter.Value>
-                                            <ControlTemplate TargetType="Button">
-                                                <Border Background="{TemplateBinding Background}"
-                                                        BorderBrush="{TemplateBinding BorderBrush}"
-                                                        BorderThickness="1"
-                                                        CornerRadius="6">
-                                                    <ContentPresenter HorizontalAlignment="Center" 
-                                                                    VerticalAlignment="Center"/>
-                                                </Border>
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                    <Style.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter Property="Background" Value="#C44A24"/>
-                                            <Setter Property="BorderBrush" Value="#A83E1E"/>
-                                        </Trigger>
-                                        <Trigger Property="IsPressed" Value="True">
-                                            <Setter Property="Background" Value="#A83E1E"/>
-                                            <Setter Property="BorderBrush" Value="#8A3319"/>
-                                        </Trigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Button.Style>
-                        </Button>
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <!-- Иконка загрузки -->
+                            <Viewbox Width="96" Height="96" Margin="0,0,0,30">
+                                <Path Data="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"
+                                      Fill="#E2542A"
+                                      Stretch="Uniform"/>
+                            </Viewbox>
 
-                        <!-- Информация о поддерживаемых форматах -->
-                        <TextBlock Text="Поддерживаемые форматы: Word (.docx, .dotx, .docm, .dotm), PDF (.pdf), Excel (.xlsx, .xls, .xlsm, .xlsb, .csv)"
-                                   FontSize="14"
-                                   Foreground="#888888"
-                                   TextAlignment="Center"
-                                   Margin="0,20,0,0"/>
-                    </StackPanel>
-                </Border>
+                            <!-- Текст инструкции -->
+                            <TextBlock Text="Перетащите файл заявки сюда или"
+                                       FontSize="20"
+                                       Foreground="#555555"
+                                       TextAlignment="Center"
+                                       Margin="0,0,0,15"/>
 
-                <!-- Текст или область для отображения загруженного файла -->
-                <TextBlock Name="FileNameText"
-                           Text=""
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Bottom"
-                           Margin="0,0,0,30"
-                           FontSize="16"
-                           Foreground="#555555"
-                           Visibility="Collapsed"/>
-            </Grid>
+                            <!-- Кнопка выбора файла -->
+                            <Button Name="SelectFileButton"
+                                    Content="Выберите файл"
+                                    Background="#E2542A"
+                                    Foreground="White"
+                                    BorderBrush="#C44A24"
+                                    Padding="30,15"
+                                    FontSize="16"
+                                    FontWeight="SemiBold"
+                                    Cursor="Hand"
+                                    HorizontalAlignment="Center"
+                                    MinWidth="180"
+                                    Click="SelectFileButton_Click">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="6">
+                                                        <ContentPresenter HorizontalAlignment="Center" 
+                                                                        VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="#C44A24"/>
+                                                <Setter Property="BorderBrush" Value="#A83E1E"/>
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter Property="Background" Value="#A83E1E"/>
+                                                <Setter Property="BorderBrush" Value="#8A3319"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+
+                            <!-- Информация о поддерживаемых форматах -->
+                            <TextBlock Text="Поддерживаемые форматы: Word (.docx, .dotx, .docm, .dotm), PDF (.pdf), Excel (.xlsx, .xls, .xlsm, .xlsb, .csv)"
+                                       FontSize="14"
+                                       Foreground="#888888"
+                                       TextAlignment="Center"
+                                       Margin="0,20,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Область ввода текста (видна при выборе TextInputRadio) -->
+                    <Border Name="TextInputArea"
+                            Background="#F9F9F9"
+                            BorderBrush="#CCCCCC"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="20"
+                            Margin="0,0,0,20"
+                            Visibility="Collapsed">
+
+                        <StackPanel>
+                            <!-- Заголовок -->
+                            <TextBlock Text="Вставьте текст заявки"
+                                       FontSize="18"
+                                       FontWeight="SemiBold"
+                                       Foreground="#333333"
+                                       Margin="0,0,0,15"/>
+
+                            <!-- Подсказка -->
+                            <TextBlock Text="Скопируйте текст заявки и вставьте его в поле ниже"
+                                       FontSize="14"
+                                       Foreground="#666666"
+                                       Margin="0,0,0,15"/>
+
+                            <!-- Текстовое поле для ввода -->
+                            <TextBox Name="RequestTextBox"
+                                     Height="200"
+                                     TextWrapping="Wrap"
+                                     AcceptsReturn="True"
+                                     VerticalScrollBarVisibility="Auto"
+                                     Padding="10"
+                                     FontSize="14"
+                                     BorderBrush="#CCCCCC"
+                                     BorderThickness="1"
+                                     Background="White"
+                                     Foreground="#333333">
+                                <TextBox.Style>
+                                    <Style TargetType="TextBox">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="TextBox">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                                            CornerRadius="4">
+                                                        <ScrollViewer x:Name="PART_ContentHost"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </TextBox.Style>
+                            </TextBox>
+
+                            <!-- Кнопка обработки текста -->
+                            <Button Name="ProcessTextButton"
+                                    Content="Обработать текст"
+                                    Background="#E2542A"
+                                    Foreground="White"
+                                    BorderBrush="#C44A24"
+                                    Padding="30,15"
+                                    FontSize="16"
+                                    FontWeight="SemiBold"
+                                    Cursor="Hand"
+                                    HorizontalAlignment="Center"
+                                    MinWidth="200"
+                                    Margin="0,20,0,0"
+                                    Click="ProcessTextButton_Click">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}"
+                                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="6">
+                                                        <ContentPresenter HorizontalAlignment="Center" 
+                                                                        VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="#C44A24"/>
+                                                <Setter Property="BorderBrush" Value="#A83E1E"/>
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter Property="Background" Value="#A83E1E"/>
+                                                <Setter Property="BorderBrush" Value="#8A3319"/>
+                                            </Trigger>
+                                            <Trigger Property="IsEnabled" Value="False">
+                                                <Setter Property="Background" Value="#CCCCCC"/>
+                                                <Setter Property="BorderBrush" Value="#AAAAAA"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+
+                            <!-- Примечание -->
+                            <TextBlock Text="Текст будет обработан для извлечения списка товаров"
+                                       FontSize="12"
+                                       Foreground="#888888"
+                                       TextAlignment="Center"
+                                       Margin="0,15,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Информация о загруженном файле (для режима файла) -->
+                    <TextBlock Name="FileNameText"
+                               Text=""
+                               HorizontalAlignment="Center"
+                               FontSize="16"
+                               Foreground="#555555"
+                               Visibility="Collapsed"/>
+                </StackPanel>
+            </ScrollViewer>
         </Border>
     </Grid>
 </Page>

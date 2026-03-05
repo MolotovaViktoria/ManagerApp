@@ -34,7 +34,227 @@ namespace ManagerApp.Pages
 
             LoadProductsFromManager();
         }
+        // Добавьте эти поля в класс
+        private int _totalSearchTasks = 0;
+        private int _completedSearchTasks = 0;
+        private readonly object _progressLock = new object();
 
+        // Методы для управления прогрессом
+        private void ShowProgress(string message)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                ProgressPanel.Visibility = Visibility.Visible;
+                ProgressText.Text = message;
+                ProgressBar.Value = 0;
+                ProgressCounter.Text = $"0/{_totalSearchTasks}";
+
+                // Блокируем кнопки во время поиска
+                btnQuickAdd.IsEnabled = false;
+                btnClearAll.IsEnabled = false;
+                btnNext.IsEnabled = false;
+                txtNewProduct.IsEnabled = false;
+            });
+        }
+
+        private void UpdateProgress(int completed, int total, string currentProduct = null)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (total > 0)
+                {
+                    double percentage = (double)completed / total * 100;
+                    ProgressBar.Value = percentage;
+                    ProgressCounter.Text = $"{completed}/{total}";
+
+                    if (!string.IsNullOrEmpty(currentProduct))
+                    {
+                        ProgressText.Text = $"Поиск: {currentProduct}";
+                    }
+                    else
+                    {
+                        ProgressText.Text = $"Поиск товаров... {completed}/{total}";
+                    }
+                }
+            });
+        }
+
+        private void HideProgress()
+        {
+            Dispatcher.Invoke(() =>
+            {
+                ProgressPanel.Visibility = Visibility.Collapsed;
+
+                // Разблокируем кнопки
+                btnQuickAdd.IsEnabled = true;
+                btnClearAll.IsEnabled = true;
+                btnNext.IsEnabled = true;
+                txtNewProduct.IsEnabled = true;
+            });
+        }
+
+        // Обновленный метод поиска для всех продуктов
+        private async Task SmartSearchForAllProductsAsync()
+        {
+            if (!ProductItems.Any()) return;
+
+            try
+            {
+                _totalSearchTasks = ProductItems.Count;
+                _completedSearchTasks = 0;
+
+                ShowProgress($"Поиск товаров... 0/{_totalSearchTasks}");
+
+                var searchTasks = new List<Task>();
+
+                foreach (var item in ProductItems)
+                {
+                    if (string.IsNullOrWhiteSpace(item.OriginalProduct))
+                    {
+                        lock (_progressLock)
+                        {
+                            _completedSearchTasks++;
+                            UpdateProgress(_completedSearchTasks, _totalSearchTasks);
+                        }
+                        continue;
+                    }
+
+                    searchTasks.Add(Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await SmartSearchProductsWithProgressAsync(item, item.OriginalProduct);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"Ошибка при поиске '{item.OriginalProduct}': {ex.Message}");
+                        }
+                        finally
+                        {
+                            lock (_progressLock)
+                            {
+                                _completedSearchTasks++;
+                                UpdateProgress(_completedSearchTasks, _totalSearchTasks);
+                            }
+                        }
+                    }));
+                }
+
+                await Task.WhenAll(searchTasks);
+
+                // Показываем завершение
+                UpdateProgress(_totalSearchTasks, _totalSearchTasks, "Завершено!");
+                await Task.Delay(500); // Показываем "Завершено!" полсекунды
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при автопоиске: {ex.Message}");
+            }
+            finally
+            {
+                HideProgress();
+            }
+        }
+
+        // Новый метод поиска с обновлением прогресса
+        private async Task SmartSearchProductsWithProgressAsync(ProductItemViewModel item, string searchText)
+        {
+            try
+            {
+                // Обновляем статус с текущим товаром
+                Dispatcher.Invoke(() =>
+                {
+                    UpdateProgress(_completedSearchTasks, _totalSearchTasks,
+                        searchText.Length > 30 ? searchText.Substring(0, 27) + "..." : searchText);
+                });
+
+                if (string.IsNullOrWhiteSpace(searchText))
+                    return;
+
+                string cacheKey = searchText.ToLower().Trim();
+
+                if (_searchCache.TryGetValue(cacheKey, out var cachedResults))
+                {
+                    await UpdateProductsListAsync(item, cachedResults);
+                    return;
+                }
+
+                Console.WriteLine($"🔍 Поиск: '{searchText}'");
+                var searchResults = await _productMatcher.FindSimilarProductsAsync(searchText, 50);
+
+                var bitrixProducts = searchResults.Select(p => new Data.ScharedData.BitrixProductViewModel
+                {
+                    ProductId = p.ProductId,
+                    ProductName = p.ProductName,
+                    CategoryName = p.CategoryName,
+                    Price = p.Price,
+                    HasPrice = p.HasPrice,
+                    SectionId = p.SectionId
+                }).ToList();
+
+                Console.WriteLine($"✅ Найдено {bitrixProducts.Count} товаров");
+
+                if (bitrixProducts.Any())
+                {
+                    _searchCache[cacheKey] = bitrixProducts;
+                }
+
+                await UpdateProductsListAsync(item, bitrixProducts);
+                await TryAutoSelectBestMatchAsync(item, bitrixProducts, searchText);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Ошибка при поиске '{searchText}': {ex.Message}");
+            }
+        }
+
+        // Обновленный метод добавления товара
+        private async Task AddProductItemAsync(string productName)
+        {
+            if (ProductItems.Any(p => p.OriginalProduct.Equals(productName, StringComparison.OrdinalIgnoreCase)))
+            {
+                MessageBox.Show($"Товар '{productName}' уже существует в списке",
+                              "Внимание",
+                              MessageBoxButton.OK,
+                              MessageBoxImage.Warning);
+                return;
+            }
+
+            var item = new ProductItemViewModel
+            {
+                OriginalProduct = productName,
+                BitrixProducts = new ObservableCollection<Data.ScharedData.BitrixProductViewModel>(),
+                SelectedBitrixProduct = null
+            };
+
+            item.AddCommand = new RelayCommand(AddProduct);
+            item.RemoveCommand = new RelayCommand(RemoveProductItem);
+
+            ProductItems.Add(item);
+
+            var currentProducts = ProductSelectionManager.GetProducts() ?? new List<string>();
+            if (!currentProducts.Contains(productName, StringComparer.OrdinalIgnoreCase))
+            {
+                currentProducts.Add(productName);
+                ProductSelectionManager.SetProducts(currentProducts);
+            }
+
+            // Для одного товара показываем прогресс
+            _totalSearchTasks = 1;
+            _completedSearchTasks = 0;
+            ShowProgress($"Поиск: {productName}");
+
+            try
+            {
+                await SmartSearchProductsWithProgressAsync(item, productName);
+                UpdateProgress(1, 1, "Готово!");
+                await Task.Delay(500);
+            }
+            finally
+            {
+                HideProgress();
+            }
+        }
         public ComparisonProduct(List<string> products) : this()
         {
             if (products != null && products.Count > 0)
@@ -105,29 +325,29 @@ namespace ManagerApp.Pages
             }
         }
 
-        // Метод поиска для всех продуктов
-        private async Task SmartSearchForAllProductsAsync()
-        {
-            if (!ProductItems.Any()) return;
+        //// Метод поиска для всех продуктов
+        //private async Task SmartSearchForAllProductsAsync()
+        //{
+        //    if (!ProductItems.Any()) return;
 
-            try
-            {
-                var searchTasks = new List<Task>();
+        //    try
+        //    {
+        //        var searchTasks = new List<Task>();
 
-                foreach (var item in ProductItems)
-                {
-                    if (string.IsNullOrWhiteSpace(item.OriginalProduct)) continue;
+        //        foreach (var item in ProductItems)
+        //        {
+        //            if (string.IsNullOrWhiteSpace(item.OriginalProduct)) continue;
 
-                    searchTasks.Add(SmartSearchProductsAsync(item, item.OriginalProduct));
-                }
+        //            searchTasks.Add(SmartSearchProductsAsync(item, item.OriginalProduct));
+        //        }
 
-                await Task.WhenAll(searchTasks);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Ошибка при автопоиске: {ex.Message}");
-            }
-        }
+        //        await Task.WhenAll(searchTasks);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        Console.WriteLine($"Ошибка при автопоиске: {ex.Message}");
+        //    }
+        //}
 
         #region Обработчики кнопок
 
@@ -170,38 +390,38 @@ namespace ManagerApp.Pages
             }
         }
 
-        private async Task AddProductItemAsync(string productName)
-        {
-            if (ProductItems.Any(p => p.OriginalProduct.Equals(productName, StringComparison.OrdinalIgnoreCase)))
-            {
-                MessageBox.Show($"Товар '{productName}' уже существует в списке",
-                              "Внимание",
-                              MessageBoxButton.OK,
-                              MessageBoxImage.Warning);
-                return;
-            }
+        //private async Task AddProductItemAsync(string productName)
+        //{
+        //    if (ProductItems.Any(p => p.OriginalProduct.Equals(productName, StringComparison.OrdinalIgnoreCase)))
+        //    {
+        //        MessageBox.Show($"Товар '{productName}' уже существует в списке",
+        //                      "Внимание",
+        //                      MessageBoxButton.OK,
+        //                      MessageBoxImage.Warning);
+        //        return;
+        //    }
 
-            var item = new ProductItemViewModel
-            {
-                OriginalProduct = productName,
-                BitrixProducts = new ObservableCollection<Data.ScharedData.BitrixProductViewModel>(),
-                SelectedBitrixProduct = null
-            };
+        //    var item = new ProductItemViewModel
+        //    {
+        //        OriginalProduct = productName,
+        //        BitrixProducts = new ObservableCollection<Data.ScharedData.BitrixProductViewModel>(),
+        //        SelectedBitrixProduct = null
+        //    };
 
-            item.AddCommand = new RelayCommand(AddProduct);
-            item.RemoveCommand = new RelayCommand(RemoveProductItem);
+        //    item.AddCommand = new RelayCommand(AddProduct);
+        //    item.RemoveCommand = new RelayCommand(RemoveProductItem);
 
-            ProductItems.Add(item);
+        //    ProductItems.Add(item);
 
-            var currentProducts = ProductSelectionManager.GetProducts() ?? new List<string>();
-            if (!currentProducts.Contains(productName, StringComparer.OrdinalIgnoreCase))
-            {
-                currentProducts.Add(productName);
-                ProductSelectionManager.SetProducts(currentProducts);
-            }
+        //    var currentProducts = ProductSelectionManager.GetProducts() ?? new List<string>();
+        //    if (!currentProducts.Contains(productName, StringComparer.OrdinalIgnoreCase))
+        //    {
+        //        currentProducts.Add(productName);
+        //        ProductSelectionManager.SetProducts(currentProducts);
+        //    }
 
-            await SmartSearchProductsAsync(item, productName);
-        }
+        //    await SmartSearchProductsAsync(item, productName);
+        //}
 
         private void RemoveProductItem(object parameter)
         {
