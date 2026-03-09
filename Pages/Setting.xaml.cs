@@ -30,7 +30,7 @@ namespace ManagerApp.Pages
     {
         private const string SettingsFileName = "settings.txt";
         private const string OCRSettingsFileName = "fileresurse.txt"; // Добавьте эту константу
-        private const string DefaultVAT = "20";
+        private const string DefaultVAT = "22";
 
         private string _vat = DefaultVAT;
         private ObservableCollection<BitrixUser> _employees = new ObservableCollection<BitrixUser>();
@@ -685,7 +685,7 @@ namespace ManagerApp.Pages
                 // В случае ошибки возвращаем значение по умолчанию
             }
 
-            return 0.20m; // 20% по умолчанию
+            return 0.22m; // 22% по умолчанию
         }
 
 

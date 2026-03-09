@@ -14,7 +14,7 @@ namespace ManagerApp.Classes.Setting
         {
             // Исключены администраторы: Алексей Неустроев (id:9), Павел Коростелев (id:1)
             // и другие сотрудники из предоставленного списка
-            new BitrixUser { id = 10, name = "Алена Юрьева", work_position = "Отдел снабжения", Initials = "АЮ" },
+            new BitrixUser { id = 10, name = "Елена Юрьева", work_position = "Отдел снабжения", Initials = "АЮ" },
             new BitrixUser { id = 241, name = "Виктория Молотова", work_position = "ТД МК «НАВИГАТОР»", Initials = "ВМ" },
             new BitrixUser { id = 11, name = "Максим Ермаков", work_position = "Отдел продаж", Initials = "МЕ" },
             new BitrixUser { id = 13, name = "Юлия Кагарманова", work_position = "Отдел продаж", Initials = "ЮК" },

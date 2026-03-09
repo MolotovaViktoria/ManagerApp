@@ -423,59 +423,59 @@ namespace ManagerApp.Pages
         //    await SmartSearchProductsAsync(item, productName);
         //}
 
-        private void RemoveProductItem(object parameter)
-        {
-            if (parameter is ProductItemViewModel item)
-            {
-                var result = MessageBox.Show($"Удалить товар '{item.OriginalProduct}'?",
-                                           "Подтверждение удаления",
-                                           MessageBoxButton.YesNo,
-                                           MessageBoxImage.Question);
+        //private void RemoveProductItem(object parameter)
+        //{
+        //    if (parameter is ProductItemViewModel item)
+        //    {
+        //        var result = MessageBox.Show($"Удалить товар '{item.OriginalProduct}'?",
+        //                                   "Подтверждение удаления",
+        //                                   MessageBoxButton.YesNo,
+        //                                   MessageBoxImage.Question);
 
-                if (result == MessageBoxResult.Yes)
-                {
-                    ProductItems.Remove(item);
+        //        if (result == MessageBoxResult.Yes)
+        //        {
+        //            ProductItems.Remove(item);
 
-                    var currentProducts = ProductSelectionManager.GetProducts()?.ToList() ?? new List<string>();
-                    currentProducts.RemoveAll(p => p.Equals(item.OriginalProduct, StringComparison.OrdinalIgnoreCase));
-                    ProductSelectionManager.SetProducts(currentProducts);
+        //            var currentProducts = ProductSelectionManager.GetProducts()?.ToList() ?? new List<string>();
+        //            currentProducts.RemoveAll(p => p.Equals(item.OriginalProduct, StringComparison.OrdinalIgnoreCase));
+        //            ProductSelectionManager.SetProducts(currentProducts);
 
-                    MessageBox.Show($"Товар '{item.OriginalProduct}' удален",
-                                  "Успешно",
-                                  MessageBoxButton.OK,
-                                  MessageBoxImage.Information);
-                }
-            }
-        }
+        //            MessageBox.Show($"Товар '{item.OriginalProduct}' удален",
+        //                          "Успешно",
+        //                          MessageBoxButton.OK,
+        //                          MessageBoxImage.Information);
+        //        }
+        //    }
+        //}
 
-        private void ClearAllProducts()
-        {
-            if (!ProductItems.Any())
-            {
-                MessageBox.Show("Список товаров пуст",
-                              "Информация",
-                              MessageBoxButton.OK,
-                              MessageBoxImage.Information);
-                return;
-            }
+        //private void ClearAllProducts()
+        //{
+        //    if (!ProductItems.Any())
+        //    {
+        //        MessageBox.Show("Список товаров пуст",
+        //                      "Информация",
+        //                      MessageBoxButton.OK,
+        //                      MessageBoxImage.Information);
+        //        return;
+        //    }
 
-            var result = MessageBox.Show($"Вы уверены, что хотите удалить все товары ({ProductItems.Count} шт.)?",
-                                       "Подтверждение удаления",
-                                       MessageBoxButton.YesNo,
-                                       MessageBoxImage.Warning);
+        //    var result = MessageBox.Show($"Вы уверены, что хотите удалить все товары ({ProductItems.Count} шт.)?",
+        //                               "Подтверждение удаления",
+        //                               MessageBoxButton.YesNo,
+        //                               MessageBoxImage.Warning);
 
-            if (result == MessageBoxResult.Yes)
-            {
-                ProductItems.Clear();
-                ProductSelectionManager.ClearProducts();
-                _searchCache.Clear();
+        //    if (result == MessageBoxResult.Yes)
+        //    {
+        //        ProductItems.Clear();
+        //        ProductSelectionManager.ClearProducts();
+        //        _searchCache.Clear();
 
-                MessageBox.Show("Все товары удалены",
-                              "Готово",
-                              MessageBoxButton.OK,
-                              MessageBoxImage.Information);
-            }
-        }
+        //        MessageBox.Show("Все товары удалены",
+        //                      "Готово",
+        //                      MessageBoxButton.OK,
+        //                      MessageBoxImage.Information);
+        //    }
+        //}
 
         #endregion
 
@@ -872,6 +872,160 @@ namespace ManagerApp.Pages
         }
 
         #endregion
+
+
+
+
+        // Таймер для debounce поиска (чтобы не искать после каждой буквы)
+        private readonly Dictionary<ProductItemViewModel, System.Timers.Timer> _searchTimers =
+            new Dictionary<ProductItemViewModel, System.Timers.Timer>();
+        private readonly object _timersLock = new object();
+
+        // Обработчик изменения текста в TextBox таблицы
+        private async void ProductTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            var textBox = sender as TextBox;
+            if (textBox?.DataContext is ProductItemViewModel item)
+            {
+                // Отменяем предыдущий таймер для этого элемента
+                lock (_timersLock)
+                {
+                    if (_searchTimers.TryGetValue(item, out var existingTimer))
+                    {
+                        existingTimer.Stop();
+                        existingTimer.Dispose();
+                        _searchTimers.Remove(item);
+                    }
+                }
+
+                // Если текст пустой - очищаем результаты
+                if (string.IsNullOrWhiteSpace(item.OriginalProduct))
+                {
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        item.BitrixProducts.Clear();
+                        item.SelectedBitrixProduct = null;
+                    });
+                    return;
+                }
+
+                // Сбрасываем выбранный товар при изменении текста
+                item.SelectedBitrixProduct = null;
+
+                // Создаем новый таймер с задержкой 800 мс (debounce)
+                var timer = new System.Timers.Timer(800);
+                timer.AutoReset = false;
+
+                timer.Elapsed += async (s, args) =>
+                {
+                    try
+                    {
+                        // Запускаем поиск
+                        await SmartSearchProductsWithProgressAsync(item, item.OriginalProduct);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Ошибка при поиске: {ex.Message}");
+                    }
+                    finally
+                    {
+                        // Удаляем таймер после завершения
+                        lock (_timersLock)
+                        {
+                            if (_searchTimers.ContainsKey(item))
+                            {
+                                _searchTimers.Remove(item);
+                            }
+                        }
+                    }
+                };
+
+                lock (_timersLock)
+                {
+                    _searchTimers[item] = timer;
+                }
+
+                timer.Start();
+            }
+        }
+
+        // Не забудьте очистить таймеры при удалении элемента
+        private void RemoveProductItem(object parameter)
+        {
+            if (parameter is ProductItemViewModel item)
+            {
+                // Останавливаем и удаляем таймер для этого элемента
+                lock (_timersLock)
+                {
+                    if (_searchTimers.TryGetValue(item, out var timer))
+                    {
+                        timer.Stop();
+                        timer.Dispose();
+                        _searchTimers.Remove(item);
+                    }
+                }
+
+                var result = MessageBox.Show($"Удалить товар '{item.OriginalProduct}'?",
+                                           "Подтверждение удаления",
+                                           MessageBoxButton.YesNo,
+                                           MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    ProductItems.Remove(item);
+
+                    var currentProducts = ProductSelectionManager.GetProducts()?.ToList() ?? new List<string>();
+                    currentProducts.RemoveAll(p => p.Equals(item.OriginalProduct, StringComparison.OrdinalIgnoreCase));
+                    ProductSelectionManager.SetProducts(currentProducts);
+
+                    MessageBox.Show($"Товар '{item.OriginalProduct}' удален",
+                                  "Успешно",
+                                  MessageBoxButton.OK,
+                                  MessageBoxImage.Information);
+                }
+            }
+        }
+
+        // Также очищаем таймеры при очистке всех товаров
+        private void ClearAllProducts()
+        {
+            if (!ProductItems.Any())
+            {
+                MessageBox.Show("Список товаров пуст",
+                              "Информация",
+                              MessageBoxButton.OK,
+                              MessageBoxImage.Information);
+                return;
+            }
+
+            var result = MessageBox.Show($"Вы уверены, что хотите удалить все товары ({ProductItems.Count} шт.)?",
+                                       "Подтверждение удаления",
+                                       MessageBoxButton.YesNo,
+                                       MessageBoxImage.Warning);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                // Останавливаем все таймеры
+                lock (_timersLock)
+                {
+                    foreach (var timer in _searchTimers.Values)
+                    {
+                        timer.Stop();
+                        timer.Dispose();
+                    }
+                    _searchTimers.Clear();
+                }
+
+                ProductItems.Clear();
+                ProductSelectionManager.ClearProducts();
+                _searchCache.Clear();
+
+                MessageBox.Show("Все товары удалены",
+                              "Готово",
+                              MessageBoxButton.OK,
+                              MessageBoxImage.Information);
+            }
+        }
     }
 
     #region Вспомогательные классы

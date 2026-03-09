@@ -423,15 +423,27 @@
 
                                         <!-- Колонка 1: Товар из заявки -->
                                         <Border Grid.Column="0"
-                                                BorderBrush="#E0E0E0"
-                                                BorderThickness="0,0,1,0"
-                                                Padding="10,0">
-                                            <TextBox Text="{Binding OriginalProduct, Mode=TwoWay}"
-                                                     TextWrapping="Wrap"
-                                                     HorizontalAlignment="Center"
-                                                     VerticalAlignment="Center"
-                                                     FontSize="14"
-                                                     Foreground="#333333"/>
+        BorderBrush="#E0E0E0"
+        BorderThickness="0,0,1,0"
+        Padding="10,0">
+                                            <TextBox Text="{Binding OriginalProduct, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+             TextWrapping="Wrap"
+             HorizontalAlignment="Stretch"
+             VerticalAlignment="Center"
+             FontSize="14"
+             Foreground="#333333"
+             MinWidth="200"
+             TextChanged="ProductTextBox_TextChanged">
+                                                <!-- ДОБАВЬТЕ ЭТУ СТРОКУ -->
+                                                <TextBox.Style>
+                                                    <Style TargetType="TextBox">
+                                                        <Setter Property="Border.CornerRadius" Value="4"/>
+                                                        <Setter Property="Background" Value="White"/>
+                                                        <Setter Property="BorderBrush" Value="#CCCCCC"/>
+                                                        <Setter Property="BorderThickness" Value="1"/>
+                                                    </Style>
+                                                </TextBox.Style>
+                                            </TextBox>
                                         </Border>
 
                                         <!-- Колонка 2: Выбор товара из Bitrix -->
