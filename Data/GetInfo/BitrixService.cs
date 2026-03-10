@@ -297,22 +297,29 @@ namespace ManagerApp.Data.GetInfo
         /// <param name="templateId">ID шаблона. По умолчанию = 2 (Счет России)</param>
         /// <param name="format">Формат файла: "docx" или "pdf". По умолчанию "docx".</param>
         /// <returns>URL для скачивания документа или null в случае ошибки</returns>
+        /// <summary>
+        /// Генерирует и возвращает документ (Word или PDF) для смарт-счета по шаблону
+        /// </summary>
+        /// <param name="invoiceId">ID счета (Smart Invoice, entityTypeId=31)</param>
+        /// <param name="templateId">ID шаблона: 32 для СПК, 34 для НВР</param>
+        /// <param name="format">Формат файла: "docx" или "pdf". По умолчанию "docx".</param>
+        /// <returns>URL для скачивания документа или null в случае ошибки</returns>
         public async Task<string> GenerateInvoiceDocument(
             int invoiceId,
-            int templateId_ = 32,
+            int templateId, // Убираем значение по умолчанию, теперь обязательный параметр
             string format = "docx")
         {
             try
             {
                 Console.WriteLine($"=== ГЕНЕРАЦИЯ ДОКУМЕНТА ДЛЯ СЧЕТА {invoiceId} ===");
-                Console.WriteLine($"Шаблон: {templateId_}, Формат: {format}");
+                Console.WriteLine($"Шаблон: {templateId}, Формат: {format}");
 
                 // Важно: для смарт-счетов используем правильный провайдер данных
                 string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.documentgenerator.document.add";
 
                 var requestData = new
                 {
-                    templateId = templateId_,
+                    templateId = templateId,
                     entityTypeId = 31,          // Смарт-счета (Smart Invoice)
                     entityId = invoiceId,       // ID нашего счета
                     values = new { }            // Дополнительные значения (можно оставить пустым)
@@ -434,18 +441,18 @@ namespace ManagerApp.Data.GetInfo
         }
 
         public async Task<int> CreateSmartInvoice(
-          DateTime invoiceDate,
-          int clientCompanyId,
-          int myCompanyId,
-          string orderTopic,
-          List<InvoiceProduct> products,
-          string number_chet,
-          string adress,
-          string day_dostavka,
-          string sposob_oplata,
-          int responsibleId,
-          string statusId = "DT31_1:NEW",
-          DateTime? payBeforeDate = null)
+     DateTime invoiceDate,
+     int clientCompanyId,
+     int myCompanyId,
+     string orderTopic,
+     List<InvoiceProduct> products,
+     string number_chet,
+     string adress,
+     string day_dostavka,
+     string sposob_oplata,
+     int responsibleId,
+     string statusId = "DT31_1:NEW",
+     DateTime? payBeforeDate = null)
         {
             try
             {
@@ -454,7 +461,24 @@ namespace ManagerApp.Data.GetInfo
 
                 string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.item.add";
 
-                string invoiceNumber = number_chet;
+
+                // Группируем товары по ProductId для подсчета уникальных наименований
+                var groupedProducts = products
+                    .GroupBy(p => new { p.ProductId, p.ProductName })
+                    .Select(g => g.First())
+                    .ToList();
+
+                // Количество уникальных наименований после группировки
+                int uniqueProductNamesCount = groupedProducts.Count;
+
+                Console.WriteLine($"📊 Всего позиций в списке (с учетом количества): {products.Count}");
+                Console.WriteLine($"📊 Уникальных наименований товаров: {uniqueProductNamesCount}");
+
+                // Выводим уникальные товары для проверки
+                foreach (var product in groupedProducts)
+                {
+                    Console.WriteLine($"   - {product.ProductName} (ID: {product.ProductId})");
+                }
 
                 var invoiceRequestData = new
                 {
@@ -462,7 +486,7 @@ namespace ManagerApp.Data.GetInfo
                     fields = new
                     {
                         // ВАЖНО: используем invoiceDate, а не DateTime.Now!
-                        TITLE = $"Счет на оплату № {invoiceNumber} от {invoiceDate:dd.MM.yyyy}",
+                        TITLE = $"Счет на оплату № от {invoiceDate:dd.MM.yyyy}",
 
                         // ОЧЕНЬ ВАЖНО: добавляем поле для генератора документов!
                         DOCUMENT_CREATE_TIME = invoiceDate.ToString("yyyy-MM-ddTHH:mm:ss"),
@@ -482,6 +506,10 @@ namespace ManagerApp.Data.GetInfo
                         XML_ID = adress ?? string.Empty,
                         COMMENTS = day_dostavka ?? string.Empty,
                         SOURCE_DESCRIPTION = sposob_oplata ?? string.Empty,
+
+                        // Пробуем оба поля - одно из них должно сработать
+                        COMPANY_LEAD_TOTAL_ROWS = uniqueProductNamesCount,
+                        COMPANY_LEAD_TOTAL_QUANTITY = uniqueProductNamesCount,
 
                         // Дополнительные полезные поля
                         CATEGORY_ID = 3,
@@ -531,6 +559,9 @@ namespace ManagerApp.Data.GetInfo
                     Console.WriteLine($"✅ Товары добавлены в счет #{invoiceId}");
                 }
 
+                // Проверяем, какие поля реально сохранились
+                await CheckActualInvoiceFields(invoiceId);
+
                 return invoiceId;
             }
             catch (Exception ex)
@@ -540,6 +571,48 @@ namespace ManagerApp.Data.GetInfo
             }
         }
 
+        // Добавьте этот метод для проверки полей
+        private async Task CheckActualInvoiceFields(int invoiceId)
+        {
+            try
+            {
+                Console.WriteLine($"\n🔍 ПРОВЕРКА ПОЛЕЙ СЧЕТА #{invoiceId}");
+
+                string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.item.get";
+                var requestData = new
+                {
+                    entityTypeId = 31,
+                    id = invoiceId
+                };
+
+                string jsonRequest = JsonConvert.SerializeObject(requestData);
+                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync(webhookUrl, content);
+                string jsonResponse = await response.Content.ReadAsStringAsync();
+
+                Console.WriteLine($"📊 Данные счета из Bitrix:\n{jsonResponse}");
+
+                // Парсим ответ для проверки конкретных полей
+                dynamic result = JsonConvert.DeserializeObject(jsonResponse);
+
+                if (result?.result?.item != null)
+                {
+                    var item = result.result.item;
+                    Console.WriteLine($"\n📋 СОХРАНЕННЫЕ ПОЛЯ:");
+                    Console.WriteLine($"COMPANY_LEAD_TOTAL_ROWS: {item.companyLeadTotalRows}");
+                    Console.WriteLine($"COMPANY_LEAD_TOTAL_QUANTITY: {item.companyLeadTotalQuantity}");
+                    Console.WriteLine($"PRODUCTS_PRODUCT_QUANTITY: {item.productsProductQuantity}");
+                    Console.WriteLine($"XML_ID: {item.xmlId}");
+                    Console.WriteLine($"COMMENTS: {item.comments}");
+                    Console.WriteLine($"SOURCE_DESCRIPTION: {item.sourceDescription}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка проверки полей: {ex.Message}");
+            }
+        }
 
         private async Task<bool> AddProductsToSmartInvoice(int invoiceId, List<InvoiceProduct> products)
         {
@@ -552,7 +625,7 @@ namespace ManagerApp.Data.GetInfo
             }
 
             // ПОЛУЧАЕМ СПИСОК ЕДИНИЦ ИЗМЕРЕНИЯ ИЗ BITRIX24
-            var measures = await BitrixMeasureService.GetMeasuresAsync();
+            var measures = await GetMeasuresAsync();
             Console.WriteLine($"Загружено единиц измерения из Bitrix24: {measures?.Count ?? 0}");
 
             if (measures == null || measures.Count == 0)
@@ -579,6 +652,8 @@ namespace ManagerApp.Data.GetInfo
 
             string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.item.productrow.add";
             int successCount = 0;
+            int errorCount = 0;
+            int duplicateCount = 0;
 
             foreach (var product in products)
             {
@@ -589,9 +664,9 @@ namespace ManagerApp.Data.GetInfo
 
                     // Очищаем название товара от категории в скобках
                     string cleanProductName = CleanProductNameSkobka(product.ProductName);
-                    Console.WriteLine($"Товар: '{cleanProductName}'");
+                    Console.WriteLine($"\nТовар: '{cleanProductName}' (ID: {product.ProductId})");
 
-                    // ОПРЕДЕЛЯЕМ КОД ЕДИНИЦЫ ИЗМЕРЕНИЯ ПО measureId (ID)
+                    // ОПРЕДЕЛЯЕМ КОД ЕДИНИЦЫ ИЗМЕРЕНИЯ
                     int measureCode = 796; // по умолчанию - Штука
                     string measureSymbol = "шт"; // по умолчанию
                     string measureTitle = "Штука"; // по умолчанию
@@ -601,13 +676,10 @@ namespace ManagerApp.Data.GetInfo
                         var measureId = product.MeasureId.Trim();
                         Console.WriteLine($"  measureId из продукта: '{measureId}'");
 
-                        // Ищем единицу измерения по ID
                         if (measureDictById.TryGetValue(measureId, out BitrixMeasure foundMeasure))
                         {
-                            // Берем CODE из найденной единицы измерения
                             if (foundMeasure.CODE != null)
                             {
-                                // Пробуем преобразовать любое значение в строку, а затем в int
                                 string codeString = foundMeasure.CODE.ToString();
                                 if (int.TryParse(codeString, out int parsedCode2))
                                 {
@@ -615,7 +687,6 @@ namespace ManagerApp.Data.GetInfo
                                 }
                             }
 
-                            // Берем символ и название
                             measureSymbol = !string.IsNullOrEmpty(foundMeasure.SYMBOL_RUS)
                                 ? foundMeasure.SYMBOL_RUS
                                 : "шт";
@@ -629,38 +700,7 @@ namespace ManagerApp.Data.GetInfo
                         }
                         else
                         {
-                            Console.WriteLine($"  ⚠️ Единица измерения с ID='{measureId}' не найдена в словаре");
-
-                            // Пробуем найти по другим критериям или используем значения по умолчанию
-                            // Проверяем, может быть это известный ID
-                            if (measureId == "1")
-                            {
-                                measureCode = 796; // Штука
-                                measureSymbol = "шт";
-                                measureTitle = "Штука";
-                            }
-                            else if (measureId == "2")
-                            {
-                                measureCode = 2; // Литр
-                                measureSymbol = "л";
-                                measureTitle = "Литр";
-                            }
-                            else if (measureId == "3")
-                            {
-                                measureCode = 3; // Грамм
-                                measureSymbol = "г";
-                                measureTitle = "Грамм";
-                            }
-                            else if (measureId == "6")
-                            {
-                                measureCode = 6; // Метр
-                                measureSymbol = "м";
-                                measureTitle = "Метр";
-                            }
-                            else
-                            {
-                                Console.WriteLine($"  ⚠️ Используем значения по умолчанию: код 796 (Штука)");
-                            }
+                            Console.WriteLine($"  ⚠️ Единица измерения с ID='{measureId}' не найдена, используем значения по умолчанию");
                         }
                     }
                     else
@@ -668,67 +708,61 @@ namespace ManagerApp.Data.GetInfo
                         Console.WriteLine($"  ⚠️ MeasureId не указан, используем по умолчанию: код 796 (Штука)");
                     }
 
-                    // Формируем запрос для добавления товара
-                    var productRowRequestData = new
+                    // ПЕРВАЯ ПОПЫТКА - добавляем с оригинальным productId
+                    bool added = await TryAddProductToInvoice(
+                        invoiceId,
+                        product.ProductId,
+                        cleanProductName,
+                        product.Price,
+                        product.Quantity,
+                        measureCode,
+                        measureSymbol);
+
+                    if (added)
                     {
-                        fields = new
-                        {
-                            ownerId = invoiceId,
-                            ownerType = "SI", // Smart Invoice
-                            productId = product.ProductId > 0 ? (int?)product.ProductId : null,
-                            productName = cleanProductName,
-                            price = product.Price,
-                            quantity = product.Quantity,
-                            measureCode = measureCode,
-                            measureName = measureSymbol, // Используем symbol для measureName
-                            taxRate = 20.0,
-                            taxIncluded = "N"
-                        }
-                    };
+                        successCount++;
+                        await Task.Delay(200);
+                        continue;
+                    }
 
-                    string productJson = JsonConvert.SerializeObject(productRowRequestData);
-                    Console.WriteLine($"  Отправляем: measureCode={measureCode}, measureName='{measureSymbol}'");
+                    // ЕСЛИ НЕ ПОЛУЧИЛОСЬ - создаем дубликат в папке "Прочее"
+                    Console.WriteLine($"  ⚠️ Не удалось добавить товар ID {product.ProductId}. Создаем дубликат в папке 'Прочее'...");
 
-                    var productContent = new StringContent(productJson, Encoding.UTF8, "application/json");
+                    int newProductId = await CreateProductInOtherFolder(
+                        cleanProductName,
+                        product.Price,
+                        measureCode);
 
-                    var response = await _httpClient.PostAsync(webhookUrl, productContent);
-                    string jsonResponse = await response.Content.ReadAsStringAsync();
-
-                    Console.WriteLine($"  Ответ Bitrix: {jsonResponse}");
-
-                    if (response.IsSuccessStatusCode)
+                    if (newProductId > 0)
                     {
-                        try
+                        Console.WriteLine($"  ✅ Создан дубликат товара с ID: {newProductId}");
+
+                        // ВТОРАЯ ПОПЫТКА - добавляем с новым productId
+                        bool addedDuplicate = await TryAddProductToInvoice(
+                            invoiceId,
+                            newProductId,
+                            cleanProductName,
+                            product.Price,
+                            product.Quantity,
+                            measureCode,
+                            measureSymbol);
+
+                        if (addedDuplicate)
                         {
-                            dynamic result = JsonConvert.DeserializeObject(jsonResponse);
-                            if (result?.result?.productRow?.id != null)
-                            {
-                                // Проверяем, какие единицы измерения реально сохранились
-                                var savedMeasureCode = result?.result?.productRow?.measureCode?.ToString();
-                                var savedMeasureName = result?.result?.productRow?.measureName?.ToString();
-
-                                Console.WriteLine($"  ✅ Товар добавлен. ID позиции: {result?.result?.productRow?.id}");
-                                Console.WriteLine($"     Сохранено в Bitrix: код={savedMeasureCode}, название='{savedMeasureName}'");
-
-                                successCount++;
-                            }
-                            else
-                            {
-                                Console.WriteLine($"  ⚠️ Товар добавлен, но не получен ID позиции");
-                                successCount++; // Все равно считаем успешным
-                            }
+                            duplicateCount++;
+                            successCount++;
+                            Console.WriteLine($"  ✅ Товар успешно добавлен в счет через дубликат!");
                         }
-                        catch (Exception jsonEx)
+                        else
                         {
-                            Console.WriteLine($"  ⚠️ Ошибка парсинга ответа: {jsonEx.Message}");
-                            Console.WriteLine($"  Ответ: {jsonResponse}");
-                            successCount++; // Считаем успешным, если статус 200
+                            errorCount++;
+                            Console.WriteLine($"  ❌ Не удалось добавить даже дубликат товара");
                         }
                     }
                     else
                     {
-                        Console.WriteLine($"  ❌ Ошибка HTTP: {response.StatusCode}");
-                        Console.WriteLine($"  Тело ошибки: {jsonResponse}");
+                        errorCount++;
+                        Console.WriteLine($"  ❌ Не удалось создать дубликат товара");
                     }
 
                     await Task.Delay(200);
@@ -740,58 +774,216 @@ namespace ManagerApp.Data.GetInfo
                     {
                         Console.WriteLine($"  Внутреннее исключение: {ex.InnerException.Message}");
                     }
+                    errorCount++;
                 }
             }
 
-            Console.WriteLine($"=== ИТОГО: Успешно добавлено {successCount} из {products.Count} товаров. ===");
+            Console.WriteLine($"\n=== ИТОГО: Успешно добавлено {successCount} из {products.Count} товаров. ===");
+            Console.WriteLine($"   - Обычных: {successCount - duplicateCount}");
+            Console.WriteLine($"   - Дубликатов: {duplicateCount}");
+            Console.WriteLine($"   - Ошибок: {errorCount}");
+
             return successCount > 0;
+        }
+
+        /// <summary>
+        /// Пытается добавить товар в счет
+        /// </summary>
+        private async Task<bool> TryAddProductToInvoice(int invoiceId, int productId, string productName,
+            decimal price, decimal quantity, int measureCode, string measureSymbol)
+        {
+            try
+            {
+                string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.item.productrow.add";
+
+                var productRowRequestData = new
+                {
+                    fields = new
+                    {
+                        ownerId = invoiceId,
+                        ownerType = "SI",
+                        productId = productId,
+                        productName = productName,
+                        price = price,
+                        quantity = quantity,
+                        measureCode = measureCode,
+                        measureName = measureSymbol,
+                        taxRate = 20.0,
+                        taxIncluded = "N"
+                    }
+                };
+
+                string productJson = JsonConvert.SerializeObject(productRowRequestData);
+                Console.WriteLine($"  Отправляем запрос с productId={productId}: measureCode={measureCode}, measureName='{measureSymbol}'");
+
+                var productContent = new StringContent(productJson, Encoding.UTF8, "application/json");
+                var response = await _httpClient.PostAsync(webhookUrl, productContent);
+                string jsonResponse = await response.Content.ReadAsStringAsync();
+
+                Console.WriteLine($"  Ответ Bitrix: {jsonResponse}");
+
+                if (response.IsSuccessStatusCode)
+                {
+                    try
+                    {
+                        dynamic result = JsonConvert.DeserializeObject(jsonResponse);
+                        if (result?.result?.productRow?.id != null)
+                        {
+                            var savedMeasureCode = result?.result?.productRow?.measureCode?.ToString();
+                            var savedMeasureName = result?.result?.productRow?.measureName?.ToString();
+
+                            Console.WriteLine($"  ✅ Товар добавлен. ID позиции: {result?.result?.productRow?.id}");
+                            Console.WriteLine($"     Сохранено в Bitrix: код={savedMeasureCode}, название='{savedMeasureName}'");
+                            return true;
+                        }
+                        else
+                        {
+                            Console.WriteLine($"  ⚠️ Товар добавлен, но не получен ID позиции");
+                            return true;
+                        }
+                    }
+                    catch (Exception jsonEx)
+                    {
+                        Console.WriteLine($"  ⚠️ Ошибка парсинга ответа: {jsonEx.Message}");
+                        return true;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"  ❌ Ошибка HTTP: {response.StatusCode}");
+                    Console.WriteLine($"  Тело ошибки: {jsonResponse}");
+
+                    // Проверяем, является ли ошибка проблемой прав
+                    if (jsonResponse.Contains("Insufficient permission") ||
+                        jsonResponse.Contains("permission") ||
+                        jsonResponse.Contains("доступа"))
+                    {
+                        Console.WriteLine($"  🔍 Обнаружена ошибка прав доступа - будем создавать дубликат");
+                    }
+
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  ❌ Исключение в TryAddProductToInvoice: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Создает товар в папке "Прочее" (iblockSectionId = 697)
+        /// </summary>
+        private async Task<int> CreateProductInOtherFolder(string productName, decimal price, int measureCode)
+        {
+            try
+            {
+                Console.WriteLine($"  🔧 Создаем дубликат товара в папке 'Прочее': {productName}");
+
+                string url = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/catalog.product.add";
+
+                // Добавляем суффикс, чтобы отличать от оригинала
+                string duplicateName = $"{productName} (дубликат)";
+
+                var productData = new
+                {
+                    fields = new
+                    {
+                        iblockId = 14,
+                        name = duplicateName,
+                        iblockSectionId = 697, // ID папки "Прочее"
+                        active = "Y",
+                        price = new
+                        {
+                            price = price,
+                            currency = "RUB"
+                        },
+                        measure = measureCode // Код единицы измерения
+                    }
+                };
+
+                string jsonData = System.Text.Json.JsonSerializer.Serialize(productData);
+
+                using (var client = new HttpClient())
+                {
+                    var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
+                    var response = await client.PostAsync(url, content);
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        string error = await response.Content.ReadAsStringAsync();
+                        Console.WriteLine($"  ❌ Ошибка HTTP при создании дубликата: {response.StatusCode}, {error}");
+                        return 0;
+                    }
+
+                    string result = await response.Content.ReadAsStringAsync();
+
+                    using (var doc = System.Text.Json.JsonDocument.Parse(result))
+                    {
+                        var root = doc.RootElement;
+
+                        if (root.TryGetProperty("result", out var resultElement) &&
+                            resultElement.TryGetProperty("element", out var element) &&
+                            element.TryGetProperty("id", out var idElement))
+                        {
+                            int productId = idElement.GetInt32();
+                            Console.WriteLine($"  ✅ Дубликат товара создан с ID: {productId}");
+
+                            // Обновляем кэш, чтобы новый товар был доступен
+                            _ = Task.Run(async () => await BitrixCache.RefreshCacheAsync());
+
+                            return productId;
+                        }
+
+                        Console.WriteLine($"  ❌ Не удалось получить ID дубликата из ответа: {result}");
+                        return 0;
+                    }
+                }
+            }
+            catch (System.Text.Json.JsonException jsonEx)
+            {
+                Console.WriteLine($"  ❌ Ошибка парсинга JSON при создании дубликата: {jsonEx.Message}");
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  ❌ Общая ошибка при создании дубликата: {ex.Message}");
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// Проверяет, существует ли уже дубликат товара
+        /// </summary>
+        private async Task<int> FindExistingDuplicate(string originalProductName)
+        {
+            try
+            {
+                string duplicateName = $"{originalProductName} (дубликат)";
+
+                // Используем существующий метод поиска
+                int existingId = await GetProductIdByName(duplicateName);
+
+                if (existingId > 0)
+                {
+                    Console.WriteLine($"  🔍 Найден существующий дубликат товара с ID: {existingId}");
+                    return existingId;
+                }
+
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  ❌ Ошибка при поиске дубликата: {ex.Message}");
+                return 0;
+            }
         }
 
         /// <summary>
         /// Проверяем какие поля реально сохранены в счете
         /// </summary>
         /// 
-        private async Task CheckActualInvoiceFields(int invoiceId)
-        {
-            try
-            {
-                Console.WriteLine($"\n🔍 ПРОВЕРКА ПОЛЕЙ СЧЕТА #{invoiceId}");
 
-                string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.item.get";
-                var requestData = new
-                {
-                    entityTypeId = 31,
-                    id = invoiceId
-                };
-
-                string jsonRequest = JsonConvert.SerializeObject(requestData);
-                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
-
-                var response = await _httpClient.PostAsync(webhookUrl, content);
-                string jsonResponse = await response.Content.ReadAsStringAsync();
-
-                Console.WriteLine($"📊 Данные счета из Bitrix:\n{jsonResponse}");
-
-                // Парсим ответ
-                dynamic result = JsonConvert.DeserializeObject(jsonResponse);
-
-                if (result?.result?.item != null)
-                {
-                    var item = result.result.item;
-                    Console.WriteLine($"\n📋 ВОТ ЧТО СОХРАНИЛОСЬ:");
-                    Console.WriteLine($"TITLE: {item.title}");
-                    Console.WriteLine($"XML_ID: {item.xmlId}");
-                    Console.WriteLine($"COMMENTS: {item.comments}");
-                    Console.WriteLine($"SOURCE_DESCRIPTION: {item.sourceDescription}");
-                    Console.WriteLine($"BEGINDATE: {item.begindate}");
-                    Console.WriteLine($"ASSIGNED_BY_ID: {item.assignedById}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Ошибка проверки полей: {ex.Message}");
-            }
-        }
 
 
         private DateTime CalculateBusinessDays(DateTime startDate, int businessDays)

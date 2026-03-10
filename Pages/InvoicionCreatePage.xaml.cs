@@ -19,6 +19,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using static CustomPaymentDialog;
 using static ManagerApp.Data.GetInfo.BitrixService;
 namespace ManagerApp.Pages
 {
@@ -29,6 +30,23 @@ namespace ManagerApp.Pages
     {
         private DateTime? inviteTime; // nullable DateTime
         DateTime invoiceDate;
+
+
+        public InvoicionCreatePage()
+        {
+            InitializeComponent();
+            InitializeData();
+            LoadCompaniesAsync();
+            InitializePaymentStatuses();
+            InitializePaymentMethods();
+
+            cmbCompanies.AddHandler(TextBox.TextChangedEvent,
+                new TextChangedEventHandler(cmbCompanies_TextChanged),
+                true);
+
+            // Инициализация шаблона
+            SelectedTemplateName = "СПК (шаблон 32)";
+        }
         // Новые свойства для полей формы
         private string _invoiceNumber;
         public string InvoiceNumber
@@ -50,7 +68,33 @@ namespace ManagerApp.Pages
             get => _deliveryDays;
             set { _deliveryDays = value; OnPropertyChanged(nameof(DeliveryDays)); }
         }
+        private string _selectedTemplateName;
+        public string SelectedTemplateName
+        {
+            get => _selectedTemplateName;
+            set
+            {
+                _selectedTemplateName = value;
+                OnPropertyChanged(nameof(SelectedTemplateName));
+                OnPropertyChanged(nameof(SelectedTemplateColor));
+            }
+        }
 
+        public Brush SelectedTemplateColor
+        {
+            get => SelectedTemplateName == "СПК (шаблон 32)" ? Brushes.Green : Brushes.Orange;
+        }
+
+        private void DisplayMyCompanyDetails(MyLocalCompany company)
+        {
+            if (company == null) return;
+
+            var details = new System.Text.StringBuilder();
+            details.AppendLine($"Компания: {company.DisplayName}");
+            details.AppendLine($"Шаблон документа ID: {company.TemplateId}");
+
+            MyCompanyDetails = details.ToString();
+        }
         // Способы оплаты
         public ObservableCollection<PaymentMethod> PaymentMethods { get; set; }
         private PaymentMethod _selectedPaymentMethod;
@@ -94,7 +138,7 @@ namespace ManagerApp.Pages
 
         // Коллекции для комбобоксов
         public ObservableCollection<Company> Companies { get; set; }
-        public ObservableCollection<Company> MyCompanies { get; set; }
+        public ObservableCollection<MyLocalCompany> MyLocalCompanies { get; set; }
         public ObservableCollection<PaymentStatus> PaymentStatuses { get; set; }
 
         // Выбранные значения
@@ -112,18 +156,18 @@ namespace ManagerApp.Pages
                 }
             }
         }
-
-        private Company _selectedMyCompany;
-        public Company SelectedMyCompany
+        private MyLocalCompany _selectedMyLocalCompany;
+        public MyLocalCompany SelectedMyLocalCompany
         {
-            get => _selectedMyCompany;
+            get => _selectedMyLocalCompany;
             set
             {
-                _selectedMyCompany = value;
-                OnPropertyChanged(nameof(SelectedMyCompany));
+                _selectedMyLocalCompany = value;
+                OnPropertyChanged(nameof(SelectedMyLocalCompany));
                 if (value != null)
                 {
                     DisplayMyCompanyDetails(value);
+                    Console.WriteLine($"✅ Выбрана компания: {value.DisplayName}, шаблон ID: {value.TemplateId}");
                 }
             }
         }
@@ -219,18 +263,7 @@ namespace ManagerApp.Pages
         }
 
         // Конструктор без параметров (для дизайнера)
-        public InvoicionCreatePage()
-        {
-            InitializeComponent();
-            InitializeData();
-            LoadCompaniesAsync();
-            InitializePaymentStatuses();
-            InitializePaymentMethods();
-
-            cmbCompanies.AddHandler(TextBox.TextChangedEvent,
-                new TextChangedEventHandler(cmbCompanies_TextChanged),
-                true);
-        }
+      
 
         // Простое добавление своего способа оплаты
         private void InitializePaymentMethods()
@@ -376,12 +409,15 @@ namespace ManagerApp.Pages
         }
 
         private async Task ProcessSuccessfulInvoiceAsync(int invoiceId,
-            List<(string Name, int Id)> foundProducts, List<string> notFoundProducts)
+     List<(string Name, int Id)> foundProducts, List<string> notFoundProducts)
         {
             UpdateStatus($"✅ Счет создан! ID: {invoiceId}", "✅");
 
+            // ОПРЕДЕЛЯЕМ ID ШАБЛОНА В ЗАВИСИМОСТИ ОТ ВЫБРАННОЙ КОМПАНИИ
+            int templateId = GetTemplateIdForMyCompany();
+
             // ГЕНЕРАЦИЯ ДОКУМЕНТА WORD СРАЗУ ПОСЛЕ СОЗДАНИЯ СЧЕТА
-            await GenerateAndDownloadDocumentAsync(invoiceId, foundProducts, notFoundProducts);
+            await GenerateAndDownloadDocumentAsync(invoiceId, templateId, foundProducts, notFoundProducts);
         }
         private string RemoveRubleSymbolFromText(string text)
         {
@@ -394,15 +430,16 @@ namespace ManagerApp.Pages
                 .Trim();
         }
 
-        private async Task GenerateAndDownloadDocumentAsync(int invoiceId,
-            List<(string Name, int Id)> foundProducts, List<string> notFoundProducts)
+        private async Task GenerateAndDownloadDocumentAsync(int invoiceId, int templateId,
+      List<(string Name, int Id)> foundProducts, List<string> notFoundProducts)
         {
             try
             {
-                UpdateStatus("Генерация документа Word...", "⏳");
+                string companyType = templateId == 32 ? "СПК" : "НВР";
+                UpdateStatus($"Генерация документа Word (шаблон {companyType})...", "⏳");
 
-                // ГЕНЕРАЦИЯ И СКАЧИВАНИЕ ДОКУМЕНТА
-                string downloadUrl = await _bitrixService.GenerateInvoiceDocument(invoiceId, 32, "docx");
+                // ГЕНЕРАЦИЯ И СКАЧИВАНИЕ ДОКУМЕНТА с указанием шаблона
+                string downloadUrl = await _bitrixService.GenerateInvoiceDocument(invoiceId, templateId, "docx");
 
                 string successMessage = $"Счет #{invoiceId} создан!\n" +
                                        $"Товаров: {foundProducts.Count}\n" +
@@ -410,7 +447,7 @@ namespace ManagerApp.Pages
 
                 if (!string.IsNullOrEmpty(downloadUrl))
                 {
-                    successMessage += $"\n\n📄 Документ Word готов!";
+                    successMessage += $"\n\n📄 Документ Word готов (шаблон {companyType})!";
 
                     // Автоматическое скачивание файла в несколько мест
                     string mainPath = await DownloadDocumentFileAsync(
@@ -433,8 +470,7 @@ namespace ManagerApp.Pages
                     successMessage += $"\n\nПропущено: {notFoundProducts.Count} товаров";
                 }
 
-                //MessageBox.Show(successMessage, "Готово", MessageBoxButton.OK, MessageBoxImage.Information);
-                UpdateStatus($"Документ счета #{invoiceId} готов", "✅");
+                UpdateStatus($"Документ счета #{invoiceId} (шаблон {companyType}) готов", "✅");
             }
             catch (Exception ex)
             {
@@ -443,6 +479,25 @@ namespace ManagerApp.Pages
                 MessageBox.Show($"Счет создан, но документ не сгенерирован:\n{ex.Message}",
                     "Внимание", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
+        }
+
+        /// <summary>
+        /// Определяет ID шаблона в зависимости от выбранной "Моей компании"
+        /// </summary>
+        /// <returns>32 для ООО "СПК", 34 для ООО ТД МК "НВР"</returns>
+        /// <summary>
+        /// Определяет ID шаблона в зависимости от выбранной компании
+        /// </summary>
+        private int GetTemplateIdForMyCompany()
+        {
+            if (SelectedMyLocalCompany == null)
+            {
+                Console.WriteLine("⚠️ Компания не выбрана, используем шаблон по умолчанию 32 (СПК)");
+                return 32;
+            }
+
+            Console.WriteLine($"✅ Используем шаблон ID: {SelectedMyLocalCompany.TemplateId} для компании {SelectedMyLocalCompany.DisplayName}");
+            return SelectedMyLocalCompany.TemplateId;
         }
 
         private void LoadInvoiceItems(List<InvoiceItem> items)
@@ -476,7 +531,7 @@ namespace ManagerApp.Pages
             try
             {
                 // ПРОВЕРКА ВЫБРАННЫХ КОМПАНИЙ
-                if (SelectedCompany == null || SelectedMyCompany == null)
+                if (SelectedCompany == null || SelectedMyLocalCompany == null)
                 {
                     MessageBox.Show("Выберите обе компании!", "Ошибка",
                         MessageBoxButton.OK, MessageBoxImage.Error);
@@ -685,7 +740,7 @@ namespace ManagerApp.Pages
             Console.WriteLine($"1. Дата счета: {invoiceDate:dd.MM.yyyy}");
             Console.WriteLine($"2. Номер счета: {InvoiceNumber}");
             Console.WriteLine($"3. Клиент: {SelectedCompany.Title} (ID: {SelectedCompany.Id})");
-            Console.WriteLine($"4. Компания: {SelectedMyCompany.Title} (ID: {SelectedMyCompany.Id})");
+            //Console.WriteLine($"4. Компания: {SelectedMyLocalCompany.Title} (ID: {SelectedMyLocalCompany.Id})");
             Console.WriteLine($"5. Адрес: {Address}");
             Console.WriteLine($"6. Дней доставки: {DeliveryDays}");
             Console.WriteLine($"7. Способ оплаты: {(SelectedPaymentMethod?.Name ?? "Не выбран")}");
@@ -700,7 +755,7 @@ namespace ManagerApp.Pages
             return await _bitrixService.CreateSmartInvoice(
                 invoiceDate, // передаем дату
                 SelectedCompany.Id,
-                SelectedMyCompany.Id,
+                6,
                 orderTopic,
                 invoiceProducts.Where(p => p.ProductId > 0).ToList(),
                 InvoiceNumber,
@@ -992,11 +1047,32 @@ namespace ManagerApp.Pages
         {
             _bitrixService = new BitrixService();
             Companies = new ObservableCollection<Company>();
-            MyCompanies = new ObservableCollection<Company>();
+            MyLocalCompanies = new ObservableCollection<MyLocalCompany>(); // Изменено
             _allCompanies = new List<Company>();
             CompanyContacts = new ObservableCollection<ContactInfo>();
             InvoiceItems = new ObservableCollection<InvoiceItemViewModel>();
             DataContext = this;
+
+            // Добавляем две компании вручную
+            MyLocalCompanies.Add(new MyLocalCompany
+            {
+                DisplayName = "ООО \"СПК\"",
+                ShortName = "СПК",
+                TemplateId = 32
+            });
+
+            MyLocalCompanies.Add(new MyLocalCompany
+            {
+                DisplayName = "ООО ТД МК «НВР»",
+                ShortName = "НВР",
+                TemplateId = 34
+            });
+
+            // Выбираем первую по умолчанию
+            if (MyLocalCompanies.Count > 0)
+            {
+                SelectedMyLocalCompany = MyLocalCompanies[0];
+            }
         }
 
         // Асинхронная загрузка компаний
@@ -1012,7 +1088,7 @@ namespace ManagerApp.Pages
                 var myCompanies = await _bitrixService.GetMyCompanies();
 
                 Companies.Clear();
-                MyCompanies.Clear();
+                //SelectedMyLocalCompany.Clear();
                 _allCompanies.Clear();
 
                 var myCompanyIds = myCompanies.Select(c => c.Id).ToHashSet();
@@ -1026,20 +1102,6 @@ namespace ManagerApp.Pages
                     }
                 }
 
-                foreach (var company in myCompanies)
-                {
-                    MyCompanies.Add(company);
-                }
-
-                if (Companies.Count > 0)
-                {
-                    SelectedCompany = Companies[0];
-                }
-
-                if (MyCompanies.Count > 0)
-                {
-                    SelectedMyCompany = MyCompanies[0];
-                }
 
                 UpdateStatus($"Загружено компаний: {Companies.Count}", "✅");
             }
@@ -1155,7 +1217,7 @@ namespace ManagerApp.Pages
                 var myCompanies = await _bitrixService.GetMyCompanies();
 
                 Companies.Clear();
-                MyCompanies.Clear();
+                //MyCompanies.Clear();
                 _allCompanies.Clear();
 
                 var myCompanyIds = myCompanies.Select(c => c.Id).ToHashSet();
@@ -1169,10 +1231,10 @@ namespace ManagerApp.Pages
                     }
                 }
 
-                foreach (var company in myCompanies)
-                {
-                    MyCompanies.Add(company);
-                }
+                //foreach (var company in myCompanies)
+                //{
+                //    MyCompanies.Add(company);
+                //}
 
                 if (currentSelectedId.HasValue)
                 {
@@ -1264,16 +1326,7 @@ namespace ManagerApp.Pages
             }
         }
 
-        private void DisplayMyCompanyDetails(Company company)
-        {
-            var details = new System.Text.StringBuilder();
-            details.AppendLine($"Компания: {company.Title ?? "Без названия"}");
-            details.AppendLine($"ID: {company.Id}");
-            details.AppendLine($"Ответственный: ID {company.AssignedById}");
-            details.AppendLine($"Создана: {company.CreatedTime:dd.MM.yyyy}");
-
-            MyCompanyDetails = details.ToString();
-        }
+     
 
         private void InvoiceItem_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
@@ -1365,42 +1418,14 @@ namespace ManagerApp.Pages
         }
         private async void btnFinish_Click(object sender, RoutedEventArgs e)
         {
-            if (SelectedCompany == null || SelectedMyCompany == null)
+            if (SelectedCompany == null || SelectedMyLocalCompany == null)
             {
                 MessageBox.Show("Выберите компании!", "Ошибка",
                     MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
 
-            // Проверяем только если введен номер
-            if (!string.IsNullOrWhiteSpace(txtInvoiceNumber.Text))
-            {
-                string invoiceNumber = txtInvoiceNumber.Text.Trim();
-                Console.WriteLine($"Начинаем проверку номера: '{invoiceNumber}'");
-
-                bool exists = await CheckInvoiceExistsAsync(invoiceNumber);
-                Console.WriteLine($"Результат проверки: {exists}");
-
-                if (exists)
-                {
-                    Console.WriteLine("Показываем MessageBox...");
-
-                    // ОБЯЗАТЕЛЬНО ждем пока MessageBox закроется
-                    await Application.Current.Dispatcher.InvokeAsync(() =>
-                    {
-                        MessageBox.Show($"Счет с номером '{invoiceNumber}' уже существует!\n\n" +
-                                      "Пожалуйста, введите другой номер.",
-                                      "Номер занят",
-                                      MessageBoxButton.OK,
-                                      MessageBoxImage.Error);
-                    });
-
-                    Console.WriteLine("MessageBox закрыт, прерываем выполнение");
-                    btnFinish.IsEnabled = true;
-                    return;
-                }
-                Console.WriteLine("Проверка пройдена, номер свободен");
-            }
+          
 
             try
             {
@@ -1432,7 +1457,7 @@ namespace ManagerApp.Pages
         {
             try
             {
-                if (SelectedCompany == null || SelectedMyCompany == null || !InvoiceItems.Any())
+                if (SelectedCompany == null || SelectedMyLocalCompany == null || !InvoiceItems.Any())
                 {
                     MessageBox.Show("Заполните все обязательные поля для предпросмотра!", "Ошибка",
                         MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -1448,8 +1473,8 @@ namespace ManagerApp.Pages
                 previewText.AppendLine($"ID: {SelectedCompany.Id}");
                 previewText.AppendLine();
                 previewText.AppendLine("=== ПРОДАВЕЦ ===");
-                previewText.AppendLine($"Компания: {SelectedMyCompany.Title}");
-                previewText.AppendLine($"ID: {SelectedMyCompany.Id}");
+                //previewText.AppendLine($"Компания: {SelectedMyCompany.Title}");
+                //previewText.AppendLine($"ID: {SelectedMyCompany.Id}");
                 previewText.AppendLine();
                 previewText.AppendLine("=== ТОВАРЫ ===");
 
@@ -1753,5 +1778,19 @@ public class CustomPaymentDialog : Window
 
         // Фокус на текстовом поле при загрузке
         Loaded += (s, e) => textBox.Focus();
+    }
+
+
+    public class MyLocalCompany
+    {
+        public string DisplayName { get; set; }
+        public string ShortName { get; set; }
+        public int TemplateId { get; set; }
+
+        // Для отображения в ComboBox
+        public override string ToString()
+        {
+            return DisplayName;
+        }
     }
 }
