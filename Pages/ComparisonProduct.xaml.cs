@@ -223,7 +223,15 @@ namespace ManagerApp.Pages
                 txtNewProduct.IsEnabled = false;
             });
         }
-
+        private void DescriptionTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            var textBox = sender as TextBox;
+            if (textBox?.DataContext is ProductItemViewModel item)
+            {
+                // Автоматически сохраняем описание при изменении
+                Console.WriteLine($"Описание для {item.OriginalProduct}: {item.Description}");
+            }
+        }
         private void UpdateProgress(int completed, int total, string currentProduct = null)
         {
             Dispatcher.Invoke(() =>
@@ -1342,7 +1350,17 @@ namespace ManagerApp.Pages
         private string _selectedMeasureId;
         private string _measureSymbol;
         private string _measureName;
+        private string _description;
 
+        public string Description
+        {
+            get => _description;
+            set
+            {
+                _description = value;
+                OnPropertyChanged();
+            }
+        }
         public int Index
         {
             get => _index;

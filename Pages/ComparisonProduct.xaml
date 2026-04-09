@@ -21,127 +21,47 @@
               Background="#F5F5F5"
               Height="80"
               Margin="0">
-            <!-- Центрирующий контейнер -->
             <StackPanel Orientation="Horizontal" 
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center">
-
-                <!-- Шаг 1: Загрузка заявки -->
-                <Border Background="#E2542A"
-                        CornerRadius="6"
-                        Opacity="0.5"
-                        Width="185"
-                        Height="50"
-                        Margin="0,0,15,0">
-                    <StackPanel Orientation="Horizontal" 
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center">
-                        <Border Width="24"
-                                Height="24"
-                                CornerRadius="12"
-                                Background="White"
-                                Margin="0,0,8,0">
-                            <TextBlock Text="1"
-                                       FontSize="12"
-                                       FontWeight="Bold"
-                                       Foreground="#E2542A"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
+                <!-- Шаг 1 -->
+                <Border Background="#E2542A" CornerRadius="6" Opacity="0.5" Width="185" Height="50" Margin="0,0,15,0">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Border Width="24" Height="24" CornerRadius="12" Background="White" Margin="0,0,8,0">
+                            <TextBlock Text="1" FontSize="12" FontWeight="Bold" Foreground="#E2542A"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
-                        <TextBlock Text="Загрузка заявки"
-                                   FontSize="13"
-                                   FontWeight="Bold"
-                                   Foreground="White"
-                                   VerticalAlignment="Center"/>
+                        <TextBlock Text="Загрузка заявки" FontSize="13" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
-
-                <!-- Шаг 2: Сопоставление товаров (активный) -->
-                <Border Background="#E2542A"
-                        CornerRadius="6"
-                        Width="185"
-                        Height="50"
-                        Margin="0,0,15,0">
-                    <StackPanel Orientation="Horizontal" 
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center">
-                        <Border Width="24"
-                                Height="24"
-                                CornerRadius="12"
-                                Background="White"
-                                Margin="0,0,8,0">
-                            <TextBlock Text="2"
-                                       FontSize="12"
-                                       FontWeight="Bold"
-                                       Foreground="#E2542A"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
+                <!-- Шаг 2 -->
+                <Border Background="#E2542A" CornerRadius="6" Width="185" Height="50" Margin="0,0,15,0">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Border Width="24" Height="24" CornerRadius="12" Background="White" Margin="0,0,8,0">
+                            <TextBlock Text="2" FontSize="12" FontWeight="Bold" Foreground="#E2542A"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
-                        <TextBlock Text="Сопоставление товаров"
-                                   FontSize="13"
-                                   FontWeight="Bold"
-                                   Foreground="White"
-                                   VerticalAlignment="Center"/>
+                        <TextBlock Text="Сопоставление товаров" FontSize="13" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
-
-                <!-- Шаг 3: Редактирование цены -->
-                <Border Background="#E2542A"
-                        CornerRadius="6"
-                        Width="185"
-                        Height="50"
-                        Opacity="0.5"
-                        Margin="0,0,15,0">
-                    <StackPanel Orientation="Horizontal" 
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center">
-                        <Border Width="24"
-                                Height="24"
-                                CornerRadius="12"
-                                Background="White"
-                                Margin="0,0,8,0">
-                            <TextBlock Text="3"
-                                       FontSize="12"
-                                       FontWeight="Bold"
-                                       Foreground="#E2542A"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
+                <!-- Шаг 3 -->
+                <Border Background="#E2542A" CornerRadius="6" Width="185" Height="50" Opacity="0.5" Margin="0,0,15,0">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Border Width="24" Height="24" CornerRadius="12" Background="White" Margin="0,0,8,0">
+                            <TextBlock Text="3" FontSize="12" FontWeight="Bold" Foreground="#E2542A"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
-                        <TextBlock Text="Редактирование цены"
-                                   FontSize="13"
-                                   FontWeight="Medium"
-                                   Foreground="White"
-                                   VerticalAlignment="Center"/>
+                        <TextBlock Text="Редактирование цены" FontSize="13" FontWeight="Medium" Foreground="White" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
-
-                <!-- Шаг 4: Формирование счета -->
-                <Border Background="#E2542A"
-                        CornerRadius="6"
-                        Opacity="0.5"
-                        Width="185"
-                        Height="50"
-                        Margin="0,0,0,0">
-                    <StackPanel Orientation="Horizontal" 
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center">
-                        <Border Width="24"
-                                Height="24"
-                                CornerRadius="12"
-                                Background="White"
-                                Margin="0,0,8,0">
-                            <TextBlock Text="4"
-                                       FontSize="12"
-                                       FontWeight="Bold"
-                                       Foreground="#E2542A"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
+                <!-- Шаг 4 -->
+                <Border Background="#E2542A" CornerRadius="6" Opacity="0.5" Width="185" Height="50" Margin="0,0,0,0">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Border Width="24" Height="24" CornerRadius="12" Background="White" Margin="0,0,8,0">
+                            <TextBlock Text="4" FontSize="12" FontWeight="Bold" Foreground="#E2542A"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
-                        <TextBlock Text="Формирование счета"
-                                   FontSize="13"
-                                   FontWeight="Medium"
-                                   Foreground="White"
-                                   VerticalAlignment="Center"/>
+                        <TextBlock Text="Формирование счета" FontSize="13" FontWeight="Medium" Foreground="White" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -173,15 +93,11 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-
-                        <TextBlock Text="СОПОСТАВЛЕНИЕ ТОВАРОВ"
-                                   FontSize="18"
-                                   FontWeight="Bold"
-                                   Foreground="#333333"/>
+                        <TextBlock Text="СОПОСТАВЛЕНИЕ ТОВАРОВ" FontSize="18" FontWeight="Bold" Foreground="#333333"/>
                     </Grid>
                 </Border>
 
-                <!-- 🔵 НОВАЯ ПАНЕЛЬ ПРОГРЕССА 🔵 -->
+                <!-- Панель прогресса -->
                 <Border x:Name="ProgressPanel" 
                         Grid.Row="1"
                         Background="#FFF3E0"
@@ -197,41 +113,15 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-
-                        <!-- Иконка -->
-                        <TextBlock Grid.Column="0" 
-                                   Text="⏳" 
-                                   FontSize="18" 
-                                   Margin="0,0,10,0"
-                                   VerticalAlignment="Center"/>
-
-                        <!-- Текст и прогресс -->
-                        <StackPanel Grid.Column="1" 
-                                    Orientation="Vertical"
-                                    Margin="0,0,10,0">
-                            <TextBlock x:Name="ProgressText" 
-                                       Text="Поиск товаров..." 
-                                       FontSize="13" 
-                                       FontWeight="SemiBold"
-                                       Foreground="#E2542A"
-                                       Margin="0,0,0,3"/>
-                            <ProgressBar x:Name="ProgressBar" 
-                                         Height="15" 
-                                         Minimum="0" 
-                                         Maximum="100" 
-                                         Value="0"
-                                         Foreground="#E2542A"
-                                         Background="#FFE0B2"/>
+                        <TextBlock Grid.Column="0" Text="⏳" FontSize="18" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" Orientation="Vertical" Margin="0,0,10,0">
+                            <TextBlock x:Name="ProgressText" Text="Поиск товаров..." FontSize="13" FontWeight="SemiBold"
+                                       Foreground="#E2542A" Margin="0,0,0,3"/>
+                            <ProgressBar x:Name="ProgressBar" Height="15" Minimum="0" Maximum="100" Value="0"
+                                         Foreground="#E2542A" Background="#FFE0B2"/>
                         </StackPanel>
-
-                        <!-- Счетчик -->
-                        <TextBlock x:Name="ProgressCounter" 
-                                   Grid.Column="2" 
-                                   Text="0/0" 
-                                   FontSize="13" 
-                                   FontWeight="Bold"
-                                   Foreground="#E2542A"
-                                   VerticalAlignment="Center"/>
+                        <TextBlock x:Name="ProgressCounter" Grid.Column="2" Text="0/0" FontSize="13" FontWeight="Bold"
+                                   Foreground="#E2542A" VerticalAlignment="Center"/>
                     </Grid>
                 </Border>
 
@@ -248,26 +138,11 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-
-                        <TextBlock Grid.Column="0"
-                                   Text="Добавить товар:"
-                                   FontSize="14"
-                                   FontWeight="SemiBold"
-                                   Foreground="#333333"
-                                   VerticalAlignment="Center"
-                                   Margin="0,0,10,0"/>
-
-                        <TextBox x:Name="txtNewProduct"
-                                 Grid.Column="1"
-                                 Margin="0,0,10,0"
-                                 Padding="10,8"
-                                 FontSize="14"
-                                 VerticalContentAlignment="Center"
-                                 BorderBrush="#CCCCCC"
-                                 BorderThickness="1"
-                                 VerticalAlignment="Center"
-                                 KeyUp="TxtNewProduct_KeyUp"
-                                 TextChanged="TxtNewProduct_TextChanged">
+                        <TextBlock Grid.Column="0" Text="Добавить товар:" FontSize="14" FontWeight="SemiBold"
+                                   Foreground="#333333" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <TextBox x:Name="txtNewProduct" Grid.Column="1" Margin="0,0,10,0" Padding="10,8" FontSize="14"
+                                 VerticalContentAlignment="Center" BorderBrush="#CCCCCC" BorderThickness="1"
+                                 VerticalAlignment="Center" KeyUp="TxtNewProduct_KeyUp" TextChanged="TxtNewProduct_TextChanged">
                             <TextBox.Style>
                                 <Style TargetType="TextBox">
                                     <Setter Property="Border.CornerRadius" Value="4"/>
@@ -275,28 +150,16 @@
                                 </Style>
                             </TextBox.Style>
                         </TextBox>
-
-                        <Button x:Name="btnQuickAdd"
-                                Grid.Column="2"
-                                Content="Добавить"
-                                Width="100"
-                                Height="36"
-                                Background="#4CAF50"
-                                Foreground="White"
-                                FontWeight="Bold"
-                                FontSize="13"
-                                Click="BtnQuickAdd_Click"
-                                Cursor="Hand"
-                                Margin="0,0,10,0">
+                        <Button x:Name="btnQuickAdd" Grid.Column="2" Content="Добавить" Width="100" Height="36"
+                                Background="#4CAF50" Foreground="White" FontWeight="Bold" FontSize="13"
+                                Click="BtnQuickAdd_Click" Cursor="Hand" Margin="0,0,10,0">
                             <Button.Style>
                                 <Style TargetType="Button">
                                     <Setter Property="Template">
                                         <Setter.Value>
                                             <ControlTemplate TargetType="Button">
-                                                <Border Background="{TemplateBinding Background}"
-                                                        CornerRadius="4">
-                                                    <ContentPresenter HorizontalAlignment="Center"
-                                                                      VerticalAlignment="Center"/>
+                                                <Border Background="{TemplateBinding Background}" CornerRadius="4">
+                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                 </Border>
                                             </ControlTemplate>
                                         </Setter.Value>
@@ -313,28 +176,16 @@
                                 </Style>
                             </Button.Style>
                         </Button>
-
-                        <Button x:Name="btnClearAll"
-                                Grid.Column="3"
-                                Content="Очистить все"
-                                Width="110"
-                                Height="36"
-                                Background="#F44336"
-                                Foreground="White"
-                                FontWeight="Bold"
-                                FontSize="13"
-                                Click="BtnClearAll_Click"
-                                Cursor="Hand"
-                                ToolTip="Удалить все товары из списка">
+                        <Button x:Name="btnClearAll" Grid.Column="3" Content="Очистить все" Width="110" Height="36"
+                                Background="#F44336" Foreground="White" FontWeight="Bold" FontSize="13"
+                                Click="BtnClearAll_Click" Cursor="Hand" ToolTip="Удалить все товары из списка">
                             <Button.Style>
                                 <Style TargetType="Button">
                                     <Setter Property="Template">
                                         <Setter.Value>
                                             <ControlTemplate TargetType="Button">
-                                                <Border Background="{TemplateBinding Background}"
-                                                        CornerRadius="4">
-                                                    <ContentPresenter HorizontalAlignment="Center"
-                                                                      VerticalAlignment="Center"/>
+                                                <Border Background="{TemplateBinding Background}" CornerRadius="4">
+                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                 </Border>
                                             </ControlTemplate>
                                         </Setter.Value>
@@ -349,123 +200,175 @@
                         </Button>
                     </Grid>
                 </Border>
-                <!-- Заголовки колонок -->
-                <!-- В файле ComparisonProduct.xaml, найдите секцию с заголовками колонок и замените -->
-                <!-- Заголовки колонок -->
-                <Border Grid.Row="3"
-        Background="#F0F0F0"
-        BorderBrush="#E0E0E0"
-        BorderThickness="0,0,0,1"
-        Padding="20,10">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="60"/>
-                            <!-- № -->
-                            <ColumnDefinition Width="*"/>
-                            <!-- Товар из заявки -->
-                            <ColumnDefinition Width="*"/>
-                            <!-- Выбор товара из Bitrix -->
-                            <ColumnDefinition Width="100"/>
-                            <!-- Количество (НОВОЕ) -->
-                            <ColumnDefinition Width="120"/>
-                            <!-- Единица измерения (НОВОЕ) -->
-                            <ColumnDefinition Width="80"/>
-                            <!-- Действие -->
-                            <ColumnDefinition Width="80"/>
-                            <!-- Удалить -->
-                        </Grid.ColumnDefinitions>
 
-                        <TextBlock Grid.Column="0" Text="№" FontSize="14" FontWeight="Bold" Foreground="#333333" 
-                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" Text="ТОВАР ИЗ ЗАЯВКИ" FontSize="14" FontWeight="Bold" Foreground="#333333" 
-                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="2" Text="ВЫБОР ТОВАРА ИЗ BITRIX" FontSize="14" FontWeight="Bold" Foreground="#333333" 
-                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="3" Text="КОЛИЧЕСТВО" FontSize="14" FontWeight="Bold" Foreground="#333333" 
-                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="4" Text="ЕД. ИЗМЕРЕНИЯ" FontSize="14" FontWeight="Bold" Foreground="#333333" 
-                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="5" Text="ДЕЙСТВИЕ" FontSize="14" FontWeight="Bold" Foreground="#333333" 
-                   HorizontalAlignment="Center" VerticalAlignment="Center" Width="80"/>
-                        <TextBlock Grid.Column="6" Text="УДАЛИТЬ" FontSize="14" FontWeight="Bold" Foreground="#333333" 
-                   HorizontalAlignment="Center" VerticalAlignment="Center" Width="80"/>
-                    </Grid>
-                </Border>
-
-                <!-- Таблица товаров - обновите ItemsControl.ItemTemplate -->
+                <!-- Таблица товаров с DataGrid для возможности изменения ширины колонок -->
                 <ScrollViewer Grid.Row="4"
-              VerticalScrollBarVisibility="Auto"
-              HorizontalScrollBarVisibility="Disabled"
-              Padding="0">
-                    <ItemsControl x:Name="itemsControlProducts"
-                  ItemsSource="{Binding ProductItems}"
-                  Margin="0">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border BorderBrush="#E0E0E0"
-                        BorderThickness="0,0,0,1"
-                        Padding="20,12"
-                        Background="White">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="60"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="100"/>
-                                            <ColumnDefinition Width="120"/>
-                                            <ColumnDefinition Width="80"/>
-                                            <ColumnDefinition Width="80"/>
-                                        </Grid.ColumnDefinitions>
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Auto">
+                    <DataGrid x:Name="dataGridProducts"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              CanUserDeleteRows="False"
+                              CanUserReorderColumns="True"
+                              CanUserResizeColumns="True"
+                              CanUserSortColumns="True"
+                              GridLinesVisibility="None"
+                              RowHeight="50"
+                              HeadersVisibility="Column"
+                              SelectionMode="Single"
+                              SelectionUnit="FullRow"
+                              Background="White"
+                              BorderThickness="0"
+                              HorizontalGridLinesBrush="#F0F0F0"
+                              VerticalGridLinesBrush="#F0F0F0"
+                              ItemsSource="{Binding ProductItems}">
 
-                                        <!-- Колонка 0: Номер -->
-                                        <TextBlock Grid.Column="0"
-                                   Text="{Binding Index}"
-                                   FontSize="14"
-                                   Foreground="#333333"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"/>
+                        <DataGrid.Columns>
+                            <!-- Колонка 0: Номер -->
+                            <DataGridTextColumn Header="№"
+                                                Binding="{Binding Index}"
+                                                Width="60"
+                                                IsReadOnly="True">
+                                <DataGridTextColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="Background" Value="#F8F8F8"/>
+                                        <Setter Property="Foreground" Value="#333333"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                        <Setter Property="FontSize" Value="12"/>
+                                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                        <Setter Property="BorderBrush" Value="#E0E0E0"/>
+                                        <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                                        <Setter Property="Padding" Value="10,5"/>
+                                    </Style>
+                                </DataGridTextColumn.HeaderStyle>
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="VerticalAlignment" Value="Center"/>
+                                        <Setter Property="HorizontalAlignment" Value="Center"/>
+                                        <Setter Property="Padding" Value="10,5"/>
+                                        <Setter Property="FontSize" Value="13"/>
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
 
-                                        <!-- Колонка 1: Товар из заявки -->
-                                        <Border Grid.Column="1"
-                                BorderBrush="#E0E0E0"
-                                BorderThickness="0,0,1,0"
-                                Padding="10,0">
-                                            <TextBox Text="{Binding OriginalProduct, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                     TextWrapping="Wrap"
-                                     HorizontalAlignment="Stretch"
-                                     VerticalAlignment="Center"
-                                     FontSize="14"
-                                     Foreground="#333333"
-                                     MinWidth="200"
-                                     TextChanged="ProductTextBox_TextChanged">
-                                                <TextBox.Style>
-                                                    <Style TargetType="TextBox">
-                                                        <Setter Property="Border.CornerRadius" Value="4"/>
-                                                        <Setter Property="Background" Value="White"/>
-                                                        <Setter Property="BorderBrush" Value="#CCCCCC"/>
-                                                        <Setter Property="BorderThickness" Value="1"/>
-                                                    </Style>
-                                                </TextBox.Style>
-                                            </TextBox>
-                                        </Border>
+                            <!-- Колонка 1: Товар из заявки -->
+                            <DataGridTemplateColumn Header="ТОВАР ИЗ ЗАЯВКИ"
+                                                    Width="250">
+                                <DataGridTemplateColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="Background" Value="#F8F8F8"/>
+                                        <Setter Property="Foreground" Value="#333333"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                        <Setter Property="FontSize" Value="12"/>
+                                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                        <Setter Property="BorderBrush" Value="#E0E0E0"/>
+                                        <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                                        <Setter Property="Padding" Value="10,5"/>
+                                    </Style>
+                                </DataGridTemplateColumn.HeaderStyle>
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding OriginalProduct, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                 TextWrapping="Wrap"
+                                                 HorizontalAlignment="Stretch"
+                                                 VerticalAlignment="Center"
+                                                 FontSize="14"
+                                                 Foreground="#333333"
+                                                 MinWidth="200"
+                                                 TextChanged="ProductTextBox_TextChanged"
+                                                 BorderThickness="1"
+                                                 BorderBrush="#CCCCCC"
+                                                 >
+                                            <TextBox.Style>
+                                                <Style TargetType="TextBox">
+                                                    <Setter Property="Border.CornerRadius" Value="4"/>
+                                                    <Setter Property="Background" Value="White"/>
+                                                    <Setter Property="BorderBrush" Value="#CCCCCC"/>
+                                                    <Setter Property="BorderThickness" Value="1"/>
+                                                </Style>
+                                            </TextBox.Style>
+                                        </TextBox>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
 
-                                        <!-- Колонка 2: Выбор товара из Bitrix -->
-                                        <ComboBox Grid.Column="2"
-                                  Margin="10,0"
-                                  ItemsSource="{Binding BitrixProducts}"
-                                  DisplayMemberPath="ProductName"
-                                  SelectedItem="{Binding SelectedBitrixProduct, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                  MaxDropDownHeight="400" 
-                                  IsEditable="True"
-                                  HorizontalAlignment="Stretch"
-                                  VerticalAlignment="Center"
-                                  FontSize="14"
-                                  Height="38"
-                                  Padding="10,0"
-                                  BorderBrush="#CCCCCC"
-                                  DropDownOpened="ComboBox_DropDownOpened"
-                                  KeyUp="ComboBox_KeyUp"
-                                  SelectionChanged="ComboBox_SelectionChanged">
+                            <!-- Колонка 2: Описание -->
+                            <DataGridTemplateColumn Header="ОПИСАНИЕ"
+                                                    Width="200">
+                                <DataGridTemplateColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="Background" Value="#F8F8F8"/>
+                                        <Setter Property="Foreground" Value="#333333"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                        <Setter Property="FontSize" Value="12"/>
+                                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                        <Setter Property="BorderBrush" Value="#E0E0E0"/>
+                                        <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                                        <Setter Property="Padding" Value="10,5"/>
+                                    </Style>
+                                </DataGridTemplateColumn.HeaderStyle>
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding Description, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                 TextWrapping="Wrap"
+                                                 AcceptsReturn="True"
+                                                 MinHeight="35"
+                                                 MaxHeight="80"
+                                                 HorizontalAlignment="Stretch"
+                                                 VerticalAlignment="Center"
+                                                 FontSize="13"
+                                                 Foreground="#555555"
+                                                 BorderBrush="#CCCCCC"
+                                                 BorderThickness="1"
+                                                 
+                                                 Background="White"
+                                                 TextChanged="DescriptionTextBox_TextChanged"
+                                                 VerticalScrollBarVisibility="Auto">
+                                            <TextBox.Style>
+                                                <Style TargetType="TextBox">
+                                                    <Setter Property="Border.CornerRadius" Value="4"/>
+                                                    <Setter Property="Background" Value="White"/>
+                                                    <Setter Property="BorderBrush" Value="#CCCCCC"/>
+                                                    <Setter Property="BorderThickness" Value="1"/>
+                                                </Style>
+                                            </TextBox.Style>
+                                        </TextBox>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- Колонка 3: Выбор товара из Bitrix -->
+                            <DataGridTemplateColumn Header="ВЫБОР ТОВАРА ИЗ BITRIX"
+                                                    Width="300">
+                                <DataGridTemplateColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="Background" Value="#F8F8F8"/>
+                                        <Setter Property="Foreground" Value="#333333"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                        <Setter Property="FontSize" Value="12"/>
+                                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                        <Setter Property="BorderBrush" Value="#E0E0E0"/>
+                                        <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                                        <Setter Property="Padding" Value="10,5"/>
+                                    </Style>
+                                </DataGridTemplateColumn.HeaderStyle>
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ComboBox Margin="5,0"
+                                                  ItemsSource="{Binding BitrixProducts}"
+                                                  DisplayMemberPath="ProductName"
+                                                  SelectedItem="{Binding SelectedBitrixProduct, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  MaxDropDownHeight="400" 
+                                                  IsEditable="True"
+                                                  HorizontalAlignment="Stretch"
+                                                  VerticalAlignment="Center"
+                                                  FontSize="14"
+                                                  Height="38"
+                                                  Padding="10,0"
+                                                  BorderBrush="#CCCCCC"
+                                                  DropDownOpened="ComboBox_DropDownOpened"
+                                                  KeyUp="ComboBox_KeyUp"
+                                                  SelectionChanged="ComboBox_SelectionChanged">
                                             <ComboBox.Style>
                                                 <Style TargetType="ComboBox">
                                                     <Setter Property="Border.CornerRadius" Value="4"/>
@@ -475,7 +378,7 @@
                                                 <DataTemplate>
                                                     <StackPanel Orientation="Vertical" Margin="2" HorizontalAlignment="Center">
                                                         <TextBlock Text="{Binding ProductName}" FontWeight="SemiBold" 
-                                                   TextWrapping="Wrap" HorizontalAlignment="Center"/>
+                                                                   TextWrapping="Wrap" HorizontalAlignment="Center"/>
                                                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                                             <TextBlock Text="{Binding CategoryName}" FontSize="11" Foreground="Gray"/>
                                                             <TextBlock Text=" • " FontSize="11" Foreground="Gray"/>
@@ -485,22 +388,41 @@
                                                 </DataTemplate>
                                             </ComboBox.ItemTemplate>
                                         </ComboBox>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
 
-                                        <!-- Колонка 3: Количество (НОВОЕ) -->
-                                        <TextBox Grid.Column="3"
-                                 Text="{Binding Quantity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 Width="80"
-                                 Height="35"
-                                 FontSize="13"
-                                 TextAlignment="Center"
-                                 VerticalContentAlignment="Center"
-                                 BorderBrush="#CCCCCC"
-                                 BorderThickness="1"
-                                 Padding="5,0"
-                                 PreviewTextInput="QuantityTextBox_PreviewTextInput"
-                                 LostFocus="QuantityTextBox_LostFocus"
-                                 HorizontalAlignment="Center"
-                                 VerticalAlignment="Center">
+                            <!-- Колонка 4: Количество -->
+                            <DataGridTemplateColumn Header="КОЛИЧЕСТВО"
+                                                    Width="100">
+                                <DataGridTemplateColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="Background" Value="#F8F8F8"/>
+                                        <Setter Property="Foreground" Value="#333333"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                        <Setter Property="FontSize" Value="12"/>
+                                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                        <Setter Property="BorderBrush" Value="#E0E0E0"/>
+                                        <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                                        <Setter Property="Padding" Value="10,5"/>
+                                    </Style>
+                                </DataGridTemplateColumn.HeaderStyle>
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBox Text="{Binding Quantity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                 Width="80"
+                                                 Height="35"
+                                                 FontSize="13"
+                                                 TextAlignment="Center"
+                                                 VerticalContentAlignment="Center"
+                                                 BorderBrush="#CCCCCC"
+                                                 BorderThickness="1"
+                                                 Padding="5,0"
+                                                 PreviewTextInput="QuantityTextBox_PreviewTextInput"
+                                                 LostFocus="QuantityTextBox_LostFocus"
+                                                 HorizontalAlignment="Center"
+                                                 VerticalAlignment="Center"
+                                                >
                                             <TextBox.Style>
                                                 <Style TargetType="TextBox">
                                                     <Setter Property="Border.CornerRadius" Value="4"/>
@@ -512,20 +434,38 @@
                                                 </Style>
                                             </TextBox.Style>
                                         </TextBox>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
 
-                                        <!-- Колонка 4: Единица измерения (НОВОЕ) -->
-                                        <ComboBox Grid.Column="4"
-                                  ItemsSource="{Binding Path=DataContext.AllMeasures, RelativeSource={RelativeSource AncestorType={x:Type Page}}}"
-                                  SelectedValue="{Binding SelectedMeasureId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                  SelectedValuePath="ID"
-                                  DisplayMemberPath="SYMBOL_RUS"
-                                  Width="100"
-                                  Height="35"
-                                  FontSize="13"
-                                  VerticalContentAlignment="Center"
-                                  HorizontalAlignment="Center"
-                                  VerticalAlignment="Center"
-                                  IsEnabled="True">
+                            <!-- Колонка 5: Единица измерения -->
+                            <DataGridTemplateColumn Header="ЕД. ИЗМЕРЕНИЯ"
+                                                    Width="120">
+                                <DataGridTemplateColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="Background" Value="#F8F8F8"/>
+                                        <Setter Property="Foreground" Value="#333333"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                        <Setter Property="FontSize" Value="12"/>
+                                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                        <Setter Property="BorderBrush" Value="#E0E0E0"/>
+                                        <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                                        <Setter Property="Padding" Value="10,5"/>
+                                    </Style>
+                                </DataGridTemplateColumn.HeaderStyle>
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ComboBox ItemsSource="{Binding Path=DataContext.AllMeasures, RelativeSource={RelativeSource AncestorType={x:Type Page}}}"
+                                                  SelectedValue="{Binding SelectedMeasureId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  SelectedValuePath="ID"
+                                                  DisplayMemberPath="SYMBOL_RUS"
+                                                  Width="100"
+                                                  Height="35"
+                                                  FontSize="13"
+                                                  VerticalContentAlignment="Center"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"
+                                                  IsEnabled="True">
                                             <ComboBox.Style>
                                                 <Style TargetType="ComboBox">
                                                     <Setter Property="Border.CornerRadius" Value="4"/>
@@ -534,52 +474,99 @@
                                                 </Style>
                                             </ComboBox.Style>
                                         </ComboBox>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
 
-                                        <!-- Колонка 5: Кнопка расширенного поиска -->
-                                        <Button Grid.Column="5"
-                                Width="40"
-                                Height="40"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                Command="{Binding AddCommand}"
-                                CommandParameter="{Binding}" 
-                                ToolTip="Открыть расширенный поиск"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Cursor="Hand">
+                            <!-- Колонка 6: Действие -->
+                            <DataGridTemplateColumn Header="ДЕЙСТВИЕ"
+                                                    Width="80">
+                                <DataGridTemplateColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="Background" Value="#F8F8F8"/>
+                                        <Setter Property="Foreground" Value="#333333"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                        <Setter Property="FontSize" Value="12"/>
+                                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                        <Setter Property="BorderBrush" Value="#E0E0E0"/>
+                                        <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                                        <Setter Property="Padding" Value="10,5"/>
+                                    </Style>
+                                </DataGridTemplateColumn.HeaderStyle>
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Width="40"
+                                                Height="40"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Command="{Binding AddCommand}"
+                                                CommandParameter="{Binding}" 
+                                                ToolTip="Открыть расширенный поиск"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Cursor="Hand">
                                             <Grid>
                                                 <Image Source="/Image/changeButton.png" 
-                                       Width="28"
-                                       Height="28"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"
-                                       RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                       Width="28"
+                                                       Height="28"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       RenderOptions.BitmapScalingMode="HighQuality"/>
                                             </Grid>
                                         </Button>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
 
-                                        <!-- Колонка 6: Кнопка удаления товара -->
-                                        <Button Grid.Column="6"
-                                Width="40"
-                                Height="40"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                Command="{Binding RemoveCommand}"
-                                CommandParameter="{Binding}"
-                                ToolTip="Удалить товар"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Cursor="Hand">
+                            <!-- Колонка 7: Удалить -->
+                            <DataGridTemplateColumn Header="УДАЛИТЬ"
+                                                    Width="80">
+                                <DataGridTemplateColumn.HeaderStyle>
+                                    <Style TargetType="DataGridColumnHeader">
+                                        <Setter Property="Background" Value="#F8F8F8"/>
+                                        <Setter Property="Foreground" Value="#333333"/>
+                                        <Setter Property="FontWeight" Value="Bold"/>
+                                        <Setter Property="FontSize" Value="12"/>
+                                        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+                                        <Setter Property="BorderBrush" Value="#E0E0E0"/>
+                                        <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                                        <Setter Property="Padding" Value="10,5"/>
+                                    </Style>
+                                </DataGridTemplateColumn.HeaderStyle>
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Width="40"
+                                                Height="40"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Command="{Binding RemoveCommand}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="Удалить товар"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Cursor="Hand">
                                             <Grid>
                                                 <Ellipse Width="32" Height="32" Fill="#FF5252"/>
                                                 <TextBlock Text="×" FontSize="20" FontWeight="Bold" Foreground="White"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                             </Grid>
                                         </Button>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+
+                        <DataGrid.RowStyle>
+                            <Style TargetType="DataGridRow">
+                                <Setter Property="BorderBrush" Value="#F0F0F0"/>
+                                <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                                <Style.Resources>
+                                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#A6A7A8"/>
+                                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#333333"/>
+                                </Style.Resources>
+                            </Style>
+                        </DataGrid.RowStyle>
+                    </DataGrid>
                 </ScrollViewer>
             </Grid>
         </Border>
@@ -598,28 +585,16 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-
-                <!-- Кнопка "Назад" -->
-                <Button x:Name="btnBack"
-                        Grid.Column="1"
-                        Content="НАЗАД"
-                        Width="140"
-                        Height="45"
-                        Background="#E2542A"
-                        Foreground="White"
-                        FontWeight="Bold"
-                        FontSize="14"
-                        BorderThickness="0"
-                        Click="btnBack_Click">
+                <Button x:Name="btnBack" Grid.Column="1" Content="НАЗАД" Width="140" Height="45"
+                        Background="#E2542A" Foreground="White" FontWeight="Bold" FontSize="14"
+                        BorderThickness="0" Click="btnBack_Click">
                     <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="Button">
-                                        <Border Background="{TemplateBinding Background}"
-                                                CornerRadius="4">
-                                            <ContentPresenter HorizontalAlignment="Center"
-                                                              VerticalAlignment="Center"/>
+                                        <Border Background="{TemplateBinding Background}" CornerRadius="4">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         </Border>
                                     </ControlTemplate>
                                 </Setter.Value>
@@ -627,28 +602,16 @@
                         </Style>
                     </Button.Style>
                 </Button>
-
-                <!-- Кнопка "Далее" -->
-                <Button x:Name="btnNext"
-                        Grid.Column="3"
-                        Content="ДАЛЕЕ"
-                        Width="140"
-                        Height="45"
-                        Background="#E2542A"
-                        Foreground="White"
-                        FontWeight="Bold"
-                        FontSize="14"
-                        BorderThickness="0"
-                        Click="btnNext_Click">
+                <Button x:Name="btnNext" Grid.Column="3" Content="ДАЛЕЕ" Width="140" Height="45"
+                        Background="#E2542A" Foreground="White" FontWeight="Bold" FontSize="14"
+                        BorderThickness="0" Click="btnNext_Click">
                     <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="Button">
-                                        <Border Background="{TemplateBinding Background}"
-                                                CornerRadius="4">
-                                            <ContentPresenter HorizontalAlignment="Center"
-                                                              VerticalAlignment="Center"/>
+                                        <Border Background="{TemplateBinding Background}" CornerRadius="4">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                         </Border>
                                     </ControlTemplate>
                                 </Setter.Value>
