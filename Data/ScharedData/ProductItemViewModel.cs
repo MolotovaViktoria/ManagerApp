@@ -1,56 +1,100 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using ManagerApp.Data.ScharedData;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Input;
-using static ManagerApp.Pages.ComparisonProduct;
 
-namespace ManagerApp.Data.ScharedData
+public class ProductItemViewModel : INotifyPropertyChanged
 {
-    public class ProductItemViewModel : INotifyPropertyChanged
+    private int _index;
+    private string _originalProduct;
+    private BitrixProductViewModel _selectedBitrixProduct;
+    private decimal _quantity = 1;
+    private string _selectedMeasureId;
+    private string _measureSymbol;
+    private string _measureName;
+
+    public int Index
     {
-        private string _originalProduct;
-        private BitrixProductViewModel _selectedBitrixProduct;
-
-        public string OriginalProduct
+        get => _index;
+        set
         {
-            get => _originalProduct;
-            set
-            {
-                if (_originalProduct != value)
-                {
-                    _originalProduct = value;
-                    OnPropertyChanged();
-                }
-            }
+            _index = value;
+            OnPropertyChanged();
         }
+    }
 
-        public ObservableCollection<BitrixProductViewModel> BitrixProducts { get; set; }
-
-        public BitrixProductViewModel SelectedBitrixProduct
+    public string OriginalProduct
+    {
+        get => _originalProduct;
+        set
         {
-            get => _selectedBitrixProduct;
-            set
-            {
-                if (_selectedBitrixProduct != value)
-                {
-                    _selectedBitrixProduct = value;
-                    OnPropertyChanged();
-                }
-            }
+            _originalProduct = value;
+            OnPropertyChanged();
         }
+    }
 
-        public ICommand AddCommand { get; set; }
-
-        public event PropertyChangedEventHandler PropertyChanged;
-
-        public virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+    public decimal Quantity
+    {
+        get => _quantity;
+        set
         {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+            _quantity = value;
+            OnPropertyChanged();
         }
+    }
+
+    public string SelectedMeasureId
+    {
+        get => _selectedMeasureId;
+        set
+        {
+            _selectedMeasureId = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(MeasureSymbol));
+            OnPropertyChanged(nameof(MeasureName));
+        }
+    }
+
+    public string MeasureSymbol
+    {
+        get => _measureSymbol;
+        set
+        {
+            _measureSymbol = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public string MeasureName
+    {
+        get => _measureName;
+        set
+        {
+            _measureName = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public ObservableCollection<BitrixProductViewModel> BitrixProducts { get; set; }
+
+    public BitrixProductViewModel SelectedBitrixProduct
+    {
+        get => _selectedBitrixProduct;
+        set
+        {
+            _selectedBitrixProduct = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public ICommand AddCommand { get; set; }
+    public ICommand RemoveCommand { get; set; }
+
+    public event PropertyChangedEventHandler PropertyChanged;
+
+    public virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 }

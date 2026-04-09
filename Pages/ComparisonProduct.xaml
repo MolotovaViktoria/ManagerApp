@@ -6,7 +6,8 @@
       xmlns:local="clr-namespace:ManagerApp.Pages"
       mc:Ignorable="d" 
       d:DesignHeight="600" d:DesignWidth="900"
-      Title="Сопоставление товаров">
+      Title="Сопоставление товаров"
+      Loaded="Page_Loaded">
 
     <Grid>
         <Grid.RowDefinitions>
@@ -349,6 +350,8 @@
                     </Grid>
                 </Border>
                 <!-- Заголовки колонок -->
+                <!-- В файле ComparisonProduct.xaml, найдите секцию с заголовками колонок и замените -->
+                <!-- Заголовки колонок -->
                 <Border Grid.Row="3"
         Background="#F0F0F0"
         BorderBrush="#E0E0E0"
@@ -357,58 +360,39 @@
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="60"/>
-                            <!-- новая колонка для номера -->
+                            <!-- № -->
                             <ColumnDefinition Width="*"/>
+                            <!-- Товар из заявки -->
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
+                            <!-- Выбор товара из Bitrix -->
+                            <ColumnDefinition Width="100"/>
+                            <!-- Количество (НОВОЕ) -->
+                            <ColumnDefinition Width="120"/>
+                            <!-- Единица измерения (НОВОЕ) -->
+                            <ColumnDefinition Width="80"/>
+                            <!-- Действие -->
+                            <ColumnDefinition Width="80"/>
+                            <!-- Удалить -->
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Grid.Column="0"
-                   Text="№"
-                   FontSize="14"
-                   FontWeight="Bold"
-                   Foreground="#333333"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"/>
-
-                        <TextBlock Grid.Column="1"
-                   Text="ТОВАР ИЗ ЗАЯВКИ"
-                   FontSize="14"
-                   FontWeight="Bold"
-                   Foreground="#333333"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"/>
-
-                        <TextBlock Grid.Column="2"
-                   Text="ВЫБОР ТОВАРА ИЗ BITRIX"
-                   FontSize="14"
-                   FontWeight="Bold"
-                   Foreground="#333333"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"/>
-
-                        <TextBlock Grid.Column="3"
-                   Text="ДЕЙСТВИЕ"
-                   FontSize="14"
-                   FontWeight="Bold"
-                   Foreground="#333333"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"
-                   Width="80"/>
-
-                        <TextBlock Grid.Column="4"
-                   Text="УДАЛИТЬ"
-                   FontSize="14"
-                   FontWeight="Bold"
-                   Foreground="#333333"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"
-                   Width="100"/>
+                        <TextBlock Grid.Column="0" Text="№" FontSize="14" FontWeight="Bold" Foreground="#333333" 
+                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Text="ТОВАР ИЗ ЗАЯВКИ" FontSize="14" FontWeight="Bold" Foreground="#333333" 
+                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" Text="ВЫБОР ТОВАРА ИЗ BITRIX" FontSize="14" FontWeight="Bold" Foreground="#333333" 
+                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="3" Text="КОЛИЧЕСТВО" FontSize="14" FontWeight="Bold" Foreground="#333333" 
+                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="4" Text="ЕД. ИЗМЕРЕНИЯ" FontSize="14" FontWeight="Bold" Foreground="#333333" 
+                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="5" Text="ДЕЙСТВИЕ" FontSize="14" FontWeight="Bold" Foreground="#333333" 
+                   HorizontalAlignment="Center" VerticalAlignment="Center" Width="80"/>
+                        <TextBlock Grid.Column="6" Text="УДАЛИТЬ" FontSize="14" FontWeight="Bold" Foreground="#333333" 
+                   HorizontalAlignment="Center" VerticalAlignment="Center" Width="80"/>
                     </Grid>
                 </Border>
 
-                <!-- Таблица товаров -->
+                <!-- Таблица товаров - обновите ItemsControl.ItemTemplate -->
                 <ScrollViewer Grid.Row="4"
               VerticalScrollBarVisibility="Auto"
               HorizontalScrollBarVisibility="Disabled"
@@ -425,20 +409,21 @@
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="60"/>
-                                            <!-- Добавлено: колонка для номера -->
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="100"/>
+                                            <ColumnDefinition Width="120"/>
+                                            <ColumnDefinition Width="80"/>
+                                            <ColumnDefinition Width="80"/>
                                         </Grid.ColumnDefinitions>
 
                                         <!-- Колонка 0: Номер -->
                                         <TextBlock Grid.Column="0"
-           Text="{Binding Index}"
-           FontSize="14"
-           Foreground="#333333"
-           HorizontalAlignment="Center"
-           VerticalAlignment="Center"/>
+                                   Text="{Binding Index}"
+                                   FontSize="14"
+                                   Foreground="#333333"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
 
                                         <!-- Колонка 1: Товар из заявки -->
                                         <Border Grid.Column="1"
@@ -479,7 +464,8 @@
                                   Padding="10,0"
                                   BorderBrush="#CCCCCC"
                                   DropDownOpened="ComboBox_DropDownOpened"
-                                  KeyUp="ComboBox_KeyUp">
+                                  KeyUp="ComboBox_KeyUp"
+                                  SelectionChanged="ComboBox_SelectionChanged">
                                             <ComboBox.Style>
                                                 <Style TargetType="ComboBox">
                                                     <Setter Property="Border.CornerRadius" Value="4"/>
@@ -487,33 +473,72 @@
                                             </ComboBox.Style>
                                             <ComboBox.ItemTemplate>
                                                 <DataTemplate>
-                                                    <StackPanel Orientation="Vertical" 
-                                                Margin="2"
-                                                HorizontalAlignment="Center">
-                                                        <TextBlock Text="{Binding ProductName}"
-                                                   FontWeight="SemiBold"
-                                                   TextWrapping="Wrap"
-                                                   HorizontalAlignment="Center"/>
-                                                        <StackPanel Orientation="Horizontal" 
-                                                    HorizontalAlignment="Center">
-                                                            <TextBlock Text="{Binding CategoryName}"
-                                                       FontSize="11"
-                                                       Foreground="Gray"/>
-                                                            <TextBlock Text=" • "
-                                                       FontSize="11"
-                                                       Foreground="Gray"/>
-                                                            <TextBlock Text="{Binding Price, StringFormat='Цена: {0:#,##0.00} ₽'}"
-                                                       FontSize="11"/>
+                                                    <StackPanel Orientation="Vertical" Margin="2" HorizontalAlignment="Center">
+                                                        <TextBlock Text="{Binding ProductName}" FontWeight="SemiBold" 
+                                                   TextWrapping="Wrap" HorizontalAlignment="Center"/>
+                                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                                            <TextBlock Text="{Binding CategoryName}" FontSize="11" Foreground="Gray"/>
+                                                            <TextBlock Text=" • " FontSize="11" Foreground="Gray"/>
+                                                            <TextBlock Text="{Binding Price, StringFormat='Цена: {0:#,##0.00} ₽'}" FontSize="11"/>
                                                         </StackPanel>
                                                     </StackPanel>
                                                 </DataTemplate>
                                             </ComboBox.ItemTemplate>
                                         </ComboBox>
 
-                                        <!-- Колонка 3: Кнопка расширенного поиска -->
-                                        <Button Grid.Column="3"
-                                Width="50"
-                                Height="50"
+                                        <!-- Колонка 3: Количество (НОВОЕ) -->
+                                        <TextBox Grid.Column="3"
+                                 Text="{Binding Quantity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                 Width="80"
+                                 Height="35"
+                                 FontSize="13"
+                                 TextAlignment="Center"
+                                 VerticalContentAlignment="Center"
+                                 BorderBrush="#CCCCCC"
+                                 BorderThickness="1"
+                                 Padding="5,0"
+                                 PreviewTextInput="QuantityTextBox_PreviewTextInput"
+                                 LostFocus="QuantityTextBox_LostFocus"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center">
+                                            <TextBox.Style>
+                                                <Style TargetType="TextBox">
+                                                    <Setter Property="Border.CornerRadius" Value="4"/>
+                                                    <Style.Triggers>
+                                                        <Trigger Property="IsFocused" Value="True">
+                                                            <Setter Property="BorderBrush" Value="#E2542A"/>
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBox.Style>
+                                        </TextBox>
+
+                                        <!-- Колонка 4: Единица измерения (НОВОЕ) -->
+                                        <ComboBox Grid.Column="4"
+                                  ItemsSource="{Binding Path=DataContext.AllMeasures, RelativeSource={RelativeSource AncestorType={x:Type Page}}}"
+                                  SelectedValue="{Binding SelectedMeasureId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                  SelectedValuePath="ID"
+                                  DisplayMemberPath="SYMBOL_RUS"
+                                  Width="100"
+                                  Height="35"
+                                  FontSize="13"
+                                  VerticalContentAlignment="Center"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  IsEnabled="True">
+                                            <ComboBox.Style>
+                                                <Style TargetType="ComboBox">
+                                                    <Setter Property="Border.CornerRadius" Value="4"/>
+                                                    <Setter Property="Background" Value="White"/>
+                                                    <Setter Property="BorderBrush" Value="#CCCCCC"/>
+                                                </Style>
+                                            </ComboBox.Style>
+                                        </ComboBox>
+
+                                        <!-- Колонка 5: Кнопка расширенного поиска -->
+                                        <Button Grid.Column="5"
+                                Width="40"
+                                Height="40"
                                 Background="Transparent"
                                 BorderThickness="0"
                                 Command="{Binding AddCommand}"
@@ -532,8 +557,8 @@
                                             </Grid>
                                         </Button>
 
-                                        <!-- Колонка 4: Кнопка удаления товара -->
-                                        <Button Grid.Column="4"
+                                        <!-- Колонка 6: Кнопка удаления товара -->
+                                        <Button Grid.Column="6"
                                 Width="40"
                                 Height="40"
                                 Background="Transparent"
@@ -546,12 +571,8 @@
                                 Cursor="Hand">
                                             <Grid>
                                                 <Ellipse Width="32" Height="32" Fill="#FF5252"/>
-                                                <TextBlock Text="×" 
-                                           FontSize="20" 
-                                           FontWeight="Bold" 
-                                           Foreground="White"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
+                                                <TextBlock Text="×" FontSize="20" FontWeight="Bold" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                             </Grid>
                                         </Button>
                                     </Grid>

@@ -492,9 +492,9 @@
                                 </DataGridTextColumn.ElementStyle>
                             </DataGridTextColumn>
 
-                            <!-- Колонка 5: Выбор единицы измерения -->
-                            <DataGridTemplateColumn Header="ЕДИНИЦА ИЗМЕРЕНИЯ"
-                                                    Width="180">
+                            <!-- Колонка 6: Количество (только для чтения) -->
+                            <DataGridTemplateColumn Header="КОЛИЧЕСТВО"
+                        Width="120">
                                 <DataGridTemplateColumn.HeaderStyle>
                                     <Style TargetType="DataGridColumnHeader">
                                         <Setter Property="Background" Value="#F8F8F8"/>
@@ -509,32 +509,23 @@
                                 </DataGridTemplateColumn.HeaderStyle>
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <ComboBox ItemsSource="{Binding Path=DataContext.AllMeasures, 
-                                                    RelativeSource={RelativeSource AncestorType={x:Type Page}}}"
-                                                  SelectedValue="{Binding SelectedMeasureId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                  SelectedValuePath="ID"
-                                                  DisplayMemberPath="SYMBOL_RUS"
-                                                  Width="160"
-                                                  Height="30"
-                                                  FontSize="13"
-                                                  VerticalContentAlignment="Center"
-                                                  IsEnabled="{Binding IsMeasureEditable}">
-                                            <ComboBox.Style>
-                                                <Style TargetType="ComboBox">
-                                                    <Setter Property="Background" Value="White"/>
-                                                    <Setter Property="BorderBrush" Value="#E0E0E0"/>
-                                                    <Setter Property="BorderThickness" Value="1"/>
-                                                    <Setter Property="Padding" Value="5,0"/>
-                                                </Style>
-                                            </ComboBox.Style>
-                                        </ComboBox>
+                                        <TextBlock Text="{Binding Quantity, StringFormat='{}{0:#,##0.##}'}"
+                       Width="100"
+                       Height="30"
+                       FontSize="13"
+                       TextAlignment="Center"
+                       VerticalAlignment="Center"
+                       Padding="5,0"
+                       Background="#F5F5F5"
+                       Foreground="#666666"/>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
 
-                            <!-- Колонка 6: Количество -->
-                            <DataGridTemplateColumn Header="КОЛИЧЕСТВО"
-                                                    Width="120">
+
+                            <!-- Колонка 5: Единица измерения (только для чтения) -->
+                            <DataGridTemplateColumn Header="ЕДИНИЦА ИЗМЕРЕНИЯ"
+                        Width="180">
                                 <DataGridTemplateColumn.HeaderStyle>
                                     <Style TargetType="DataGridColumnHeader">
                                         <Setter Property="Background" Value="#F8F8F8"/>
@@ -549,30 +540,19 @@
                                 </DataGridTemplateColumn.HeaderStyle>
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <TextBox Text="{Binding Quantity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                 Width="100"
-                                                 Height="30"
-                                                 FontSize="13"
-                                                 TextAlignment="Center"
-                                                 VerticalContentAlignment="Center"
-                                                 BorderBrush="#E0E0E0"
-                                                 BorderThickness="1"
-                                                 Padding="5,0"
-                                                 PreviewTextInput="TextBoxQuantity_PreviewTextInput"
-                                                 >
-                                            <TextBox.Style>
-                                                <Style TargetType="TextBox">
-                                                    <Style.Triggers>
-                                                        <Trigger Property="IsFocused" Value="True">
-                                                            <Setter Property="BorderBrush" Value="#E2542A"/>
-                                                        </Trigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBox.Style>
-                                        </TextBox>
+                                        <TextBlock Text="{Binding Unit}"
+                       Width="160"
+                       Height="30"
+                       FontSize="13"
+                       TextAlignment="Center"
+                       VerticalAlignment="Center"
+                       Padding="5,0"
+                       Background="#F5F5F5"
+                       Foreground="#666666"/>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
+
 
                             <!-- Колонка 7: Ввод своей цены -->
                             <DataGridTemplateColumn Header="СВОЯ ЦЕНА"

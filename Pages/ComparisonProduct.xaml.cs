@@ -4,12 +4,14 @@ using ManagerApp.Data.GetInfo;
 using ManagerApp.Data.ScharedData;
 using ManagerApp.Data.Search;
 using ManagerApp.Data.StructureList;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
+using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
@@ -27,6 +29,168 @@ namespace ManagerApp.Pages
         private bool _isLoading = false;
         public int Index { get; set; }
         private Dictionary<string, List<Data.ScharedData.BitrixProductViewModel>> _searchCache = new Dictionary<string, List<Data.ScharedData.BitrixProductViewModel>>();
+        // НОВЫЕ ПОЛЯ ДЛЯ ЕДИНИЦ ИЗМЕРЕНИЯ
+        private ObservableCollection<BitrixMeasure> _allMeasures;
+        private Dictionary<string, BitrixMeasure> _measuresDictionary = new Dictionary<string, BitrixMeasure>();
+        private bool _measuresLoaded = false;
+        private readonly object _measuresLock = new object();
+
+        public ObservableCollection<BitrixMeasure> AllMeasures
+        {
+            get => _allMeasures;
+            set
+            {
+                _allMeasures = value;
+                OnPropertyChanged(nameof(AllMeasures));
+            }
+        }
+
+        private async Task EnsureMeasuresLoaded()
+        {
+            lock (_measuresLock)
+            {
+                if (_measuresLoaded)
+                    return;
+            }
+
+            try
+            {
+                AllMeasures = new ObservableCollection<BitrixMeasure>();
+
+                var measures = await BitrixMeasureService.GetMeasuresAsync();
+
+                if (measures != null && measures.Any())
+                {
+                    await Dispatcher.InvokeAsync(() =>
+                    {
+                        AllMeasures.Clear();
+                        foreach (var measure in measures)
+                        {
+                            AllMeasures.Add(measure);
+                        }
+                    });
+
+                    lock (_measuresLock)
+                    {
+                        _measuresDictionary.Clear();
+                        foreach (var measure in measures)
+                        {
+                            string id = measure.ID?.ToString() ?? "";
+                            if (!string.IsNullOrEmpty(id))
+                            {
+                                _measuresDictionary[id] = measure;
+                            }
+                        }
+                        _measuresLoaded = true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка загрузки единиц измерения: {ex.Message}");
+            }
+        }
+        private string GetMeasureSymbol(string measureId)
+        {
+            if (string.IsNullOrEmpty(measureId))
+                return "шт.";
+
+            lock (_measuresLock)
+            {
+                if (_measuresDictionary.TryGetValue(measureId, out var measure))
+                {
+                    if (!string.IsNullOrEmpty(measure.SYMBOL_RUS))
+                        return measure.SYMBOL_RUS;
+                    if (!string.IsNullOrEmpty(measure.SYMBOL_INTL))
+                        return measure.SYMBOL_INTL;
+                }
+            }
+            return "шт.";
+        }
+
+        private string GetMeasureName(string measureId)
+        {
+            if (string.IsNullOrEmpty(measureId))
+                return "Штука";
+
+            lock (_measuresLock)
+            {
+                if (_measuresDictionary.TryGetValue(measureId, out var measure))
+                {
+                    if (!string.IsNullOrEmpty(measure.MEASURE_TITLE))
+                        return measure.MEASURE_TITLE;
+                }
+            }
+            return "Штука";
+        }
+
+        private async Task AddProductItemAsync(string productName)
+        {
+            if (ProductItems.Any(p => p.OriginalProduct.Equals(productName, StringComparison.OrdinalIgnoreCase)))
+            {
+                MessageBox.Show($"Товар '{productName}' уже существует в списке", "Внимание",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var item = new ProductItemViewModel
+            {
+                OriginalProduct = productName,
+                BitrixProducts = new ObservableCollection<Data.ScharedData.BitrixProductViewModel>(),
+                SelectedBitrixProduct = null,
+                Quantity = 1, // Значение по умолчанию
+                SelectedMeasureId = GetDefaultMeasureId() // Метод для получения ID по умолчанию
+            };
+
+            item.AddCommand = new RelayCommand(AddProduct);
+            item.RemoveCommand = new RelayCommand(RemoveProductItem);
+
+            ProductItems.Add(item);
+            UpdateItemsIndexes();
+
+            var currentProducts = ProductSelectionManager.GetProducts() ?? new List<string>();
+            if (!currentProducts.Contains(productName, StringComparer.OrdinalIgnoreCase))
+            {
+                currentProducts.Add(productName);
+                ProductSelectionManager.SetProducts(currentProducts);
+            }
+
+            _totalSearchTasks = 1;
+            _completedSearchTasks = 0;
+            ShowProgress($"Поиск: {productName}");
+
+            try
+            {
+                await SmartSearchProductsWithProgressAsync(item, productName);
+                UpdateProgress(1, 1, "Готово!");
+                await Task.Delay(500);
+            }
+            finally
+            {
+                HideProgress();
+            }
+        }
+
+        private string GetDefaultMeasureId()
+        {
+            // Ищем единицу измерения "Штука" по умолчанию
+            lock (_measuresLock)
+            {
+                var defaultMeasure = _measuresDictionary.Values
+                    .FirstOrDefault(m => (m.SYMBOL_RUS == "шт" || m.SYMBOL_RUS == "шт.") ||
+                                          m.MEASURE_TITLE == "Штука" ||
+                                          m.CODE == "796"); // Код для штук в Bitrix
+
+                if (defaultMeasure != null)
+                    return defaultMeasure.ID;
+            }
+            return null; // Если не нашли, вернется null, и будет использоваться "шт." по умолчанию
+        }
+        private async void Page_Loaded(object sender, RoutedEventArgs e)
+        {
+            await EnsureMeasuresLoaded();
+        }
+
 
         public ComparisonProduct()
         {
@@ -211,56 +375,7 @@ namespace ManagerApp.Pages
             }
         }
 
-        // Обновленный метод добавления товара
-        private async Task AddProductItemAsync(string productName)
-        {
-            if (ProductItems.Any(p => p.OriginalProduct.Equals(productName, StringComparison.OrdinalIgnoreCase)))
-            {
-                MessageBox.Show($"Товар '{productName}' уже существует в списке",
-                              "Внимание",
-                              MessageBoxButton.OK,
-                              MessageBoxImage.Warning);
-                return;
-            }
 
-            var item = new ProductItemViewModel
-            {
-                OriginalProduct = productName,
-                BitrixProducts = new ObservableCollection<Data.ScharedData.BitrixProductViewModel>(),
-                SelectedBitrixProduct = null
-            };
-
-            item.AddCommand = new RelayCommand(AddProduct);
-            item.RemoveCommand = new RelayCommand(RemoveProductItem);
-
-            ProductItems.Add(item);
-
-            // 👇 ДОБАВЬТЕ ЭТУ СТРОЧКУ
-            UpdateItemsIndexes();
-
-            var currentProducts = ProductSelectionManager.GetProducts() ?? new List<string>();
-            if (!currentProducts.Contains(productName, StringComparer.OrdinalIgnoreCase))
-            {
-                currentProducts.Add(productName);
-                ProductSelectionManager.SetProducts(currentProducts);
-            }
-
-            // Для одного товара показываем прогресс
-            _totalSearchTasks = 1;
-            _completedSearchTasks = 0;
-            ShowProgress($"Поиск: {productName}");
-
-            try
-            {
-                await SmartSearchProductsWithProgressAsync(item, productName);
-                UpdateProgress(1, 1, "Готово!");
-                await Task.Delay(500);
-            }
-            finally
-            {
-                HideProgress();
-            }
-        }
         public ComparisonProduct(List<string> products) : this()
         {
             if (products != null && products.Count > 0)
@@ -293,8 +408,22 @@ namespace ManagerApp.Pages
                         {
                             OriginalProduct = product,
                             BitrixProducts = new ObservableCollection<Data.ScharedData.BitrixProductViewModel>(),
-                            SelectedBitrixProduct = null
+                            SelectedBitrixProduct = null,
+                            Quantity = 1,
+                            SelectedMeasureId = GetDefaultMeasureId()
                         };
+
+                        // Установите символ и название для единицы измерения по умолчанию
+                        if (!string.IsNullOrEmpty(item.SelectedMeasureId))
+                        {
+                            item.MeasureSymbol = GetMeasureSymbol(item.SelectedMeasureId);
+                            item.MeasureName = GetMeasureName(item.SelectedMeasureId);
+                        }
+                        else
+                        {
+                            item.MeasureSymbol = "шт.";
+                            item.MeasureName = "Штука";
+                        }
 
                         item.AddCommand = new RelayCommand(AddProduct);
                         item.RemoveCommand = new RelayCommand(RemoveProductItem);
@@ -302,9 +431,7 @@ namespace ManagerApp.Pages
                         ProductItems.Add(item);
                     }
 
-                    // 👇 ДОБАВЬТЕ ЭТУ СТРОКУ - обновляем индексы
                     UpdateItemsIndexes();
-
                     await SmartSearchForAllProductsAsync();
                 }
             }
@@ -616,18 +743,111 @@ namespace ManagerApp.Pages
             {
                 await Task.Delay(300);
 
-                await Application.Current.Dispatcher.InvokeAsync(() =>
+                await Application.Current.Dispatcher.InvokeAsync(async () =>
                 {
                     var displayProduct = item.BitrixProducts.FirstOrDefault(p => p.ProductId == bestMatch.ProductId);
                     if (displayProduct != null)
                     {
                         item.SelectedBitrixProduct = displayProduct;
+
+                        // АВТОМАТИЧЕСКИ ПОДСТАВЛЯЕМ ЕДИНИЦУ ИЗМЕРЕНИЯ
+                        await AutoSetMeasureFromBitrixProduct(item, bestMatch);
+
                         Console.WriteLine($"✅ Автоматически выбрано: '{item.OriginalProduct}' → '{bestMatch.ProductName}'");
                     }
                 });
             }
         }
 
+        // Метод для автоматической подстановки единицы измерения из Bitrix
+        private async Task AutoSetMeasureFromBitrixProduct(ProductItemViewModel item, Data.ScharedData.BitrixProductViewModel selectedProduct)
+        {
+            try
+            {
+                // Пробуем получить детали товара из Bitrix
+                if (int.TryParse(selectedProduct.ProductId, out int productId) && productId > 0)
+                {
+                    var productDetail = await BitrixProductService.GetProductAsync(productId);
+
+                    if (productDetail != null && !string.IsNullOrEmpty(productDetail.MEASURE))
+                    {
+                        string measureId = productDetail.MEASURE;
+
+                        // Проверяем, существует ли такая единица измерения в нашем словаре
+                        lock (_measuresLock)
+                        {
+                            if (_measuresDictionary.TryGetValue(measureId, out var measure))
+                            {
+                                item.SelectedMeasureId = measureId;
+                                item.MeasureSymbol = measure.SYMBOL_RUS ?? measure.SYMBOL_INTL ?? "шт.";
+                                item.MeasureName = measure.MEASURE_TITLE ?? "Штука";
+
+                                Console.WriteLine($"✅ Автоматически установлена единица измерения: {item.MeasureSymbol} ({item.MeasureName}) для товара {item.OriginalProduct}");
+                                return;
+                            }
+                        }
+
+                        // Если единица измерения не найдена в словаре, пробуем загрузить её отдельно
+                        var singleMeasure = await GetMeasureById(measureId);
+                        if (singleMeasure != null)
+                        {
+                            lock (_measuresLock)
+                            {
+                                if (!_measuresDictionary.ContainsKey(measureId))
+                                {
+                                    _measuresDictionary[measureId] = singleMeasure;
+                                }
+                            }
+
+                            // Обновляем UI
+                            await Dispatcher.InvokeAsync(() =>
+                            {
+                                if (!AllMeasures.Any(m => m.ID == measureId))
+                                {
+                                    AllMeasures.Add(singleMeasure);
+                                }
+                            });
+
+                            item.SelectedMeasureId = measureId;
+                            item.MeasureSymbol = singleMeasure.SYMBOL_RUS ?? singleMeasure.SYMBOL_INTL ?? "шт.";
+                            item.MeasureName = singleMeasure.MEASURE_TITLE ?? "Штука";
+
+                            Console.WriteLine($"✅ Загружена и установлена единица измерения: {item.MeasureSymbol} для товара {item.OriginalProduct}");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при автоматической подстановке единицы измерения: {ex.Message}");
+            }
+        }
+
+        // Метод для получения единицы измерения по ID
+        private async Task<BitrixMeasure> GetMeasureById(string measureId)
+        {
+            try
+            {
+                using (var httpClient = new HttpClient())
+                {
+                    httpClient.Timeout = TimeSpan.FromSeconds(30);
+                    string apiUrl = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.measure.get.json?id={measureId}";
+
+                    var response = await httpClient.GetAsync(apiUrl);
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var json = await response.Content.ReadAsStringAsync();
+                        var result = JsonConvert.DeserializeObject<BitrixMeasureGetResponse>(json);
+                        return result?.Result;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка получения единицы измерения {measureId}: {ex.Message}");
+            }
+            return null;
+        }
         // Обработчики для ComboBox
         private async void ComboBox_DropDownOpened(object sender, EventArgs e)
         {
@@ -677,7 +897,7 @@ namespace ManagerApp.Pages
             }
         }
 
-        private void AddProduct(object parameter)
+        private async void AddProduct(object parameter)
         {
             if (parameter is ProductItemViewModel item)
             {
@@ -714,6 +934,9 @@ namespace ManagerApp.Pages
 
                         item.SelectedBitrixProduct = productToSelect;
 
+                        // АВТОМАТИЧЕСКИ ПОДСТАВЛЯЕМ ЕДИНИЦУ ИЗМЕРЕНИЯ
+                        await AutoSetMeasureFromBitrixProduct(item, productToSelect);
+
                         MessageBox.Show($"Добавлено сопоставление:\n" +
                                       $"Заявка: {item.OriginalProduct}\n" +
                                       $"Bitrix: {selectedProduct.ProductName}\n" +
@@ -730,54 +953,53 @@ namespace ManagerApp.Pages
 
         private async void btnNext_Click(object sender, RoutedEventArgs e)
         {
+            await EnsureMeasuresLoaded();
+
             BitrixService bitrixService = new BitrixService();
 
-            // Проверка 1: Есть ли вообще товары в списке
             if (!ProductItems.Any())
             {
                 MessageBox.Show("Список товаров пуст. Добавьте хотя бы один товар для сопоставления.",
-                              "Нет товаров",
-                              MessageBoxButton.OK,
-                              MessageBoxImage.Warning);
+                    "Нет товаров", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            // Итоговый список сопоставленных товаров
             var matchedProductList = new List<MatchedProduct>();
-
-            // Списки для разных типов товаров
             var unmatchedProducts = new List<ProductItemViewModel>();
 
-            // Обрабатываем все товары
             foreach (var item in ProductItems)
             {
-                if (item.SelectedBitrixProduct == null)
+                // Проверяем, выбран ли товар
+                bool isSelected = item.SelectedBitrixProduct != null &&
+                                  item.SelectedBitrixProduct.ProductId != "0" &&
+                                  item.SelectedBitrixProduct.ProductId != "-1" &&
+                                  !item.SelectedBitrixProduct.ProductName.Contains("-- Не выбран --") &&
+                                  !item.SelectedBitrixProduct.ProductName.Contains("❌ Товар не найден");
+
+                if (!isSelected)
                 {
-                    // Товар без выбора
                     unmatchedProducts.Add(item);
                     continue;
                 }
 
-                // Проверяем, не является ли выбранный товар пустым или "не найден"
-                if (item.SelectedBitrixProduct.ProductId == "0" ||
-                    item.SelectedBitrixProduct.ProductId == "-1" ||
-                    item.SelectedBitrixProduct.ProductName.Contains("-- Не выбран --") ||
-                    item.SelectedBitrixProduct.ProductName.Contains("❌ Товар не найден"))
-                {
-                    // Обрабатываем как несопоставленный товар
-                    unmatchedProducts.Add(item);
-                    continue;
-                }
-
-                // Безопасное преобразование ID
                 if (!int.TryParse(item.SelectedBitrixProduct?.ProductId, out int bitrixProductId) || bitrixProductId <= 0)
                 {
                     MessageBox.Show($"Некорректный ID товара для '{item.OriginalProduct}'",
-                                  "Ошибка",
-                                  MessageBoxButton.OK,
-                                  MessageBoxImage.Error);
+                        "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
+
+                // ВАЖНО: Используем количество и единицу измерения из item
+                string measureId = item.SelectedMeasureId;
+                string measureSymbol = !string.IsNullOrEmpty(item.MeasureSymbol) ? item.MeasureSymbol : GetMeasureSymbol(measureId);
+                string measureName = !string.IsNullOrEmpty(item.MeasureName) ? item.MeasureName : GetMeasureName(measureId);
+                decimal quantity = item.Quantity > 0 ? item.Quantity : 1;
+
+                Console.WriteLine($"Сохранение товара: {item.OriginalProduct}");
+                Console.WriteLine($"  Quantity: {quantity}");
+                Console.WriteLine($"  MeasureId: {measureId}");
+                Console.WriteLine($"  MeasureSymbol: {measureSymbol}");
+                Console.WriteLine($"  MeasureName: {measureName}");
 
                 var matchedProduct = new MatchedProduct
                 {
@@ -786,14 +1008,20 @@ namespace ManagerApp.Pages
                     BitrixProductName = item.SelectedBitrixProduct.ProductName,
                     BitrixPrice = item.SelectedBitrixProduct.Price,
                     CustomPrice = item.SelectedBitrixProduct.Price,
-                    Quantity = 1,
-                    Unit = "шт.",
-                    VAT = SettingsHelper.GetVATAsString()
+                    Quantity = quantity,  // ← Количество из item
+                    Unit = measureSymbol,  // ← Символ единицы измерения
+                    UnitFullName = measureName,  // ← Полное название единицы измерения
+                    VAT = SettingsHelper.GetVATAsString(),
+                    ProductQuantity = quantity,  // Сохраняем количество
+                    MeasureId = measureId,  // Сохраняем ID единицы измерения
+                    MeasureSymbol = measureSymbol,  // Сохраняем символ
+                    MeasureName = measureName,  // Сохраняем название
+                    Measure = measureId  // Для обратной совместимости
                 };
                 matchedProductList.Add(matchedProduct);
             }
 
-            // Проверяем несопоставленные товары
+            // Обработка несопоставленных товаров (оставляем без изменений)
             if (unmatchedProducts.Any())
             {
                 var result = MessageBox.Show($"Найдено {unmatchedProducts.Count} неподобранных товаров:\n\n" +
@@ -807,28 +1035,30 @@ namespace ManagerApp.Pages
                 {
                     try
                     {
-                        // Создаем каждый несопоставленный товар и сразу добавляем в список
                         foreach (var item in unmatchedProducts)
                         {
                             int createdProductId = await bitrixService.CreateProductAsync(item.OriginalProduct);
 
                             if (createdProductId > 0)
                             {
-                                // Сразу добавляем созданный товар в итоговый список
                                 var matchedProduct = new MatchedProduct
                                 {
                                     BitrixProductId = createdProductId,
                                     OriginalProductName = item.OriginalProduct,
-                                    BitrixProductName = item.OriginalProduct, // Используем оригинальное название
-                                    BitrixPrice = 0, // Цена по умолчанию
-                                    CustomPrice = 0, // Цена по умолчанию
-                                    Quantity = 1,
-                                    Unit = "шт.",
-                                    VAT = SettingsHelper.GetVATAsString()
+                                    BitrixProductName = item.OriginalProduct,
+                                    BitrixPrice = 0,
+                                    CustomPrice = 0,
+                                    Quantity = item.Quantity > 0 ? item.Quantity : 1,
+                                    Unit = item.MeasureSymbol ?? "шт.",
+                                    UnitFullName = item.MeasureName ?? "Штука",
+                                    VAT = SettingsHelper.GetVATAsString(),
+                                    ProductQuantity = item.Quantity > 0 ? item.Quantity : 1,
+                                    MeasureId = item.SelectedMeasureId,
+                                    MeasureSymbol = item.MeasureSymbol ?? "шт.",
+                                    MeasureName = item.MeasureName ?? "Штука",
+                                    Measure = item.SelectedMeasureId
                                 };
                                 matchedProductList.Add(matchedProduct);
-
-                                Console.WriteLine($"✅ Создан товар '{item.OriginalProduct}' (ID: {createdProductId})");
                             }
                             else
                             {
@@ -859,7 +1089,6 @@ namespace ManagerApp.Pages
                 }
             }
 
-            // Проверка: есть ли товары в итоговом списке
             if (!matchedProductList.Any())
             {
                 MessageBox.Show("Не удалось сформировать список товаров для обработки.",
@@ -869,8 +1098,10 @@ namespace ManagerApp.Pages
                 return;
             }
 
-            // Сохраняем и переходим на следующую страницу
+            // СОХРАНЯЕМ В МЕНЕДЖЕР
             PriceDataManager.SetMatchedProducts(matchedProductList);
+
+            // ПЕРЕДАЕМ СПИСОК В КОНСТРУКТОР
             var editPricePage = new EditPricePage(matchedProductList);
             NavigationService.Navigate(editPricePage);
         }
@@ -891,7 +1122,56 @@ namespace ManagerApp.Pages
         }
 
         #endregion
+        private void QuantityTextBox_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            foreach (char c in e.Text)
+            {
+                if (!char.IsDigit(c) && c != ',' && c != '.')
+                {
+                    e.Handled = true;
+                    return;
+                }
+            }
+        }
 
+        private void QuantityTextBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            var textBox = sender as TextBox;
+            if (textBox == null) return;
+
+            if (string.IsNullOrWhiteSpace(textBox.Text))
+            {
+                textBox.Text = "1";
+                return;
+            }
+
+            if (decimal.TryParse(textBox.Text, out var value))
+            {
+                if (value <= 0)
+                    value = 1;
+                textBox.Text = value.ToString("0.##");
+            }
+            else
+            {
+                textBox.Text = "1";
+            }
+        }
+
+        private async void ComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var comboBox = sender as ComboBox;
+            if (comboBox?.DataContext is ProductItemViewModel item)
+            {
+                // При ручном выборе товара из ComboBox
+                if (item.SelectedBitrixProduct != null &&
+                    item.SelectedBitrixProduct.ProductId != "0" &&
+                    item.SelectedBitrixProduct.ProductId != "-1")
+                {
+                    // Автоматически подставляем единицу измерения
+                    await AutoSetMeasureFromBitrixProduct(item, item.SelectedBitrixProduct);
+                }
+            }
+        }
 
 
 
@@ -1056,6 +1336,12 @@ namespace ManagerApp.Pages
     public class ProductItemViewModel : INotifyPropertyChanged
     {
         private int _index;
+        private string _originalProduct;
+        private Data.ScharedData.BitrixProductViewModel _selectedBitrixProduct;
+        private decimal _quantity = 1;
+        private string _selectedMeasureId;
+        private string _measureSymbol;
+        private string _measureName;
 
         public int Index
         {
@@ -1066,8 +1352,6 @@ namespace ManagerApp.Pages
                 OnPropertyChanged();
             }
         }
-        private string _originalProduct;
-        private Data.ScharedData.BitrixProductViewModel _selectedBitrixProduct;
 
         public string OriginalProduct
         {
@@ -1075,6 +1359,48 @@ namespace ManagerApp.Pages
             set
             {
                 _originalProduct = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public decimal Quantity
+        {
+            get => _quantity;
+            set
+            {
+                _quantity = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string SelectedMeasureId
+        {
+            get => _selectedMeasureId;
+            set
+            {
+                _selectedMeasureId = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(MeasureSymbol));
+                OnPropertyChanged(nameof(MeasureName));
+            }
+        }
+
+        public string MeasureSymbol
+        {
+            get => _measureSymbol;
+            set
+            {
+                _measureSymbol = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string MeasureName
+        {
+            get => _measureName;
+            set
+            {
+                _measureName = value;
                 OnPropertyChanged();
             }
         }
@@ -1128,6 +1454,11 @@ namespace ManagerApp.Pages
 
     #endregion
 
+    // Класс для ответа от Bitrix при получении единицы измерения
+    public class BitrixMeasureGetResponse
+    {
+        [JsonProperty("result")]
+        public BitrixMeasure Result { get; set; }
+    }
 
-   
 }
