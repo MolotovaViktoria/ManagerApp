@@ -200,15 +200,16 @@
                                HorizontalAlignment="Center"/>
                 </Border>
 
-                <!-- Панель с НДС и итогами -->
+                <!-- Панель с НДС и итогами и наценкой -->
                 <Border Grid.Row="1"
-                        Background="#F0F0F0"
-                        BorderBrush="#E0E0E0"
-                        BorderThickness="0,0,0,1"
-                        Padding="15,10">
+        Background="#F0F0F0"
+        BorderBrush="#E0E0E0"
+        BorderThickness="0,0,0,1"
+        Padding="15,10">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="Auto"/>
@@ -216,79 +217,140 @@
 
                         <!-- НДС -->
                         <StackPanel Grid.Column="0"
-                                    Orientation="Horizontal"
-                                    VerticalAlignment="Center"
-                                    Margin="10,0">
+                    Orientation="Horizontal"
+                    VerticalAlignment="Center"
+                    Margin="10,0">
                             <TextBlock Text="НДС: "
-                                       FontSize="14"
-                                       FontWeight="SemiBold"
-                                       Foreground="#333333"
-                                       VerticalAlignment="Center"/>
+                       FontSize="14"
+                       FontWeight="SemiBold"
+                       Foreground="#333333"
+                       VerticalAlignment="Center"/>
                             <TextBlock x:Name="txtVATValue"
-                                       Text="20"
-                                       FontSize="14"
-                                       FontWeight="Bold"
-                                       Foreground="#E2542A"
-                                       VerticalAlignment="Center"
-                                       Margin="2,0,0,0"/>
+                       Text="20"
+                       FontSize="14"
+                       FontWeight="Bold"
+                       Foreground="#E2542A"
+                       VerticalAlignment="Center"
+                       Margin="2,0,0,0"/>
                             <TextBlock Text="%"
-                                       FontSize="14"
-                                       FontWeight="SemiBold"
-                                       Foreground="#333333"
-                                       VerticalAlignment="Center"/>
+                       FontSize="14"
+                       FontWeight="SemiBold"
+                       Foreground="#333333"
+                       VerticalAlignment="Center"/>
                         </StackPanel>
 
-                        <!-- Итоговая сумма -->
-                        <StackPanel Grid.Column="2"
-                                    Orientation="Horizontal"
-                                    VerticalAlignment="Center"
-                                    Margin="20,0">
-                            <TextBlock Text="Итого: "
-                                       FontSize="14"
-                                       FontWeight="SemiBold"
-                                       Foreground="#333333"
-                                       VerticalAlignment="Center"/>
-                            <TextBlock x:Name="txtTotalSum"
-                                       Text="0.00"
-                                       FontSize="14"
-                                       FontWeight="Bold"
-                                       Foreground="#E2542A"
-                                       VerticalAlignment="Center"
-                                       Margin="2,0,0,0"/>
-                            <TextBlock Text=" ₽"
-                                       FontSize="14"
-                                       FontWeight="SemiBold"
-                                       Foreground="#333333"
-                                       VerticalAlignment="Center"/>
+                        <!-- Наценка -->
+                        <StackPanel Grid.Column="1"
+                    Orientation="Horizontal"
+                    VerticalAlignment="Center"
+                    Margin="20,0">
+                            <TextBlock Text="Наценка: "
+                       FontSize="14"
+                       FontWeight="SemiBold"
+                       Foreground="#333333"
+                       VerticalAlignment="Center"/>
+                            <ComboBox x:Name="cmbMarkup"
+                      Width="80"
+                      Height="32"
+                      FontSize="13"
+                      VerticalContentAlignment="Center"
+                      SelectedIndex="0"
+                      Margin="5,0">
+                                <ComboBoxItem Content="0%"/>
+                                <ComboBoxItem Content="5%"/>
+                                <ComboBoxItem Content="10%"/>
+                                <ComboBoxItem Content="15%"/>
+                                <ComboBoxItem Content="20%"/>
+                                <ComboBoxItem Content="25%"/>
+                                <ComboBoxItem Content="30%"/>
+                                <ComboBoxItem Content="35%"/>
+                                <ComboBoxItem Content="40%"/>
+                                <ComboBoxItem Content="45%"/>
+                                <ComboBoxItem Content="50%"/>
+                            </ComboBox>
                         </StackPanel>
 
-                        <!-- Кнопка пересчета --><!--
-                        <Button Grid.Column="3"
-                                Content="ПЕРЕСЧИТАТЬ"
-                                Width="120"
-                                Height="35"
-                                Background="#E2542A"
-                                Foreground="White"
-                                FontWeight="SemiBold"
-                                FontSize="12"
-                                BorderThickness="0"
-                                Click="btnRecalculate_Click">
+                        <!-- Кнопка применить наценку -->
+                        <Button Grid.Column="2"
+                Content="ПРИМЕНИТЬ НАЦЕНКУ"
+                Width="160"
+                Height="35"
+                Background="#E2542A"
+                Foreground="White"
+                FontWeight="SemiBold"
+                FontSize="12"
+                BorderThickness="0"
+                Click="btnApplyMarkup_Click"
+                Margin="10,0">
                             <Button.Style>
                                 <Style TargetType="Button">
                                     <Setter Property="Template">
                                         <Setter.Value>
                                             <ControlTemplate TargetType="Button">
                                                 <Border Background="{TemplateBinding Background}"
-                                                        CornerRadius="4">
+                                        CornerRadius="4">
                                                     <ContentPresenter HorizontalAlignment="Center"
-                                                                      VerticalAlignment="Center"/>
+                                                      VerticalAlignment="Center"/>
                                                 </Border>
                                             </ControlTemplate>
                                         </Setter.Value>
                                     </Setter>
                                 </Style>
                             </Button.Style>
-                        </Button>-->
+                        </Button>
+
+                        <!-- Кнопка применить ко всем -->
+                        <Button Grid.Column="3"
+                Content="ПРИМЕНИТЬ КО ВСЕМ"
+                Width="160"
+                Height="35"
+                Background="#E2542A"
+                Foreground="White"
+                FontWeight="SemiBold"
+                FontSize="12"
+                BorderThickness="0"
+                Click="btnApplyToAll_Click"
+                Margin="10,0">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}"
+                                        CornerRadius="4">
+                                                    <ContentPresenter HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"/>
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+
+                        <!-- Итоговая сумма -->
+                        <StackPanel Grid.Column="4"
+                    Orientation="Horizontal"
+                    VerticalAlignment="Center"
+                    Margin="20,0">
+                            <TextBlock Text="Итого: "
+                       FontSize="14"
+                       FontWeight="SemiBold"
+                       Foreground="#333333"
+                       VerticalAlignment="Center"/>
+                            <TextBlock x:Name="txtTotalSum"
+                       Text="0.00"
+                       FontSize="14"
+                       FontWeight="Bold"
+                       Foreground="#E2542A"
+                       VerticalAlignment="Center"
+                       Margin="2,0,0,0"/>
+                            <TextBlock Text=" ₽"
+                       FontSize="14"
+                       FontWeight="SemiBold"
+                       Foreground="#333333"
+                       VerticalAlignment="Center"/>
+                        </StackPanel>
                     </Grid>
                 </Border>
 
@@ -317,11 +379,13 @@
                               SelectionChanged="dataGridProducts_SelectionChanged">
 
                         <DataGrid.Columns>
-                            <!-- Колонка 1: Наименование товара (из заявки) -->
-                            <DataGridTextColumn Header="НАИМЕНОВАНИЕ ТОВАРА"
-                                                Binding="{Binding OriginalProductName}"
-                                                Width="280"
-                                                IsReadOnly="True">
+
+
+                            <!-- Колонка 0: Номер -->
+                            <DataGridTextColumn Header="№"
+                    Binding="{Binding Index}"
+                    Width="50"
+                    IsReadOnly="True">
                                 <DataGridTextColumn.HeaderStyle>
                                     <Style TargetType="DataGridColumnHeader">
                                         <Setter Property="Background" Value="#F8F8F8"/>
@@ -336,9 +400,8 @@
                                 </DataGridTextColumn.HeaderStyle>
                                 <DataGridTextColumn.ElementStyle>
                                     <Style TargetType="TextBlock">
-                                        <Setter Property="TextWrapping" Value="Wrap"/>
                                         <Setter Property="VerticalAlignment" Value="Center"/>
-                                        <Setter Property="HorizontalAlignment" Value="Left"/>
+                                        <Setter Property="HorizontalAlignment" Value="Center"/>
                                         <Setter Property="Padding" Value="10,5"/>
                                         <Setter Property="FontSize" Value="13"/>
                                     </Style>
@@ -401,10 +464,11 @@
                             </DataGridTextColumn>
 
                             <!-- Колонка 4: Закупочная цена -->
+
                             <DataGridTextColumn Header="ЗАКУПОЧНАЯ ЦЕНА"
-                                                Binding="{Binding PurchasingPrice, StringFormat='{}{0:#,##0.00} ₽'}"
-                                                Width="120"
-                                                IsReadOnly="True">
+                    Binding="{Binding PurchasingPrice, StringFormat='{}{0:#,##0.00} ₽'}"
+                    Width="120"
+                    IsReadOnly="True">
                                 <DataGridTextColumn.HeaderStyle>
                                     <Style TargetType="DataGridColumnHeader">
                                         <Setter Property="Background" Value="#F8F8F8"/>
@@ -423,7 +487,7 @@
                                         <Setter Property="HorizontalAlignment" Value="Center"/>
                                         <Setter Property="Padding" Value="10,5"/>
                                         <Setter Property="FontSize" Value="13"/>
-                                        <Setter Property="Foreground" Value="#1976D2"/>
+                                        <!-- Строку с Foreground удалил -->
                                     </Style>
                                 </DataGridTextColumn.ElementStyle>
                             </DataGridTextColumn>
@@ -449,7 +513,7 @@
                                                     RelativeSource={RelativeSource AncestorType={x:Type Page}}}"
                                                   SelectedValue="{Binding SelectedMeasureId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                                   SelectedValuePath="ID"
-                                                  DisplayMemberPath="MEASURE_TITLE"
+                                                  DisplayMemberPath="SYMBOL_RUS"
                                                   Width="160"
                                                   Height="30"
                                                   FontSize="13"
@@ -642,7 +706,12 @@
                             <Style TargetType="DataGridRow">
                                 <Setter Property="BorderBrush" Value="#F0F0F0"/>
                                 <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                                <Style.Resources>
+                                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#A6A7A8"/>
+                                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#333333"/>
+                                </Style.Resources>
                             </Style>
+                          
                         </DataGrid.RowStyle>
                     </DataGrid>
                 </ScrollViewer>

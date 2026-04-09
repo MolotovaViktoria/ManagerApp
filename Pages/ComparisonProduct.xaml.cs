@@ -8,12 +8,14 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 
 namespace ManagerApp.Pages
@@ -23,6 +25,7 @@ namespace ManagerApp.Pages
         public ObservableCollection<ProductItemViewModel> ProductItems { get; set; }
         private BitrixProductMatcher _productMatcher;
         private bool _isLoading = false;
+        public int Index { get; set; }
         private Dictionary<string, List<Data.ScharedData.BitrixProductViewModel>> _searchCache = new Dictionary<string, List<Data.ScharedData.BitrixProductViewModel>>();
 
         public ComparisonProduct()
@@ -232,6 +235,9 @@ namespace ManagerApp.Pages
 
             ProductItems.Add(item);
 
+            // 👇 ДОБАВЬТЕ ЭТУ СТРОЧКУ
+            UpdateItemsIndexes();
+
             var currentProducts = ProductSelectionManager.GetProducts() ?? new List<string>();
             if (!currentProducts.Contains(productName, StringComparer.OrdinalIgnoreCase))
             {
@@ -279,6 +285,7 @@ namespace ManagerApp.Pages
                 else
                 {
                     ProductItems.Clear();
+                    UpdateItemsIndexes();
 
                     foreach (var product in products.Distinct(StringComparer.OrdinalIgnoreCase))
                     {
@@ -295,12 +302,24 @@ namespace ManagerApp.Pages
                         ProductItems.Add(item);
                     }
 
+                    // 👇 ДОБАВЬТЕ ЭТУ СТРОКУ - обновляем индексы
+                    UpdateItemsIndexes();
+
                     await SmartSearchForAllProductsAsync();
                 }
             }
             finally
             {
                 _isLoading = false;
+            }
+        }
+
+        // 👇 ДОБАВЬТЕ ЭТОТ МЕТОД В КЛАСС ComparisonProduct
+        private void UpdateItemsIndexes()
+        {
+            for (int i = 0; i < ProductItems.Count; i++)
+            {
+                ProductItems[i].Index = i + 1;
             }
         }
 
@@ -974,6 +993,9 @@ namespace ManagerApp.Pages
                 {
                     ProductItems.Remove(item);
 
+                    // 👇 ДОБАВЬТЕ ЭТУ СТРОЧКУ
+                    UpdateItemsIndexes();
+
                     var currentProducts = ProductSelectionManager.GetProducts()?.ToList() ?? new List<string>();
                     currentProducts.RemoveAll(p => p.Equals(item.OriginalProduct, StringComparison.OrdinalIgnoreCase));
                     ProductSelectionManager.SetProducts(currentProducts);
@@ -1017,6 +1039,7 @@ namespace ManagerApp.Pages
                 }
 
                 ProductItems.Clear();
+                UpdateItemsIndexes();
                 ProductSelectionManager.ClearProducts();
                 _searchCache.Clear();
 
@@ -1032,6 +1055,17 @@ namespace ManagerApp.Pages
 
     public class ProductItemViewModel : INotifyPropertyChanged
     {
+        private int _index;
+
+        public int Index
+        {
+            get => _index;
+            set
+            {
+                _index = value;
+                OnPropertyChanged();
+            }
+        }
         private string _originalProduct;
         private Data.ScharedData.BitrixProductViewModel _selectedBitrixProduct;
 
@@ -1093,4 +1127,7 @@ namespace ManagerApp.Pages
     }
 
     #endregion
+
+
+   
 }

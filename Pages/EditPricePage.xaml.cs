@@ -12,7 +12,9 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Media;
 using static ManagerApp.Pages.NullableDecimalConverter;
 
 namespace ManagerApp.Pages
@@ -47,6 +49,246 @@ namespace ManagerApp.Pages
             }
         }
 
+        private async void CustomPriceTextBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                var textBox = sender as TextBox;
+                if (textBox != null)
+                {
+                    // Сохраняем значение в текущем TextBox
+                    textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+
+                    // Получаем текущую строку
+                    var currentRow = FindParent<DataGridRow>(textBox);
+                    if (currentRow != null)
+                    {
+                        var dataGrid = FindParent<DataGrid>(textBox);
+                        if (dataGrid != null)
+                        {
+                            // Получаем индекс текущей строки
+                            int currentIndex = dataGrid.Items.IndexOf(currentRow.DataContext);
+
+                            // Проверяем, есть ли следующая строка
+                            if (currentIndex + 1 < dataGrid.Items.Count)
+                            {
+                                var nextItem = dataGrid.Items[currentIndex + 1];
+
+                                // Сначала снимаем фокус с текущего TextBox
+                                Keyboard.ClearFocus();
+
+                                // Небольшая задержка перед переключением
+                                await Task.Delay(50);
+
+                                // Перемещаемся на следующую строку
+                                dataGrid.SelectedItem = nextItem;
+                                dataGrid.ScrollIntoView(nextItem);
+
+                                // Ждем отрисовки
+                                await Task.Delay(50);
+
+                                // Находим ячейку "Своя цена" и переводим в режим редактирования
+                                var nextRow = dataGrid.ItemContainerGenerator.ContainerFromItem(nextItem) as DataGridRow;
+                                if (nextRow == null)
+                                {
+                                    // Если строка еще не создана, принудительно прокручиваем
+                                    dataGrid.ScrollIntoView(nextItem);
+                                    await Task.Delay(50);
+                                    nextRow = dataGrid.ItemContainerGenerator.ContainerFromItem(nextItem) as DataGridRow;
+                                }
+
+                                if (nextRow != null)
+                                {
+                                    // Находим ячейку в колонке "Своя цена" (индекс 7)
+                                    var cell = GetCell(dataGrid, nextRow, 7);
+                                    if (cell != null)
+                                    {
+                                        // Устанавливаем текущую ячейку
+                                        dataGrid.CurrentCell = new DataGridCellInfo(cell, dataGrid.Columns[7]);
+
+                                        // Начинаем редактирование
+                                        dataGrid.BeginEdit();
+
+                                        // Находим TextBox в ячейке
+                                        await Task.Delay(50);
+                                        var nextTextBox = FindVisualChild<TextBox>(cell);
+                                        if (nextTextBox != null)
+                                        {
+                                            nextTextBox.Focus();
+                                            nextTextBox.SelectAll();
+                                        }
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                // Если последняя строка, просто выделяем текст
+                                textBox.Focus();
+                                textBox.SelectAll();
+                            }
+                        }
+                    }
+                }
+                e.Handled = true;
+            }
+        }
+
+
+
+
+        // Вспомогательные методы
+        private T FindParent<T>(DependencyObject child) where T : DependencyObject
+        {
+            while (child != null)
+            {
+                if (child is T parent)
+                    return parent;
+                child = VisualTreeHelper.GetParent(child);
+            }
+            return null;
+        }
+
+        private DataGridCell GetCell(DataGrid dataGrid, DataGridRow row, int columnIndex)
+        {
+            if (row == null) return null;
+
+            var presenter = FindVisualChild<DataGridCellsPresenter>(row);
+            if (presenter == null) return null;
+
+            // Прокручиваем к нужной колонке
+            dataGrid.ScrollIntoView(row, dataGrid.Columns[columnIndex]);
+
+            var cell = presenter.ItemContainerGenerator.ContainerFromIndex(columnIndex) as DataGridCell;
+            return cell;
+        }
+
+        private T FindVisualChild<T>(DependencyObject obj) where T : DependencyObject
+        {
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(obj); i++)
+            {
+                var child = VisualTreeHelper.GetChild(obj, i);
+                if (child != null && child is T)
+                    return (T)child;
+
+                var childOfChild = FindVisualChild<T>(child);
+                if (childOfChild != null)
+                    return childOfChild;
+            }
+            return null;
+        }
+        // Обработчик кнопки "ПРИМЕНИТЬ НАЦЕНКУ" (для текущего выбранного товара)
+        private void btnApplyMarkup_Click(object sender, RoutedEventArgs e)
+        {
+            // Получаем выбранный товар
+            var selectedProduct = dataGridProducts.SelectedItem as ProductPriceViewModel;
+            if (selectedProduct == null)
+            {
+                MessageBox.Show("Выберите товар, к которому хотите применить наценку.",
+                                "Внимание", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // Получаем процент наценки
+            var selectedItem = cmbMarkup.SelectedItem as ComboBoxItem;
+            if (selectedItem == null) return;
+
+            string markupText = selectedItem.Content.ToString().Replace("%", "");
+            if (!decimal.TryParse(markupText, out decimal markupPercent))
+            {
+                markupPercent = 0;
+            }
+
+            // Рассчитываем цену с наценкой от закупочной цены
+            decimal newPrice = selectedProduct.PurchasingPrice * (1 + markupPercent / 100);
+
+            // Если закупочная цена 0, используем розничную
+            if (selectedProduct.PurchasingPrice == 0 && selectedProduct.BitrixPrice > 0)
+            {
+                newPrice = selectedProduct.BitrixPrice * (1 + markupPercent / 100);
+            }
+
+            selectedProduct.CustomPrice = Math.Round(newPrice, 2);
+
+            MessageBox.Show($"Применена наценка {markupPercent}%\n" +
+                            $"Новая цена: {selectedProduct.CustomPrice:#,##0.00} ₽",
+                            "Готово", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        // Обработчик кнопки "ПРИМЕНИТЬ КО ВСЕМ"
+        private void btnApplyToAll_Click(object sender, RoutedEventArgs e)
+        {
+            if (!Products.Any())
+            {
+                MessageBox.Show("Нет товаров для применения наценки.",
+                                "Внимание", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // Получаем процент наценки
+            var selectedItem = cmbMarkup.SelectedItem as ComboBoxItem;
+            if (selectedItem == null) return;
+
+            string markupText = selectedItem.Content.ToString().Replace("%", "");
+            if (!decimal.TryParse(markupText, out decimal markupPercent))
+            {
+                markupPercent = 0;
+            }
+
+            int updatedCount = 0;
+            int zeroPriceCount = 0;
+
+            foreach (var product in Products)
+            {
+                decimal newPrice = 0;
+
+                // Пытаемся рассчитать от закупочной цены
+                if (product.PurchasingPrice > 0)
+                {
+                    newPrice = product.PurchasingPrice * (1 + markupPercent / 100);
+                }
+                // Если закупочной нет, используем розничную
+                else if (product.BitrixPrice > 0)
+                {
+                    newPrice = product.BitrixPrice * (1 + markupPercent / 100);
+                }
+                else
+                {
+                    zeroPriceCount++;
+                    continue;
+                }
+
+                product.CustomPrice = Math.Round(newPrice, 2);
+                updatedCount++;
+            }
+
+            string message = $"Применена наценка {markupPercent}% к {updatedCount} товарам.";
+            if (zeroPriceCount > 0)
+            {
+                message += $"\n{zeroPriceCount} товаров пропущено (нет закупочной и розничной цены).";
+            }
+
+            MessageBox.Show(message, "Готово", MessageBoxButton.OK, MessageBoxImage.Information);
+            CalculateTotal();
+        }
+
+        // Дополнительно: метод для применения наценки к конкретному товару по правой кнопке
+        private void ApplyMarkupToProduct(ProductPriceViewModel product, decimal markupPercent)
+        {
+            if (product == null) return;
+
+            decimal newPrice = 0;
+
+            if (product.PurchasingPrice > 0)
+            {
+                newPrice = product.PurchasingPrice * (1 + markupPercent / 100);
+            }
+            else if (product.BitrixPrice > 0)
+            {
+                newPrice = product.BitrixPrice * (1 + markupPercent / 100);
+            }
+
+            product.CustomPrice = Math.Round(newPrice, 2);
+        }
         private string _vatValue;
         public string VATValue
         {
@@ -665,7 +907,15 @@ namespace ManagerApp.Pages
 
         private void DataGrid_LoadingRow(object sender, DataGridRowEventArgs e)
         {
+            // Показываем номер в заголовке строки (слева)
             e.Row.Header = (e.Row.GetIndex() + 1).ToString();
+
+            // Если хотите показывать в колонке, нужно добавить свойство в ViewModel
+            var product = e.Row.DataContext as ProductPriceViewModel;
+            if (product != null)
+            {
+                product.Index = e.Row.GetIndex() + 1;
+            }
         }
 
         private void DataGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
@@ -1065,6 +1315,16 @@ namespace ManagerApp.Pages
     // Класс ProductPriceViewModel
     public class ProductPriceViewModel : INotifyPropertyChanged
     {
+        private int _index;
+        public int Index
+        {
+            get => _index;
+            set
+            {
+                _index = value;
+                OnPropertyChanged(nameof(Index));
+            }
+        }
         public int BitrixProductId { get; set; }
         public string OriginalProductName { get; set; }
         public string BitrixProductName { get; set; }
