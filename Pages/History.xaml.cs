@@ -155,22 +155,34 @@ namespace ManagerApp.Pages
                 var matchedProducts = new List<ManagerApp.Data.ScharedData.MatchedProduct>();
                 foreach (var product in products)
                 {
+                    // ОТЛАДКА - выводим что пришло из парсинга
+                    Console.WriteLine($"=== ИЗ ПАРСИНГА ===");
+                    Console.WriteLine($"Название: {product.Name}");
+                    Console.WriteLine($"Количество: {product.Quantity}");
+                    Console.WriteLine($"Цена: {product.Price}");
+                    Console.WriteLine($"Ед.изм: {product.MeasureSymbol}");
+
+                    decimal priceWithoutVAT = product.Price * 0.78m;
+                    priceWithoutVAT = Math.Round(priceWithoutVAT, 2);
+
                     matchedProducts.Add(new ManagerApp.Data.ScharedData.MatchedProduct
                     {
                         OriginalProductName = product.Name,
                         BitrixProductName = product.Name,
                         Quantity = product.Quantity,
+                        ProductQuantity = product.Quantity,  // ← ДОБАВЬТЕ ЭТУ СТРОКУ
                         Unit = product.MeasureName,
                         UnitFullName = product.MeasureName,
                         MeasureSymbol = product.MeasureSymbol,
                         MeasureName = product.MeasureName,
                         MeasureId = product.MeasureId,
-                        CustomPrice = 0, // Цена будет заполнена в EditPricePage
+                        CustomPrice = priceWithoutVAT,
                         BitrixPrice = 0,
                         VAT = SettingsHelper.GetVATAsString()
                     });
-                }
 
+                    Console.WriteLine($"=== ДОБАВЛЕНО В MatchedProduct с Quantity: {matchedProducts.Last().Quantity} ===");
+                }
                 // Сохраняем в менеджер
                 PriceDataManager.SetMatchedProducts(matchedProducts);
 
@@ -192,130 +204,97 @@ namespace ManagerApp.Pages
         /// <summary>
         /// Извлечение товаров из текста счета (без AI)
         /// </summary>
+        /// <summary>
+        /// Извлечение товаров из текста счета (без AI)
+        /// </summary>
+        /// <summary>
+        /// Извлечение товаров из текста счета (без AI)
+        /// </summary>
+        /// <summary>
+        /// Извлечение товаров из текста счета (без AI)
+        /// </summary>
+        /// <summary>
+        /// Извлечение товаров из текста счета (без AI)
+        /// </summary>
+        /// <summary>
+        /// Извлечение товаров из текста счета (без AI)
+        /// </summary>
+        /// <summary>
+        /// Извлечение товаров из текста счета (без AI)
+        /// </summary>
         private List<ExtractedProductInfo> ExtractProductsFromInvoiceText(string text)
         {
             var products = new List<ExtractedProductInfo>();
 
             try
             {
-                // Ищем таблицу с товарами в счете
-                // Обычно таблица начинается после строки "№	Товары (работы, услуги)	Количество	Цена	Сумма"
-                int tableStart = text.IndexOf("№");
-                if (tableStart == -1) tableStart = text.IndexOf("Товары");
+                // Находим строки с товарами по паттерну: номер товара, потом название, потом число (количество)
+                var lines = text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
 
-                int tableEnd = text.IndexOf("Итого:", tableStart);
-                if (tableEnd == -1) tableEnd = text.IndexOf("Всего наименований", tableStart);
-                if (tableEnd == -1) tableEnd = text.Length;
-
-                if (tableStart >= 0)
+                foreach (string line in lines)
                 {
-                    string tableText = text.Substring(tableStart, Math.Min(tableEnd - tableStart, 10000));
-                    var lines = tableText.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-
-                    // Регулярное выражение для поиска строки товара
-                    // Формат: "1	Название товара	1	шт	20.33	20.33"
-                    var productRegex = new Regex(
-                        @"^(\d+)\s+(.+?)\s+(\d+(?:[.,]\d+)?)\s+(шт|м|кг|л|упак|ШТ|М|КГ|Л)\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)",
-                        RegexOptions.IgnoreCase | RegexOptions.Multiline);
-
-                    foreach (string line in lines)
+                    // Ищем строки, которые начинаются с цифры и содержат "м" или "шт"
+                    if (Regex.IsMatch(line, @"^\d+\s+") && (line.Contains("м") || line.Contains("шт")))
                     {
-                        var match = productRegex.Match(line);
-                        if (match.Success)
+                        // Разбиваем строку по пробелам и табуляции
+                        var parts = Regex.Split(line.Trim(), @"\s+");
+                        if (parts.Length >= 5)
                         {
-                            string name = match.Groups[2].Value.Trim();
-                            string quantityStr = match.Groups[3].Value.Replace('.', ',');
-                            string measure = match.Groups[4].Value.ToLower();
+                            // Номер товара - первый элемент
+                            string productName = "";
+                            decimal quantity = 0;
+                            string measure = "";
+                            decimal price = 0;
 
-                            if (measure == "шт") measure = "шт";
-                            else if (measure == "м") measure = "м";
-                            else if (measure == "кг") measure = "кг";
-                            else if (measure == "л") measure = "л";
-                            else if (measure == "упак") measure = "упак";
-
-                            decimal quantity = 1;
-                            if (decimal.TryParse(quantityStr, out decimal qty))
-                                quantity = qty;
-
-                            var product = new ExtractedProductInfo
+                            // Ищем количество (целое число, не содержащее точку)
+                            for (int i = 1; i < parts.Length; i++)
                             {
-                                Name = name,
-                                Quantity = quantity,
-                                MeasureSymbol = measure,
-                                MeasureName = GetMeasureFullName(measure),
-                                Description = "" // В счете обычно нет подробного описания
-                            };
-
-                            products.Add(product);
-                            Console.WriteLine($"Найден товар: {product.Name} - {product.Quantity} {product.MeasureSymbol}");
-                        }
-                    }
-                }
-
-                // Если регуляркой не нашли, пробуем другой подход - ищем строки с табуляцией
-                if (products.Count == 0)
-                {
-                    var lines = text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-                    foreach (var line in lines)
-                    {
-                        // Ищем строки с цифрами и "шт"
-                        if (line.Contains("шт") || line.Contains("ШТ"))
-                        {
-                            var parts = line.Split(new[] { '\t' }, StringSplitOptions.RemoveEmptyEntries);
-                            if (parts.Length >= 3)
-                            {
-                                string name = parts[0].Trim();
-                                // Убираем номер в начале
-                                name = Regex.Replace(name, @"^\d+\s+", "");
-
-                                string quantityStr = "";
-                                string measure = "шт";
-
-                                for (int i = 0; i < parts.Length; i++)
+                                if (Regex.IsMatch(parts[i], @"^\d+$") && !parts[i].Contains("."))
                                 {
-                                    if (parts[i].Trim().ToLower() == "шт" && i > 0)
+                                    quantity = decimal.Parse(parts[i]);
+                                    // Название - все что между номером и количеством
+                                    productName = string.Join(" ", parts.Skip(1).Take(i - 1));
+
+                                    // Единица измерения - следующий элемент после количества
+                                    if (i + 1 < parts.Length && (parts[i + 1] == "м" || parts[i + 1] == "шт"))
                                     {
-                                        quantityStr = parts[i - 1].Trim();
-                                        break;
+                                        measure = parts[i + 1];
+
+                                        // Цена - следующий элемент после единицы измерения
+                                        if (i + 2 < parts.Length)
+                                        {
+                                            string priceStr = parts[i + 2].Replace(".", ",");
+                                            decimal.TryParse(priceStr, out price);
+                                        }
                                     }
+                                    break;
                                 }
+                            }
 
-                                if (string.IsNullOrEmpty(quantityStr) && parts.Length > 1)
+                            if (quantity > 0 && !string.IsNullOrEmpty(productName) && !string.IsNullOrEmpty(measure))
+                            {
+                                var product = new ExtractedProductInfo
                                 {
-                                    quantityStr = parts[1].Trim();
-                                }
-
-                                decimal quantity = 1;
-                                if (decimal.TryParse(quantityStr, out decimal qty))
-                                    quantity = qty;
-
-                                if (!string.IsNullOrEmpty(name) && name.Length > 2)
-                                {
-                                    var product = new ExtractedProductInfo
-                                    {
-                                        Name = name,
-                                        Quantity = quantity,
-                                        MeasureSymbol = measure,
-                                        MeasureName = GetMeasureFullName(measure),
-                                        Description = ""
-                                    };
-                                    products.Add(product);
-                                }
+                                    Name = productName.Trim(),
+                                    Quantity = quantity,
+                                    MeasureSymbol = measure == "м" ? "м" : "шт",
+                                    MeasureName = GetMeasureFullName(measure),
+                                    Description = "",
+                                    Price = price
+                                };
+                                products.Add(product);
+                                Console.WriteLine($"✅ Найден товар: {product.Name}, Количество: {product.Quantity}, Цена: {product.Price}");
                             }
                         }
                     }
                 }
+
+                Console.WriteLine($"=== ВСЕГО НАЙДЕНО ТОВАРОВ: {products.Count} ===");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Ошибка парсинга счета: {ex.Message}");
             }
-
-            // Удаляем дубликаты
-            products = products
-                .GroupBy(p => p.Name)
-                .Select(g => g.First())
-                .ToList();
 
             return products;
         }

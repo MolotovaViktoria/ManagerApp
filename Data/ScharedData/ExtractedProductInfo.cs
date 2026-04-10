@@ -8,6 +8,7 @@
         public string MeasureSymbol { get; set; }
         public string MeasureName { get; set; }
         public string Description { get; set; }
+        public decimal Price { get; set; }  // ДОБАВЬТЕ ЭТО ПОЛЕ
 
         public ExtractedProductInfo()
         {

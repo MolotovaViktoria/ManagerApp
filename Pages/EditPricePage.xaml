@@ -492,7 +492,7 @@
                                 </DataGridTextColumn.ElementStyle>
                             </DataGridTextColumn>
 
-                            <!-- Колонка 6: Количество (редактируемое) -->
+                            <!-- Колонка 6: Количество (только для чтения) -->
                             <DataGridTemplateColumn Header="КОЛИЧЕСТВО"
                         Width="120">
                                 <DataGridTemplateColumn.HeaderStyle>
@@ -509,27 +509,15 @@
                                 </DataGridTemplateColumn.HeaderStyle>
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <TextBox Text="{Binding Quantity, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                     Width="100"
-                     Height="30"
-                     FontSize="13"
-                     TextAlignment="Center"
-                     VerticalContentAlignment="Center"
-                     BorderBrush="#E0E0E0"
-                     BorderThickness="1"
-                     Padding="5,0"
-                     PreviewTextInput="TextBoxQuantity_PreviewTextInput"
-                     LostFocus="TextBox_LostFocus">
-                                            <TextBox.Style>
-                                                <Style TargetType="TextBox">
-                                                    <Style.Triggers>
-                                                        <Trigger Property="IsFocused" Value="True">
-                                                            <Setter Property="BorderBrush" Value="#E2542A"/>
-                                                        </Trigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBox.Style>
-                                        </TextBox>
+                                        <TextBlock Text="{Binding Quantity, StringFormat='{}{0:#,##0.##}'}"
+                       Width="100"
+                       Height="30"
+                       FontSize="13"
+                       TextAlignment="Center"
+                       VerticalAlignment="Center"
+                       Padding="5,0"
+                       Background="#F5F5F5"
+                       Foreground="#666666"/>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>

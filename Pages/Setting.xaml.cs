@@ -85,7 +85,7 @@ namespace ManagerApp.Pages
         private void SetButtonsEnabled(bool enabled)
         {
             btnRefreshCache.IsEnabled = enabled;
-            btnReadManual.IsEnabled = enabled;
+            //btnReadManual.IsEnabled = enabled;
             btnSave.IsEnabled = enabled;
             btnClose.IsEnabled = enabled;
         }
