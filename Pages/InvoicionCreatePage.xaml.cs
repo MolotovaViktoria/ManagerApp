@@ -900,18 +900,46 @@ namespace ManagerApp.Pages
         {
             try
             {
-                using (MemoryStream stream = new MemoryStream(documentBytes))
-                using (WordprocessingDocument doc = WordprocessingDocument.Open(stream, true))
+                // Копируем в MemoryStream с возможностью записи
+                using (MemoryStream memoryStream = new MemoryStream())
                 {
-                    // Находим все текстовые элементы в документе
-                    foreach (Text text in doc.MainDocumentPart.Document.Descendants<Text>())
+                    // Сначала копируем исходные данные в новый поток
+                    memoryStream.Write(documentBytes, 0, documentBytes.Length);
+                    memoryStream.Position = 0;
+
+                    // Открываем документ для редактирования
+                    using (WordprocessingDocument doc = WordprocessingDocument.Open(memoryStream, true))
                     {
-                        // Заменяем символ рубля в тексте
-                        text.Text = text.Text.Replace("₽", "").Replace(" ₽", "").Trim();
+                        // Проверяем, есть ли MainDocumentPart
+                        if (doc.MainDocumentPart == null)
+                            return documentBytes;
+
+                        // Находим все текстовые элементы в документе
+                        var texts = doc.MainDocumentPart.Document.Descendants<Text>().ToList();
+
+                        foreach (Text text in texts)
+                        {
+                            if (!string.IsNullOrEmpty(text.Text))
+                            {
+                                // Заменяем символ рубля и убираем лишние пробелы
+                                string newText = text.Text
+                                    .Replace("₽", "")
+                                    .Replace(" ₽", "")
+                                    .Trim();
+
+                                if (text.Text != newText)
+                                {
+                                    text.Text = newText;
+                                }
+                            }
+                        }
+
+                        // Сохраняем изменения
+                        doc.MainDocumentPart.Document.Save();
                     }
 
-                    doc.Save();
-                    return stream.ToArray();
+                    // Возвращаем измененный массив байтов
+                    return memoryStream.ToArray();
                 }
             }
             catch (Exception ex)

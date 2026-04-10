@@ -728,11 +728,32 @@ namespace ManagerApp.Pages
 
         private void btnBack_Click(object sender, RoutedEventArgs e)
         {
+            // Сохраняем текущие данные
             SaveProductsToManager();
-            if (NavigationService.CanGoBack)
+
+            // Получаем сохраненные товары
+            var matchedProducts = PriceDataManager.GetMatchedProducts();
+
+            if (matchedProducts != null && matchedProducts.Count > 0)
             {
-                NavigationService.GoBack();
+                // Конвертируем MatchedProduct в ExtractedProductInfo для ComparisonProduct
+                var extractedProducts = matchedProducts.Select(mp => new ExtractedProductInfo
+                {
+                    Name = mp.OriginalProductName,
+                    Quantity = mp.Quantity,
+                    MeasureSymbol = mp.MeasureSymbol ?? "шт",
+                    MeasureName = mp.MeasureName ?? "Штука",
+                    MeasureId = mp.MeasureId,
+                    Description = mp.Description ?? ""
+                }).ToList();
+
+                // Сохраняем в менеджер для ComparisonProduct
+                ProductSelectionManager.SetExtractedProducts(extractedProducts);
             }
+
+            // ПРЯМОЙ ПЕРЕХОД НА ComparisonProduct, а не назад по истории
+            var comparisonPage = new ComparisonProduct();
+            NavigationService.Navigate(comparisonPage);
         }
 
         private void btnNext_Click(object sender, RoutedEventArgs e)
