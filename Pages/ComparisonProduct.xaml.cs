@@ -1012,10 +1012,13 @@ namespace ManagerApp.Pages
 
         private void btnBack_Click(object sender, RoutedEventArgs e)
         {
-            if (NavigationService.CanGoBack)
-            {
-                NavigationService.GoBack();
-            }
+            // Очищаем данные в менеджерах
+            PriceDataManager.ClearMatchedProducts();
+            ProductSelectionManager.ClearProducts();
+
+            // Переходим на DombPage
+            var dombPage = new DombPage();
+            NavigationService.Navigate(dombPage);
         }
 
         private async void AddProduct(object parameter)
