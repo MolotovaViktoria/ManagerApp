@@ -286,6 +286,7 @@
     <Compile Include="Data\GetInfo\CacheFileManager.cs" />
     <Compile Include="Data\ScharedData\BitrixProductViewModel.cs" />
     <Compile Include="Data\ScharedData\BitrixPurchasePriceService.cs" />
+    <Compile Include="Data\ScharedData\ExtractedProductInfo.cs" />
     <Compile Include="Data\ScharedData\MatchedProduct.cs" />
     <Compile Include="Data\ScharedData\PriceDataManager.cs" />
     <Compile Include="Data\ScharedData\ProductDataManager.cs" />

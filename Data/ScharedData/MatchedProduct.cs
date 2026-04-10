@@ -22,6 +22,8 @@ namespace ManagerApp.Data.ScharedData
         public decimal TotalWithVAT { get; set; }
         public decimal PurchasingPrice { get; set; }
         public string Measure { get; set; }
+        public string Description { get; set; }  // Добавьте это поле
+
 
         // НОВЫЕ ПОЛЯ
         public decimal ProductQuantity { get; set; } = 1;

@@ -1,4 +1,5 @@
 ﻿using ManagerApp.Data.ScharedData;
+using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -13,6 +14,22 @@ public class ProductItemViewModel : INotifyPropertyChanged
     private string _selectedMeasureId;
     private string _measureSymbol;
     private string _measureName;
+    private string _description;
+    private ObservableCollection<BitrixProductViewModel> _bitrixProducts;
+
+    public string Description
+    {
+        get => _description;
+        set
+        {
+            if (_description != value)
+            {
+                _description = value;
+                OnPropertyChanged();
+                Console.WriteLine($"✅ Описание обновлено для {OriginalProduct}: {_description?.Substring(0, Math.Min(50, _description?.Length ?? 0))}...");
+            }
+        }
+    }
 
     public int Index
     {
@@ -29,8 +46,11 @@ public class ProductItemViewModel : INotifyPropertyChanged
         get => _originalProduct;
         set
         {
-            _originalProduct = value;
-            OnPropertyChanged();
+            if (_originalProduct != value)
+            {
+                _originalProduct = value;
+                OnPropertyChanged();
+            }
         }
     }
 
@@ -39,8 +59,11 @@ public class ProductItemViewModel : INotifyPropertyChanged
         get => _quantity;
         set
         {
-            _quantity = value;
-            OnPropertyChanged();
+            if (_quantity != value)
+            {
+                _quantity = value;
+                OnPropertyChanged();
+            }
         }
     }
 
@@ -49,10 +72,13 @@ public class ProductItemViewModel : INotifyPropertyChanged
         get => _selectedMeasureId;
         set
         {
-            _selectedMeasureId = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(MeasureSymbol));
-            OnPropertyChanged(nameof(MeasureName));
+            if (_selectedMeasureId != value)
+            {
+                _selectedMeasureId = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(MeasureSymbol));
+                OnPropertyChanged(nameof(MeasureName));
+            }
         }
     }
 
@@ -61,8 +87,11 @@ public class ProductItemViewModel : INotifyPropertyChanged
         get => _measureSymbol;
         set
         {
-            _measureSymbol = value;
-            OnPropertyChanged();
+            if (_measureSymbol != value)
+            {
+                _measureSymbol = value;
+                OnPropertyChanged();
+            }
         }
     }
 
@@ -71,20 +100,34 @@ public class ProductItemViewModel : INotifyPropertyChanged
         get => _measureName;
         set
         {
-            _measureName = value;
-            OnPropertyChanged();
+            if (_measureName != value)
+            {
+                _measureName = value;
+                OnPropertyChanged();
+            }
         }
     }
 
-    public ObservableCollection<BitrixProductViewModel> BitrixProducts { get; set; }
+    public ObservableCollection<BitrixProductViewModel> BitrixProducts
+    {
+        get => _bitrixProducts;
+        set
+        {
+            _bitrixProducts = value;
+            OnPropertyChanged();
+        }
+    }
 
     public BitrixProductViewModel SelectedBitrixProduct
     {
         get => _selectedBitrixProduct;
         set
         {
-            _selectedBitrixProduct = value;
-            OnPropertyChanged();
+            if (_selectedBitrixProduct != value)
+            {
+                _selectedBitrixProduct = value;
+                OnPropertyChanged();
+            }
         }
     }
 

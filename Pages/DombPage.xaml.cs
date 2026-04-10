@@ -2,6 +2,7 @@
 using ClosedXML.Excel;
 using ManagerApp.Classes.Read;
 using ManagerApp.Data.ScharedData;
+
 using ManagerApp.Data.StructureList;
 using Microsoft.Win32;
 using NPOI.HSSF.UserModel;
@@ -341,10 +342,13 @@ namespace ManagerApp.Pages
         {
             try
             {
+                Console.WriteLine($"=== PROCESS TEXT ===");
+                Console.WriteLine($"Длина текста: {text.Length} символов");
+                Console.WriteLine($"Первые 300 символов: {text.Substring(0, Math.Min(300, text.Length))}");
                 Mouse.OverrideCursor = Cursors.Wait;
 
-                // Отправляем текст в AI и получаем список товаров
-                List<string> products = await ExtractProductsFromTextWithFallbackAsync(text);
+                // Отправляем текст в AI и получаем список товаров с полной информацией
+                List<ExtractedProductInfo> products = await ExtractProductsFromTextWithFallbackAsync(text);
 
                 if (products == null || products.Count == 0)
                 {
@@ -353,11 +357,19 @@ namespace ManagerApp.Pages
                     return;
                 }
 
-                // Сохраняем товары в менеджер
-                ProductSelectionManager.SetProducts(products);
+                // Выводим для отладки
+                foreach (var p in products)
+                {
+                    Console.WriteLine($"Товар: {p.Name}");
+                    Console.WriteLine($"  Количество: {p.Quantity} {p.MeasureSymbol}");
+                    Console.WriteLine($"  Описание: {p.Description}");
+                }
+
+                // Сохраняем товары с полной информацией в менеджер
+                ProductSelectionManager.SetExtractedProducts(products);
 
                 // Переходим на страницу сравнения товаров
-                ComparisonProduct comparisonPage = new ComparisonProduct(products);
+                ComparisonProduct comparisonPage = new ComparisonProduct();
                 this.NavigationService?.Navigate(comparisonPage);
             }
             catch (Exception ex)
@@ -511,10 +523,9 @@ namespace ManagerApp.Pages
             }
         }
 
-        // НОВЫЙ МЕТОД: Извлечение товаров с автоматическим переключением между AI провайдерами
-        private async Task<List<string>> ExtractProductsFromTextWithFallbackAsync(string text)
+        private async Task<List<ExtractedProductInfo>> ExtractProductsFromTextWithFallbackAsync(string text)
         {
-            List<string> products = null;
+            List<ExtractedProductInfo> products = null;
             string lastError = null;
 
             // Пробуем основной AI
@@ -553,37 +564,95 @@ namespace ManagerApp.Pages
 
             // Если оба AI недоступны, используем резервный метод извлечения
             Console.WriteLine("⚠️ Оба AI недоступны, используем резервный метод извлечения");
-            return await ExtractProductsManuallyAsync(text);
+            return await ExtractProductsManuallyWithDetailsAsync(text);
         }
 
-        // Метод для обращения к конкретному AI провайдеру
-        private async Task<List<string>> ExtractProductsFromTextAsync(string text, string apiToken, string apiUrl)
+        private List<ExtractedProductInfo> ParseProductsManually(string text)
+        {
+            var products = new List<ExtractedProductInfo>();
+
+            try
+            {
+                // Пробуем извлечь товары из текста простыми правилами
+                var lines = text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+
+                foreach (var line in lines)
+                {
+                    var trimmed = line.Trim();
+                    if (trimmed.Length < 5) continue;
+
+                    // Проверяем, похоже ли на товар
+                    if (Regex.IsMatch(trimmed, @"\d+[\.\)]\s+[А-Яа-яA-Za-z0-9\s\-\(\)]+") &&
+                        !trimmed.Contains("ООО") && !trimmed.Contains("ИНН") &&
+                        !trimmed.StartsWith("№") && !trimmed.StartsWith("п/п"))
+                    {
+                        var product = new ExtractedProductInfo
+                        {
+                            Name = trimmed,
+                            Quantity = 1,
+                            MeasureSymbol = "шт",
+                            Description = ""
+                        };
+                        products.Add(product);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка в ручном парсинге: {ex.Message}");
+            }
+
+            if (products.Count == 0)
+            {
+                products = GetSampleProducts();
+            }
+
+            return products;
+        }
+        private async Task<List<ExtractedProductInfo>> ExtractProductsFromTextAsync(string text, string apiToken, string apiUrl)
         {
             using (HttpClient client = new HttpClient())
             {
-                client.Timeout = TimeSpan.FromSeconds(30);
+                client.Timeout = TimeSpan.FromSeconds(180);
                 client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiToken}");
+
+                string prompt = @"Ты - ИИ ассистент. Извлеки ВСЕ товары из этого текста ЛЮБЫМ способом.
+
+ГЛАВНОЕ ПРАВИЛО: НЕ ПРОПУСТИ НИ ОДНОГО ТОВАРА! ДАЖЕ ЕСЛИ ИХ 1000 ШТУК!
+
+Что считается товаром:
+- Любое оборудование: розетки, выключатели, кабели, провода, лампы, стартеры, коробки, шины, штанги
+- Любой продукт с ценой или количеством
+- Любая строка, где есть название + число (количество)
+
+Как найти товары (используй ВСЕ методы сразу):
+1. Ищи в тексте слова: ШТ, шт., штука, м, метр, кг, литр, упак
+2. Ищи числа рядом с этими словами - это количество
+3. Название товара - это текст ДО количества и единицы измерения
+4. Если таблица с колонками - бери первый столбец как название
+5. Если список с номерами (1., 2.) - бери текст после номера
+6. Если просто перечисление - бери каждую строку
+
+ВАЖНО: ДАЖЕ ЕСЛИ НЕТ ЧЕТКОЙ СТРУКТУРЫ - ВСЕ РАВНО НАЙДИ ТОВАРЫ!
+
+Формат ответа (ТОЛЬКО JSON, НАЧИНАЙ С [ И ЗАКАНЧИВАЙ ]):
+[
+  {""name"": ""название товара"", ""quantity"": число, ""measure"": ""шт/м/кг"", ""description"": ""описание если есть""}
+]
+
+НЕ ПИШИ НИЧЕГО, КРОМЕ JSON. НЕ ОБРЕЗАЙ ОТВЕТ. НЕ ПРОПУСКАЙ ТОВАРЫ.
+
+Текст для анализа:
+" + text + @"
+
+НАЙДИ ВСЕ ТОВАРЫ! ВСЕ! ДАЖЕ ЕСЛИ ИХ МНОГО! ВЕРНИ JSON МАССИВ СО ВСЕМИ!";
 
                 var requestBody = new
                 {
                     model = "gpt-4o-mini",
-                    messages = new[]
-                    {
-                        new
-                        {
-                            role = "user",
-                            content = $"Проанализируй текст заявки и выдели список товаров. Товары могут быть указаны в виде таблицы, списка или простого текста.\n\n" +
-                                      $"Правила:\n" +
-                                      $"1. В каждой заявке обязательно есть товары (их не может быть 0)\n" +
-                                      $"2. Названия товаров могут находиться в разных частях документа: в таблицах, списках, абзацах\n" +
-                                      $"3. Игнорируй техническую информацию: даты, номера документов, реквизиты, адреса, телефоны\n" +
-                                      $"4. Выведи ТОЛЬКО названия товаров, каждое с новой строки\n" +
-                                      $"5. НЕ добавляй никаких пояснений, предисловий или комментариев\n\n" +
-                                      $"Текст заявки:\n{text}"
-                        }
-                    },
-                    temperature = 0.3,
-                    max_tokens = 1000
+                    messages = new[] { new { role = "user", content = prompt } },
+                    temperature = 0.0,
+                    max_tokens = 32768
                 };
 
                 string jsonRequest = JsonSerializer.Serialize(requestBody);
@@ -594,6 +663,7 @@ namespace ManagerApp.Pages
                 if (response.IsSuccessStatusCode)
                 {
                     string jsonResponse = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine($"AI Response длина: {jsonResponse.Length} символов");
 
                     using (JsonDocument doc = JsonDocument.Parse(jsonResponse))
                     {
@@ -605,12 +675,15 @@ namespace ManagerApp.Pages
                                 message.TryGetProperty("content", out JsonElement contentElement))
                             {
                                 string aiResponse = contentElement.GetString();
+                                var products = ParseAIResponseToProducts(aiResponse);
 
-                                var products = aiResponse
-                                    .Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
-                                    .Select(p => p.Trim())
-                                    .Where(p => !string.IsNullOrWhiteSpace(p) && !p.StartsWith("```"))
-                                    .ToList();
+                                Console.WriteLine($"Извлечено товаров: {products.Count}");
+
+                                //if (products.Count < 60)
+                                //{
+                                //    Console.WriteLine("⚠️ AI вернул мало товаров, пробуем улучшенный парсинг...");
+                                //    products = await ExtractProductsManuallyWithDetailsAsync(text);
+                                //}
 
                                 return products;
                             }
@@ -620,11 +693,166 @@ namespace ManagerApp.Pages
                 else
                 {
                     string errorResponse = await response.Content.ReadAsStringAsync();
-                    throw new Exception($"Ошибка API: {response.StatusCode}\n{errorResponse}");
+                    Console.WriteLine($"Ошибка API: {response.StatusCode} - {errorResponse}");
+                }
+
+                return new List<ExtractedProductInfo>();
+            }
+        }
+
+        private List<ExtractedProductInfo> ParseAIResponseToProducts(string aiResponse)
+        {
+            var products = new List<ExtractedProductInfo>();
+
+            try
+            {
+                // Пытаемся найти JSON в ответе
+                int startIndex = aiResponse.IndexOf('[');
+                int endIndex = aiResponse.LastIndexOf(']');
+
+                if (startIndex >= 0 && endIndex > startIndex)
+                {
+                    string jsonPart = aiResponse.Substring(startIndex, endIndex - startIndex + 1);
+                    var rawProducts = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(jsonPart);
+
+                    foreach (var raw in rawProducts)
+                    {
+                        var product = new ExtractedProductInfo();
+
+                        if (raw.ContainsKey("name") && raw["name"] != null)
+                            product.Name = raw["name"].ToString().Trim();
+
+                        if (raw.ContainsKey("quantity") && raw["quantity"] != null)
+                        {
+                            if (decimal.TryParse(raw["quantity"].ToString(), out decimal qty))
+                                product.Quantity = qty;
+                        }
+
+                        if (raw.ContainsKey("measure") && raw["measure"] != null)
+                        {
+                            string measure = raw["measure"].ToString().ToLower();
+                            product.MeasureSymbol = NormalizeMeasureSymbol(measure);
+                        }
+
+                        if (raw.ContainsKey("description") && raw["description"] != null)
+                            product.Description = raw["description"].ToString().Trim();
+
+                        if (!string.IsNullOrWhiteSpace(product.Name))
+                            products.Add(product);
+                    }
                 }
             }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка парсинга AI ответа: {ex.Message}");
+                // Ручной парсинг как fallback
+                products = ParseProductsManually(aiResponse);
+            }
 
-            return new List<string>();
+            return products;
+        }
+        private async Task<List<ExtractedProductInfo>> ExtractProductsManuallyWithDetailsAsync(string text)
+        {
+            return await Task.Run(() =>
+            {
+                var products = new List<ExtractedProductInfo>();
+                var lines = text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+
+                // Регулярное выражение для поиска строк с товарами
+                var productRegex = new Regex(
+                    @"^(\d+)[\.\)]\s+(.+?)(?:\t|\|)\s*(\d+(?:[.,]\d+)?)\s*(?:[мшткгл]|шт\.?|м\.?|кг\.?|л\.?|упак\.?)",
+                    RegexOptions.IgnoreCase | RegexOptions.Multiline
+                );
+
+                ExtractedProductInfo currentProduct = null;
+
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    string line = lines[i].Trim();
+                    if (string.IsNullOrWhiteSpace(line)) continue;
+
+                    // Поиск строки с номером и наименованием
+                    var match = productRegex.Match(line);
+                    if (match.Success)
+                    {
+                        // Сохраняем предыдущий товар
+                        if (currentProduct != null && !string.IsNullOrWhiteSpace(currentProduct.Name))
+                            products.Add(currentProduct);
+
+                        currentProduct = new ExtractedProductInfo
+                        {
+                            Name = match.Groups[2].Value.Trim(),
+                            Quantity = 1
+                        };
+
+                        // Извлекаем количество если есть
+                        if (match.Groups[3].Success && decimal.TryParse(match.Groups[3].Value, out decimal qty))
+                            currentProduct.Quantity = qty;
+
+                        // Извлекаем единицу измерения
+                        string measureMatch = Regex.Match(line, @"(\d+(?:[.,]\d+)?)\s*([мшткгл]|шт\.?|м\.?|кг\.?|л\.?|упак\.?)", RegexOptions.IgnoreCase).Groups[2].Value;
+                        if (!string.IsNullOrEmpty(measureMatch))
+                            currentProduct.MeasureSymbol = NormalizeMeasureSymbol(measureMatch);
+                    }
+                    else if (currentProduct != null)
+                    {
+                        // Собираем характеристики из последующих строк
+                        if (line.Contains("ГОСТ") || line.Contains("ТУ") ||
+                            line.Contains("характеристик") || line.Contains("параметр") ||
+                            line.Contains("Сечение") || line.Contains("Материал") ||
+                            line.Contains("Напряжение") || line.Contains("температур"))
+                        {
+                            if (string.IsNullOrEmpty(currentProduct.Description))
+                                currentProduct.Description = line;
+                            else
+                                currentProduct.Description += "; " + line;
+                        }
+                    }
+                }
+
+                // Добавляем последний товар
+                if (currentProduct != null && !string.IsNullOrWhiteSpace(currentProduct.Name))
+                    products.Add(currentProduct);
+
+                // Если ничего не нашли, возвращаем пример
+                if (products.Count == 0)
+                {
+                    products = GetSampleProducts();
+                }
+
+                return products;
+            });
+        }
+
+        private List<ExtractedProductInfo> GetSampleProducts()
+        {
+            return new List<ExtractedProductInfo>
+    {
+      
+        new ExtractedProductInfo
+        {
+            Name = "Товары не найдены",
+            Quantity = 0,
+            MeasureSymbol = "шт",
+            Description = ""
+        }
+    };
+        }
+        private string NormalizeMeasureSymbol(string measure)
+        {
+            var measureMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        { "м", "м" }, { "метр", "м" }, { "m", "м" }, { "metr", "м" },
+        { "шт", "шт" }, { "шт.", "шт" }, { "штука", "шт" }, { "pc", "шт" }, { "pcs", "шт" },
+        { "кг", "кг" }, { "килограмм", "кг" }, { "kg", "кг" }, { "kilogram", "кг" },
+        { "л", "л" }, { "литр", "л" }, { "l", "л" }, { "liter", "л" },
+        { "упак", "упак" }, { "упаковка", "упак" }, { "pack", "упак" }
+    };
+
+            if (measureMap.TryGetValue(measure, out string normalized))
+                return normalized;
+
+            return "шт"; // По умолчанию
         }
 
         // РЕЗЕРВНЫЙ МЕТОД: Ручное извлечение товаров из текста

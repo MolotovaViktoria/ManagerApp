@@ -8,23 +8,48 @@ namespace ManagerApp.Data.ScharedData
 {
     public static class ProductSelectionManager
     {
-        public static List<string> SelectedProducts { get; set; } = new List<string>();
+        private static List<string> _products = new List<string>();
+        private static List<ExtractedProductInfo> _extractedProducts = new List<ExtractedProductInfo>();
 
+        // НОВЫЕ МЕТОДЫ ДЛЯ РАСШИРЕННЫХ ДАННЫХ (с описанием, количеством, единицами измерения)
+        public static void SetExtractedProducts(List<ExtractedProductInfo> products)
+        {
+            _extractedProducts = products ?? new List<ExtractedProductInfo>();
 
+            // Для обратной совместимости обновляем и старый список
+            _products = _extractedProducts.Select(p => p.Name).ToList();
+        }
+
+        public static List<ExtractedProductInfo> GetExtractedProducts()
+        {
+            return _extractedProducts ?? new List<ExtractedProductInfo>();
+        }
+
+        // СТАРЫЕ МЕТОДЫ ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ (только названия товаров)
         public static void SetProducts(List<string> products)
         {
-            SelectedProducts = products ?? new List<string>();
+            _products = products ?? new List<string>();
+
+            // Конвертируем в новый формат (создаем ExtractedProductInfo с значениями по умолчанию)
+            _extractedProducts = _products.Select(p => new ExtractedProductInfo
+            {
+                Name = p,
+                Quantity = 1,
+                MeasureSymbol = "шт",
+                MeasureName = "Штука",
+                Description = ""
+            }).ToList();
         }
 
         public static List<string> GetProducts()
         {
-            return SelectedProducts;
+            return _products ?? new List<string>();
         }
 
         public static void ClearProducts()
         {
-            SelectedProducts.Clear();
+            _products?.Clear();
+            _extractedProducts?.Clear();
         }
-
     }
 }
