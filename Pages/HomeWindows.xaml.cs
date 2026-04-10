@@ -13,8 +13,6 @@ namespace ManagerApp.Pages
         public HomeWindows()
         {
             InitializeComponent();
-
-            // Загружаем главную страницу при запуске
             LoadMainPage();
         }
 
@@ -27,26 +25,25 @@ namespace ManagerApp.Pages
                 MenuColumn.Width = new GridLength(200);
                 LeftMenuPanel.MinWidth = 200;
 
-                // Показываем текст
                 txtHome.Visibility = Visibility.Visible;
                 txtHistory.Visibility = Visibility.Visible;
                 txtSettings.Visibility = Visibility.Visible;
                 txtHome1.Visibility = Visibility.Visible;
+                txtConvert.Visibility = Visibility.Visible;  // ДОБАВИТЬ
             }
             else
             {
                 MenuColumn.Width = new GridLength(60);
                 LeftMenuPanel.MinWidth = 60;
 
-                // Скрываем текст
                 txtHome.Visibility = Visibility.Collapsed;
                 txtHistory.Visibility = Visibility.Collapsed;
                 txtSettings.Visibility = Visibility.Collapsed;
                 txtHome1.Visibility = Visibility.Collapsed;
+                txtConvert.Visibility = Visibility.Collapsed;  // ДОБАВИТЬ
             }
         }
 
-        // Метод для загрузки главной страницы
         private void LoadMainPage()
         {
             try
@@ -59,6 +56,7 @@ namespace ManagerApp.Pages
                 MessageBox.Show($"Ошибка загрузки главной страницы: {ex.Message}");
             }
         }
+
         private void btnHome_Click(object sender, RoutedEventArgs e)
         {
             LoadMainPage();
@@ -68,10 +66,7 @@ namespace ManagerApp.Pages
         {
             try
             {
-                // Проверяем расширение файла
                 string extension = System.IO.Path.GetExtension(filePath)?.ToLower();
-
-                // Список поддерживаемых расширений Excel
                 string[] excelExtensions = { ".xlsx", ".xls", ".xlsm", ".xlsb", ".csv" };
 
                 if (!string.IsNullOrEmpty(extension) && excelExtensions.Contains(extension))
@@ -92,18 +87,16 @@ namespace ManagerApp.Pages
                 MessageBox.Show($"Ошибка открытия файла: {ex.Message}");
             }
         }
-        // Метод для навигации на любую страницу
+
         public void NavigateToPage(Page page)
         {
             MainFrame.Navigate(page);
         }
 
-        // Метод для открытия страницы CheakFile
         public void OpenCheakFilePage(string filePath)
         {
             try
             {
-                // Создаем страницу CheakFile и передаем путь к файлу
                 DombPage cheakFilePage = new DombPage();
                 MainFrame.Navigate(cheakFilePage);
             }
@@ -113,19 +106,14 @@ namespace ManagerApp.Pages
             }
         }
 
-
-
-
         private void btnHistory_Click(object sender, RoutedEventArgs e)
         {
-            //Загружаем страницу истории
-           History historyPage = new History();
+            History historyPage = new History();
             MainFrame.Navigate(historyPage);
         }
 
         private void btnSettings_Click(object sender, RoutedEventArgs e)
         {
-
             Setting settingsPage = new Setting();
             MainFrame.Navigate(settingsPage);
         }
@@ -134,6 +122,13 @@ namespace ManagerApp.Pages
         {
             ComparisonProduct comparisonProduct = new ComparisonProduct();
             MainFrame.Navigate(comparisonProduct);
+        }
+
+        // НОВЫЙ МЕТОД: Открытие страницы стандартизации заявки
+        private void btnConvert_Click(object sender, RoutedEventArgs e)
+        {
+            ConvertFilePage convertPage = new ConvertFilePage();
+            MainFrame.Navigate(convertPage);
         }
     }
 }

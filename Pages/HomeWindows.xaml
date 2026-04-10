@@ -8,7 +8,6 @@
         WindowStartupLocation="CenterScreen"
         Background="White">
     <Window.InputBindings>
-        <!-- Горячие клавиши -->
         <KeyBinding Key="F5" Command="{Binding RefreshCommand}" />
         <KeyBinding Key="Enter" Command="{Binding SelectCommand}" />
         <KeyBinding Key="Escape" Command="{Binding CancelCommand}" />
@@ -18,7 +17,6 @@
         <KeyBinding Modifiers="Ctrl" Key="F" Command="{Binding FocusSearchCommand}" />
     </Window.InputBindings>
     <Window.Resources>
-        <!-- Стиль для кнопок меню с КАСТОМНОЙ подсветкой -->
         <Style x:Key="MenuButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -47,7 +45,6 @@
     </Window.Resources>
 
     <Grid>
-        <!-- Сетка с двумя колонками: меню и контент -->
         <Grid.ColumnDefinitions>
             <ColumnDefinition x:Name="MenuColumn" Width="60"/>
             <ColumnDefinition Width="*"/>
@@ -64,7 +61,6 @@
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <!-- Кнопка гамбургер-меню -->
                 <Button x:Name="btnMenu" 
                         Grid.Row="0"
                         Style="{StaticResource MenuButtonStyle}"
@@ -78,7 +74,6 @@
                            Height="30"/>
                 </Button>
 
-                <!-- Контейнер для кнопок меню -->
                 <StackPanel x:Name="pnlMenu" 
                            Grid.Row="1"
                            Orientation="Vertical"
@@ -117,12 +112,12 @@
                         </Button>
                     </Grid>
 
-                    <!-- Кнопка Главная -->
+                    <!-- Кнопка Создать заявку -->
                     <Grid x:Name="gridHome1" Height="60" Margin="0,0,0,5">
                         <Button x:Name="btnHome1" 
-                Style="{StaticResource MenuButtonStyle}"
-                Click="btnHome1_Click"
-                HorizontalAlignment="Stretch">
+                                Style="{StaticResource MenuButtonStyle}"
+                                Click="btnHome1_Click"
+                                HorizontalAlignment="Stretch">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="60"/>
@@ -130,21 +125,21 @@
                                 </Grid.ColumnDefinitions>
 
                                 <Image Source="/Image/add_button.png" 
-                       Width="32" 
-                       Height="32"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Bottom"/>
+                                       Width="32" 
+                                       Height="32"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Bottom"/>
 
                                 <TextBlock x:Name="txtHome1" 
-                           Text="Создать заявку"
-                           Grid.Column="1"
-                           HorizontalAlignment="Left"
-                           VerticalAlignment="Center"
-                           Foreground="White"
-                           FontSize="16"
-                           FontWeight="Medium"
-                           Margin="10,0,0,0"
-                           Visibility="Collapsed"/>
+                                           Text="Создать заявку"
+                                           Grid.Column="1"
+                                           HorizontalAlignment="Left"
+                                           VerticalAlignment="Center"
+                                           Foreground="White"
+                                           FontSize="16"
+                                           FontWeight="Medium"
+                                           Margin="10,0,0,0"
+                                           Visibility="Collapsed"/>
                             </Grid>
                         </Button>
                     </Grid>
@@ -170,6 +165,39 @@
 
                                 <TextBlock x:Name="txtHistory" 
                                            Text="История"
+                                           Grid.Column="1"
+                                           HorizontalAlignment="Left"
+                                           VerticalAlignment="Center"
+                                           Foreground="White"
+                                           FontSize="16"
+                                           FontWeight="Medium"
+                                           Margin="10,0,0,0"
+                                           Visibility="Collapsed"/>
+                            </Grid>
+                        </Button>
+                    </Grid>
+
+                    <!-- НОВАЯ КНОПКА: СТАНДАРТИЗАЦИЯ ЗАЯВКИ -->
+                    <Grid x:Name="gridConvert" Height="60" Margin="0,0,0,5">
+                        <Button x:Name="btnConvert" 
+                                Style="{StaticResource MenuButtonStyle}"
+                                Click="btnConvert_Click"
+                                HorizontalAlignment="Stretch">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="60"/>
+                                    <ColumnDefinition Width="140" x:Name="colTextConvert"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Image Source="/ManagerApp;component/Image/convertFile.png" 
+                                       Width="32" 
+                                       Height="32"
+                                       Grid.Column="0"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+
+                                <TextBlock x:Name="txtConvert" 
+                                           Text="Стандартизация"
                                            Grid.Column="1"
                                            HorizontalAlignment="Left"
                                            VerticalAlignment="Center"
@@ -220,12 +248,9 @@
 
         <!-- Главная область контента с Frame для навигации -->
         <Grid Grid.Column="1" x:Name="MainContentArea">
-
-            <!-- Frame для отображения страниц -->
             <Frame x:Name="MainFrame"
                    NavigationUIVisibility="Hidden"
                    Source="Pages/MainPage.xaml"/>
-
         </Grid>
     </Grid>
 </Window>
