@@ -818,6 +818,9 @@ namespace ManagerApp.Pages
         {
             await Application.Current.Dispatcher.InvokeAsync(() =>
             {
+                // Сохраняем текущий выбор до очистки — Clear() сбрасывает SelectedItem через WPF
+                var savedSelectionId = item.SelectedBitrixProduct?.ProductId;
+
                 item.BitrixProducts.Clear();
 
                 // Добавляем пустой элемент
@@ -848,8 +851,36 @@ namespace ManagerApp.Pages
                     item.BitrixProducts.Add(product);
                 }
 
+                // Восстанавливаем выбор если ранее выбранный товар есть в новом списке
+                if (!string.IsNullOrEmpty(savedSelectionId) && savedSelectionId != "0" && savedSelectionId != "-1")
+                {
+                    var toRestore = item.BitrixProducts.FirstOrDefault(p => p.ProductId == savedSelectionId);
+                    if (toRestore != null)
+                        item.SelectedBitrixProduct = toRestore;
+                }
+
                 Console.WriteLine($"✅ В комбобокс добавлено {item.BitrixProducts.Count} товаров");
             });
+        }
+
+        // Подсчёт схожести запроса и названия товара по совпадению слов
+        private double CalculateWordMatchScore(string query, string productName)
+        {
+            if (string.IsNullOrWhiteSpace(query) || string.IsNullOrWhiteSpace(productName))
+                return 0;
+
+            var queryWords = query.ToLower()
+                .Split(new[] { ' ', ',', '.', '-', '(', ')', '/', '\\', '_' }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(w => w.Length > 1)
+                .Distinct()
+                .ToList();
+
+            if (!queryWords.Any())
+                return 0;
+
+            string productLower = productName.ToLower();
+            int matches = queryWords.Count(word => productLower.Contains(word));
+            return (double)matches / queryWords.Count;
         }
 
         // Метод авто-выбора лучшего совпадения
@@ -858,26 +889,42 @@ namespace ManagerApp.Pages
             if (!results.Any() || item.SelectedBitrixProduct != null)
                 return;
 
-            var bestMatch = results.FirstOrDefault();
+            // Ищем лучшее совпадение по схожести слов среди топ-10 результатов
+            Data.ScharedData.BitrixProductViewModel bestMatch = null;
+            double bestScore = 0;
 
-            if (bestMatch != null)
+            foreach (var candidate in results.Take(10))
             {
-                await Task.Delay(300);
-
-                await Application.Current.Dispatcher.InvokeAsync(async () =>
+                double score = CalculateWordMatchScore(searchText, candidate.ProductName);
+                if (score > bestScore)
                 {
-                    var displayProduct = item.BitrixProducts.FirstOrDefault(p => p.ProductId == bestMatch.ProductId);
-                    if (displayProduct != null)
-                    {
-                        item.SelectedBitrixProduct = displayProduct;
-
-                        // АВТОМАТИЧЕСКИ ПОДСТАВЛЯЕМ ЕДИНИЦУ ИЗМЕРЕНИЯ
-                        await AutoSetMeasureFromBitrixProduct(item, bestMatch);
-
-                        Console.WriteLine($"✅ Автоматически выбрано: '{item.OriginalProduct}' → '{bestMatch.ProductName}'");
-                    }
-                });
+                    bestScore = score;
+                    bestMatch = candidate;
+                }
             }
+
+            // Авто-выбор только при схожести не менее 60%
+            if (bestMatch == null || bestScore < 0.6)
+            {
+                Console.WriteLine($"⚠️ Авто-выбор пропущен: максимальная схожесть {bestScore:P0} для '{searchText}'");
+                return;
+            }
+
+            await Task.Delay(300);
+
+            await Application.Current.Dispatcher.InvokeAsync(async () =>
+            {
+                var displayProduct = item.BitrixProducts.FirstOrDefault(p => p.ProductId == bestMatch.ProductId);
+                if (displayProduct != null)
+                {
+                    item.SelectedBitrixProduct = displayProduct;
+
+                    // АВТОМАТИЧЕСКИ ПОДСТАВЛЯЕМ ЕДИНИЦУ ИЗМЕРЕНИЯ
+                    await AutoSetMeasureFromBitrixProduct(item, bestMatch);
+
+                    Console.WriteLine($"✅ Автоматически выбрано (схожесть {bestScore:P0}): '{item.OriginalProduct}' → '{bestMatch.ProductName}'");
+                }
+            });
         }
 
         // Метод для автоматической подстановки единицы измерения из Bitrix
@@ -1047,7 +1094,7 @@ namespace ManagerApp.Pages
                             productToSelect = new Data.ScharedData.BitrixProductViewModel
                             {
                                 ProductId = selectedProduct.ProductId,
-                                ProductName = FormatProductNameForDisplay(selectedProduct),
+                                ProductName = selectedProduct.ProductName,
                                 CategoryName = selectedProduct.CategoryName,
                                 Price = selectedProduct.Price,
                                 HasPrice = selectedProduct.HasPrice,
@@ -1332,9 +1379,6 @@ namespace ManagerApp.Pages
                     });
                     return;
                 }
-
-                // Сбрасываем выбранный товар при изменении текста
-                item.SelectedBitrixProduct = null;
 
                 // Создаем новый таймер с задержкой 800 мс (debounce)
                 var timer = new System.Timers.Timer(800);

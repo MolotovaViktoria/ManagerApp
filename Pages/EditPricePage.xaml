@@ -571,7 +571,7 @@
                                 </DataGridTemplateColumn.HeaderStyle>
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <TextBox Text="{Binding CustomPrice, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                        <TextBox Text="{Binding CustomPrice, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
                                                  Width="100"
                                                  Height="30"
                                                  FontSize="13"

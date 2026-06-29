@@ -9,6 +9,7 @@ using NPOI.HSSF.UserModel;
 using NPOI.SS.UserModel;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -494,9 +495,11 @@ namespace ManagerApp.Pages
 
                     // Читаем заголовки из первой строки
                     var firstRow = range.FirstRow();
+                    if (firstRow == null) continue;
                     for (int col = 1; col <= range.ColumnCount(); col++)
                     {
-                        string headerText = firstRow.Cell(col).GetString();
+                        string headerText = "";
+                        try { headerText = firstRow.Cell(col)?.GetString() ?? ""; } catch { }
                         if (string.IsNullOrEmpty(headerText))
                             headerText = $"Column {col}";
                         result.Append(headerText);
@@ -510,7 +513,8 @@ namespace ManagerApp.Pages
                     {
                         for (int col = 1; col <= range.ColumnCount(); col++)
                         {
-                            string cellValue = worksheet.Cell(row, col).GetString();
+                            string cellValue = "";
+                            try { cellValue = worksheet.Cell(row, col)?.GetString() ?? ""; } catch { }
                             result.Append(cellValue);
                             if (col < range.ColumnCount())
                                 result.Append("\t");
@@ -525,6 +529,17 @@ namespace ManagerApp.Pages
 
         private async Task<List<ExtractedProductInfo>> ExtractProductsFromTextWithFallbackAsync(string text)
         {
+            // Для больших текстов разбиваем на части чтобы AI не обрезал ответ
+            const int maxChunkSize = 15000;
+            if (text.Length > maxChunkSize)
+            {
+                Console.WriteLine($"📦 Текст большой ({text.Length} символов), разбиваем на части");
+                var chunkedProducts = await ExtractProductsFromLargeTextAsync(text);
+                if (chunkedProducts != null && chunkedProducts.Count > 0)
+                    return chunkedProducts;
+                Console.WriteLine("⚠️ Чанкинг не дал результатов, пробуем единым запросом");
+            }
+
             List<ExtractedProductInfo> products = null;
             string lastError = null;
 
@@ -565,6 +580,112 @@ namespace ManagerApp.Pages
             // Если оба AI недоступны, используем резервный метод извлечения
             Console.WriteLine("⚠️ Оба AI недоступны, используем резервный метод извлечения");
             return await ExtractProductsManuallyWithDetailsAsync(text);
+        }
+
+        // Обработка большого текста по частям
+        private async Task<List<ExtractedProductInfo>> ExtractProductsFromLargeTextAsync(string text)
+        {
+            const int maxChunkSize = 15000;
+
+            var allLines = text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+
+            // Определяем заголовочные строки (первые строки с "===", "Наименование" и т.п.)
+            var headerLines = new List<string>();
+            int dataStart = 0;
+            for (int i = 0; i < Math.Min(6, allLines.Length); i++)
+            {
+                string lower = allLines[i].ToLower();
+                if (lower.Contains("=== лист") || lower.Contains("наименование") ||
+                    lower.Contains("название") || lower.Contains("товар") ||
+                    lower.Contains("кол-во") || lower.Contains("количество") ||
+                    lower.Contains("ед.изм") || lower.Contains("цена"))
+                {
+                    headerLines.Add(allLines[i]);
+                    dataStart = i + 1;
+                }
+                else if (headerLines.Count > 0)
+                {
+                    break;
+                }
+            }
+
+            // Если заголовок не найден — берём первую строку
+            if (headerLines.Count == 0 && allLines.Length > 0)
+            {
+                headerLines.Add(allLines[0]);
+                dataStart = 1;
+            }
+
+            string header = string.Join("\n", headerLines) + "\n";
+
+            // Разбиваем строки данных на чанки
+            var chunks = new List<string>();
+            var currentChunk = new StringBuilder(header);
+
+            for (int i = dataStart; i < allLines.Length; i++)
+            {
+                string line = allLines[i] + "\n";
+                if (currentChunk.Length + line.Length > maxChunkSize && currentChunk.Length > header.Length)
+                {
+                    chunks.Add(currentChunk.ToString());
+                    currentChunk = new StringBuilder(header);
+                }
+                currentChunk.Append(line);
+            }
+            if (currentChunk.Length > header.Length)
+                chunks.Add(currentChunk.ToString());
+
+            Console.WriteLine($"📦 Разбито на {chunks.Count} частей по ~{maxChunkSize} символов");
+
+            var allProducts = new List<ExtractedProductInfo>();
+            // Дедупликация: имя+количество чтобы не добавлять одно и то же из разных чанков
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 0; i < chunks.Count; i++)
+            {
+                Console.WriteLine($"🔄 Обрабатываем часть {i + 1}/{chunks.Count}...");
+
+                List<ExtractedProductInfo> chunkProducts = null;
+
+                try
+                {
+                    chunkProducts = await ExtractProductsFromTextAsync(chunks[i], PrimaryApiToken, PrimaryApiUrl);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"⚠️ Основной AI ошибка для части {i + 1}: {ex.Message}");
+                }
+
+                if (chunkProducts == null || chunkProducts.Count == 0)
+                {
+                    try
+                    {
+                        chunkProducts = await ExtractProductsFromTextAsync(chunks[i], BackupApiToken, BackupApiUrl);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"⚠️ Запасной AI ошибка для части {i + 1}: {ex.Message}");
+                    }
+                }
+
+                if (chunkProducts != null)
+                {
+                    foreach (var product in chunkProducts)
+                    {
+                        if (string.IsNullOrWhiteSpace(product.Name)) continue;
+                        string key = $"{product.Name.ToLower()}|{product.Quantity}";
+                        if (!seen.Contains(key))
+                        {
+                            seen.Add(key);
+                            allProducts.Add(product);
+                        }
+                    }
+                }
+
+                Console.WriteLine($"✅ Часть {i + 1}: извлечено {chunkProducts?.Count ?? 0}, всего {allProducts.Count}");
+            }
+
+            return allProducts;
         }
 
         private List<ExtractedProductInfo> ParseProductsManually(string text)
@@ -629,15 +750,21 @@ namespace ManagerApp.Pages
 1. Ищи в тексте слова: ШТ, шт., штука, м, метр, кг, литр, упак
 2. Ищи числа рядом с этими словами - это количество
 3. Название товара - это текст ДО количества и единицы измерения
-4. Если таблица с колонками - бери первый столбец как название
+4. Если таблица с колонками - найди столбцы ""Наименование"", ""Количество"", ""Кол-во"", ""Ед.изм."" и извлеки из них данные ТОЧНО
 5. Если список с номерами (1., 2.) - бери текст после номера
 6. Если просто перечисление - бери каждую строку
 
-ВАЖНО: ДАЖЕ ЕСЛИ НЕТ ЧЕТКОЙ СТРУКТУРЫ - ВСЕ РАВНО НАЙДИ ТОВАРЫ!
+КОЛИЧЕСТВО: КРИТИЧЕСКИ ВАЖНО!
+- Ищи столбец ""Количество"", ""Кол-во"", ""Кол."" в таблицах
+- Ищи число перед единицей измерения: ""100 шт"", ""50 м"", ""5 кг""
+- Ищи число в соседней ячейке таблицы после названия
+- НЕ СТАВЬ 1 ПО УМОЛЧАНИЮ если количество есть в тексте - всегда ищи его
+- Если количество действительно не указано - тогда ставь 1
+- quantity ВСЕГДА должно быть числом (не строкой, не null)
 
 Формат ответа (ТОЛЬКО JSON, НАЧИНАЙ С [ И ЗАКАНЧИВАЙ ]):
 [
-  {""name"": ""название товара"", ""quantity"": число, ""measure"": ""шт/м/кг"", ""description"": ""описание если есть""}
+  {""name"": ""название товара"", ""quantity"": 100, ""measure"": ""шт/м/кг"", ""description"": ""описание если есть""}
 ]
 
 НЕ ПИШИ НИЧЕГО, КРОМЕ JSON. НЕ ОБРЕЗАЙ ОТВЕТ. НЕ ПРОПУСКАЙ ТОВАРЫ.
@@ -645,7 +772,7 @@ namespace ManagerApp.Pages
 Текст для анализа:
 " + text + @"
 
-НАЙДИ ВСЕ ТОВАРЫ! ВСЕ! ДАЖЕ ЕСЛИ ИХ МНОГО! ВЕРНИ JSON МАССИВ СО ВСЕМИ!";
+НАЙДИ ВСЕ ТОВАРЫ С ТОЧНЫМ КОЛИЧЕСТВОМ! ВЕРНИ JSON МАССИВ СО ВСЕМИ!";
 
                 var requestBody = new
                 {
@@ -724,7 +851,9 @@ namespace ManagerApp.Pages
 
                         if (raw.ContainsKey("quantity") && raw["quantity"] != null)
                         {
-                            if (decimal.TryParse(raw["quantity"].ToString(), out decimal qty))
+                            string qtyStr = raw["quantity"].ToString();
+                            if (!string.IsNullOrEmpty(qtyStr) && qtyStr != "null" &&
+                                decimal.TryParse(qtyStr, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal qty) && qty > 0)
                                 product.Quantity = qty;
                         }
 
@@ -786,7 +915,9 @@ namespace ManagerApp.Pages
                         };
 
                         // Извлекаем количество если есть
-                        if (match.Groups[3].Success && decimal.TryParse(match.Groups[3].Value, out decimal qty))
+                        if (match.Groups[3].Success && decimal.TryParse(
+                                match.Groups[3].Value.Replace(',', '.'),
+                                NumberStyles.Any, CultureInfo.InvariantCulture, out decimal qty))
                             currentProduct.Quantity = qty;
 
                         // Извлекаем единицу измерения

@@ -537,6 +537,13 @@ namespace ManagerApp.Pages
                         }
                     }
 
+                    // Если своя цена не задана — берём розничную из Bitrix, или закупочную
+                    decimal effectiveCustomPrice = matchedProduct.CustomPrice;
+                    if (effectiveCustomPrice <= 0 && matchedProduct.BitrixPrice > 0)
+                        effectiveCustomPrice = matchedProduct.BitrixPrice;
+                    if (effectiveCustomPrice <= 0 && purchasingPrice > 0)
+                        effectiveCustomPrice = purchasingPrice;
+
                     var product = new ProductPriceViewModel
                     {
                         BitrixProductId = matchedProduct.BitrixProductId,
@@ -544,7 +551,7 @@ namespace ManagerApp.Pages
                         BitrixProductName = matchedProduct.BitrixProductName,
                         BitrixPrice = matchedProduct.BitrixPrice,
                         PurchasingPrice = purchasingPrice,
-                        CustomPrice = matchedProduct.CustomPrice,
+                        CustomPrice = effectiveCustomPrice,
                         Quantity = quantity,  // ← Используем количество из matchedProduct
                         Unit = unitSymbol,
                         UnitFullName = unitName,
@@ -839,7 +846,10 @@ namespace ManagerApp.Pages
             }
 
             string newText = textBox.Text.Insert(textBox.SelectionStart, e.Text);
-            if (!decimal.TryParse(newText, NumberStyles.Any, CultureInfo.InvariantCulture, out _))
+            // Разрешаем незавершённый ввод вроде "100," или "100."
+            string forParse = newText.Replace(',', '.');
+            if (!forParse.EndsWith(".") &&
+                !decimal.TryParse(forParse, NumberStyles.Any, CultureInfo.InvariantCulture, out _))
             {
                 e.Handled = true;
             }
@@ -877,7 +887,9 @@ namespace ManagerApp.Pages
                 return;
             }
 
-            if (decimal.TryParse(textBox.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
+            // Принимаем и точку, и запятую как десятичный разделитель
+            string forParse = textBox.Text.Replace(',', '.');
+            if (decimal.TryParse(forParse, NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
             {
                 if (value < 0)
                     value = 0;
