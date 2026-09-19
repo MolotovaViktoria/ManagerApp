@@ -39,6 +39,40 @@ namespace ManagerApp.Pages
         private const string BackupApiUrl = "https://agent.timeweb.cloud/api/v1/cloud-ai/agents/db9009b9-7858-4e0a-8568-d2bc975dbbe8/v1/chat/completions";
 
         private bool _handlersInitialized = false;
+        private WaitingWindow _waitingWindow;
+
+        // Показывает окно ожидания с сообщением о текущем этапе обработки
+        // (без этого во время долгого запроса к ИИ страница выглядит зависшей/сломанной)
+        private void ShowWaiting(string message)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (_waitingWindow == null)
+                {
+                    _waitingWindow = new WaitingWindow("Обработка заявки", message)
+                    {
+                        Owner = Window.GetWindow(this)
+                    };
+                    _waitingWindow.Show();
+                }
+                else
+                {
+                    _waitingWindow.UpdateMessage(message);
+                }
+            });
+        }
+
+        private void CloseWaiting()
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (_waitingWindow != null)
+                {
+                    _waitingWindow.Close();
+                    _waitingWindow = null;
+                }
+            });
+        }
 
         public DombPage()
         {
@@ -283,6 +317,7 @@ namespace ManagerApp.Pages
             {
                 // Показываем индикатор загрузки
                 Mouse.OverrideCursor = Cursors.Wait;
+                ShowWaiting("Чтение файла...");
 
                 string fileText = "";
 
@@ -301,6 +336,7 @@ namespace ManagerApp.Pages
                 else if (FormatLists.ImageFormatList.Contains(extension))
                 {
                     // Для изображений переходим на PngPage
+                    CloseWaiting();
                     PngPage pngPage = new PngPage(filePath);
                     this.NavigationService?.Navigate(pngPage);
                     return;
@@ -336,6 +372,7 @@ namespace ManagerApp.Pages
             finally
             {
                 Mouse.OverrideCursor = null;
+                CloseWaiting();
             }
         }
 
@@ -347,6 +384,7 @@ namespace ManagerApp.Pages
                 Console.WriteLine($"Длина текста: {text.Length} символов");
                 Console.WriteLine($"Первые 300 символов: {text.Substring(0, Math.Min(300, text.Length))}");
                 Mouse.OverrideCursor = Cursors.Wait;
+                ShowWaiting("Анализ текста с помощью ИИ...");
 
                 // Отправляем текст в AI и получаем список товаров с полной информацией
                 List<ExtractedProductInfo> products = await ExtractProductsFromTextWithFallbackAsync(text);
@@ -357,6 +395,8 @@ namespace ManagerApp.Pages
                         "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
                     return;
                 }
+
+                ShowWaiting($"Найдено товаров: {products.Count}. Подстановка товаров...");
 
                 // Выводим для отладки
                 foreach (var p in products)
@@ -381,6 +421,7 @@ namespace ManagerApp.Pages
             finally
             {
                 Mouse.OverrideCursor = null;
+                CloseWaiting();
             }
         }
 

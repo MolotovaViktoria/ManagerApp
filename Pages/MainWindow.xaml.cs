@@ -603,7 +603,7 @@ namespace ManagerApp.Pages
             finally
             {
                 btnTestBitrixCache.IsEnabled = true;
-                btnTestBitrixCache.Content = "🧪 Тест Bitrix";
+                btnTestBitrixCache.Content = "🧪 Тест каталога";
             }
         }
 

@@ -219,7 +219,7 @@
                                        Margin="0,0,0,15"/>
 
                             <TextBlock Grid.Row="1" Grid.Column="0"
-                                       Text="Принудительное обновление кеша данных из Bitrix"
+                                       Text="Принудительное обновление кеша данных"
                                        FontSize="14"
                                        Foreground="#666666"
                                        TextWrapping="Wrap"

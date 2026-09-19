@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:ManagerApp.Pages"
         mc:Ignorable="d"
-        Title="Создание компании в Bitrix"
+        Title="Создание компании"
         Height="550"
         Width="700"
         WindowStartupLocation="CenterOwner"

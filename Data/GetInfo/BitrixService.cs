@@ -1,4 +1,4 @@
-﻿using ManagerApp.Classes.Setting;
+using ManagerApp.Classes.Setting;
 using ManagerApp.Data.StructureList;
 using ManagerApp.Pages;
 using Newtonsoft.Json;
@@ -18,6 +18,23 @@ namespace ManagerApp.Data.GetInfo
 {
     public class BitrixService
     {
+        // ============ НОВЫЙ API КАТАЛОГА (замена Bitrix24, см. crmnvr.ru — отключен) ============
+        private const string ApiBaseUrl = "http://83.217.203.29:8090";
+        private const string ApiKey = "aXmKuJy2EHRLOrUDF8IRTNolTkvPgmLYssA0S54m-Vc";
+
+        // Общий HttpClient для запросов к новому API (с заголовком X-Api-Key)
+        private static readonly HttpClient _apiClient = CreateApiClient();
+
+        private static HttpClient CreateApiClient()
+        {
+            var client = new HttpClient
+            {
+                Timeout = TimeSpan.FromSeconds(60)
+            };
+            client.DefaultRequestHeaders.Add("X-Api-Key", ApiKey);
+            return client;
+        }
+
         private readonly HttpClient _httpClient;
 
         public BitrixService()
@@ -32,412 +49,105 @@ namespace ManagerApp.Data.GetInfo
         private static readonly TimeSpan _categoriesCacheDuration = TimeSpan.FromMinutes(30);
         private static readonly object _categoriesLock = new object();
 
+        // Кратковременный кэш полного дампа товаров (/api/products/all), чтобы GetProducts()/
+        // GetProductsByCategory() не тянули по 50к строк из сети при каждом вызове подряд.
+        private static List<ApiProductDto> _allProductsRawCache = null;
+        private static DateTime _allProductsRawCacheTime = DateTime.MinValue;
+        private static readonly TimeSpan _allProductsRawCacheDuration = TimeSpan.FromMinutes(10);
+        private static readonly SemaphoreSlim _allProductsRawLock = new SemaphoreSlim(1, 1);
+
 
         public async Task<int> CreateProductAsync(string productName)
         {
             try
             {
-                string url = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/catalog.product.add";
-
-                var productData = new
+                // Сначала проверяем, нет ли уже такого товара в каталоге
+                var existingId = await GetProductIdByName(productName);
+                if (existingId > 0)
                 {
-                    fields = new
-                    {
-                        iblockId = 14,
-                        name = productName,
-                        iblockSectionId = 697,
-                        active = "Y"
-                    }
-                };
-
-                string jsonData = System.Text.Json.JsonSerializer.Serialize(productData);
-
-                using (var client = new HttpClient())
-                {
-                    var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
-
-                    var response = await client.PostAsync(url, content);
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        string error = await response.Content.ReadAsStringAsync();
-                        Console.WriteLine($"❌ Ошибка HTTP: {response.StatusCode}, {error}");
-                        return 0;
-                    }
-
-                    string result = await response.Content.ReadAsStringAsync();
-
-                    // Используем стандартный using вместо using declaration
-                    using (var doc = System.Text.Json.JsonDocument.Parse(result))
-                    {
-                        var root = doc.RootElement;
-
-                        if (root.TryGetProperty("result", out var resultElement) &&
-                            resultElement.TryGetProperty("element", out var element) &&
-                            element.TryGetProperty("id", out var idElement))
-                        {
-                            int productId = idElement.GetInt32();
-                            Console.WriteLine($"✅ Товар '{productName}' успешно создан");
-                            Console.WriteLine($"   ID: {productId}");
-                            return productId;
-                        }
-
-                        Console.WriteLine($"❌ Не удалось получить ID товара из ответа: {result}");
-                        return 0;
-                    }
+                    Console.WriteLine($"Товар '{productName}' уже существует (ID: {existingId})");
+                    return existingId;
                 }
-            }
-            catch (System.Text.Json.JsonException jsonEx)
-            {
-                Console.WriteLine($"❌ Ошибка парсинга JSON: {jsonEx.Message}");
+
+                // ПРОБЕЛ В API: сервер каталога (http://83.217.203.29:8090) не предоставляет
+                // endpoint для создания нового товара — каталог read-only (импортирован из Bitrix).
+                // Возвращаем 0, вызывающий код (ComparisonProduct.xaml.cs) уже обрабатывает
+                // отрицательный/нулевой результат как "не удалось создать" и не падает.
+                Console.WriteLine($"⚠️ Товар '{productName}' не найден в каталоге. Создание нового товара не поддерживается новым API (нет endpoint создания товара).");
                 return 0;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"❌ Общая ошибка: {ex.Message}");
+                Console.WriteLine($"❌ Ошибка при создании товара '{productName}': {ex.Message}");
                 return 0;
             }
         }
-        //GetSectionNameForProductFromCache
-        private async Task<string> GetSectionNameForProductFromCache(int productId)
-        {
-            try
-            {
-                Console.WriteLine($"🔍 Получаем информацию о товаре ID: {productId} напрямую...");
 
-                // Получаем товар напрямую через crm.product.get
-                string url = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.product.get?id={productId}";
-
-                using (var client = new HttpClient())
-                {
-                    var response = await client.GetAsync(url);
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        Console.WriteLine($"   ❌ Ошибка HTTP: {response.StatusCode}");
-                        return string.Empty;
-                    }
-
-                    string result = await response.Content.ReadAsStringAsync();
-
-                    if (string.IsNullOrEmpty(result) || result.Contains("\"error\""))
-                    {
-                        Console.WriteLine($"   ❌ Ошибка в ответе API");
-                        return string.Empty;
-                    }
-
-                    // Парсим JSON для получения SECTION_ID
-                    try
-                    {
-                        dynamic productData = Newtonsoft.Json.JsonConvert.DeserializeObject(result);
-                        string sectionId = productData?.result?.SECTION_ID;
-
-                        if (!string.IsNullOrEmpty(sectionId))
-                        {
-                            Console.WriteLine($"   ✅ Нашли SECTION_ID: {sectionId}");
-
-                            // Получаем название раздела
-                            string sectionName = await GetSectionNameById(sectionId);
-                            Console.WriteLine($"   📁 Раздел: {sectionName}");
-                            return sectionName;
-                        }
-                        else
-                        {
-                            Console.WriteLine($"   ⚠️ SECTION_ID не найден в ответе");
-                            return string.Empty;
-                        }
-                    }
-                    catch (Exception jsonEx)
-                    {
-                        Console.WriteLine($"   ❌ Ошибка парсинга JSON: {jsonEx.Message}");
-                        return string.Empty;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"❌ Ошибка в GetSectionNameForProductDirect для ID {productId}: {ex.Message}");
-                return string.Empty;
-            }
-        }
-
-        private async Task<string> GetSectionNameById(string sectionId)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(sectionId) || sectionId == "0")
-                    return string.Empty;
-
-                Console.WriteLine($"   🔍 Получаем название раздела ID: {sectionId}");
-
-                // Получаем информацию о разделе
-                string url = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.productsection.get?id={sectionId}";
-
-                using (var client = new HttpClient())
-                {
-                    var response = await client.GetAsync(url);
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        Console.WriteLine($"      ❌ Ошибка HTTP при запросе раздела: {response.StatusCode}");
-                        return string.Empty;
-                    }
-
-                    string result = await response.Content.ReadAsStringAsync();
-
-                    try
-                    {
-                        dynamic sectionData = Newtonsoft.Json.JsonConvert.DeserializeObject(result);
-                        string sectionName = sectionData?.result?.NAME;
-
-                        if (!string.IsNullOrEmpty(sectionName))
-                        {
-                            Console.WriteLine($"      ✅ Название раздела: {sectionName}");
-                            return sectionName;
-                        }
-                    }
-                    catch { }
-
-                    return string.Empty;
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"   ❌ Ошибка получения раздела: {ex.Message}");
-                return string.Empty;
-            }
-        }
         // В классе BitrixService добавьте:
         public async Task<List<BitrixMeasure>> GetMeasuresAsync()
         {
-            try
-            {
-                Console.WriteLine("[BitrixService] Загрузка единиц измерения из Bitrix...");
-
-                using (var httpClient = new HttpClient())
-                {
-                    httpClient.Timeout = TimeSpan.FromSeconds(30);
-
-                    string apiUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.measure.list.json";
-                    Console.WriteLine($"[BitrixService] Запрос: {apiUrl}");
-
-                    var response = await httpClient.GetAsync(apiUrl);
-
-                    if (response.IsSuccessStatusCode)
-                    {
-                        var json = await response.Content.ReadAsStringAsync();
-                        Console.WriteLine($"[BitrixService] Получен ответ, длина: {json.Length} символов");
-
-                        // Десериализуем JSON
-                        var result = JsonConvert.DeserializeObject<BitrixMeasureResponse>(json);
-
-                        if (result?.Result != null)
-                        {
-                            Console.WriteLine($"[BitrixService] Загружено {result.Result.Count} единиц измерения");
-                            return result.Result;
-                        }
-                    }
-                    else
-                    {
-                        Console.WriteLine($"[BitrixService] HTTP ошибка: {response.StatusCode}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[BitrixService] Ошибка получения единиц измерения: {ex.Message}");
-            }
-
-            // Возвращаем пустой список при ошибке
-            return new List<BitrixMeasure>();
+            // Новый каталог хранит единицы измерения простым текстом (шт/м/кг/упак),
+            // а не через справочник Bitrix, поэтому обходимся без сетевого запроса.
+            return await Task.FromResult(GetStaticMeasures());
         }
 
-        // Класс для десериализации ответа от Bitrix
+        internal static List<BitrixMeasure> GetStaticMeasures()
+        {
+            return new List<BitrixMeasure>
+            {
+                new BitrixMeasure { ID = "796", CODE = "796", SYMBOL_RUS = "шт",   MEASURE_TITLE = "Штука" },
+                new BitrixMeasure { ID = "006", CODE = "006", SYMBOL_RUS = "м",    MEASURE_TITLE = "Метр" },
+                new BitrixMeasure { ID = "166", CODE = "166", SYMBOL_RUS = "кг",   MEASURE_TITLE = "Килограмм" },
+                new BitrixMeasure { ID = "778", CODE = "778", SYMBOL_RUS = "упак", MEASURE_TITLE = "Упаковка" },
+            };
+        }
 
-
+        // Класс для десериализации ответа от Bitrix (оставлены для совместимости, больше не используются)
 
         public class BitrixMeasureResponse
         {
-            public List<BitrixMeasure> Result { get; set; }
-        }        public async Task<byte[]> DownloadDocumentBytes(string documentUrl)
-        {
-            try
-            {
-                // Если это REST API URL, делаем POST запрос
-                if (documentUrl.Contains("/rest/"))
-                {
-                    var response = await _httpClient.PostAsync(documentUrl, null);
-                    if (response.IsSuccessStatusCode)
-                    {
-                        return await response.Content.ReadAsByteArrayAsync();
-                    }
-                }
-                else // Если это прямой URL, делаем GET запрос
-                {
-                    var response = await _httpClient.GetAsync(documentUrl);
-                    if (response.IsSuccessStatusCode)
-                    {
-                        return await response.Content.ReadAsByteArrayAsync();
-                    }
-                }
+            [JsonProperty("result")]
+            public BitrixMeasureListResult Result { get; set; }
+        }
 
-                return null;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Ошибка скачивания документа: {ex.Message}");
-                return null;
-            }
+        public class BitrixMeasureListResult
+        {
+            [JsonProperty("measures")]
+            public List<BitrixMeasure> Measures { get; set; }
+        }
+
+        // TODO(local-invoice-generation): генерация документа переписывается на локальный OpenXML
+        // отдельной параллельной задачей. Bitrix (crmnvr.ru) отключен — метод больше не должен
+        // никуда стучаться, просто безопасно возвращает null.
+        public Task<byte[]> DownloadDocumentBytes(string documentUrl)
+        {
+            Console.WriteLine("[BitrixService] DownloadDocumentBytes: заглушка, Bitrix отключен, генерация документов теперь локальная (OpenXML).");
+            return Task.FromResult<byte[]>(null);
         }
 
         /// <summary>
-        /// Генерирует и возвращает документ (Word или PDF) для смарт-счета по шаблону
+        /// TODO(local-invoice-generation): генерация документа переписывается на локальный OpenXML
+        /// отдельной параллельной задачей. Заглушка, безопасно возвращает null вместо обращения
+        /// к отключенному Bitrix (crmnvr.ru).
         /// </summary>
-        /// <param name="invoiceId">ID счета (Smart Invoice, entityTypeId=31)</param>
-        /// <param name="templateId">ID шаблона. По умолчанию = 2 (Счет России)</param>
-        /// <param name="format">Формат файла: "docx" или "pdf". По умолчанию "docx".</param>
-        /// <returns>URL для скачивания документа или null в случае ошибки</returns>
-        /// <summary>
-        /// Генерирует и возвращает документ (Word или PDF) для смарт-счета по шаблону
-        /// </summary>
-        /// <param name="invoiceId">ID счета (Smart Invoice, entityTypeId=31)</param>
-        /// <param name="templateId">ID шаблона: 32 для СПК, 34 для НВР</param>
-        /// <param name="format">Формат файла: "docx" или "pdf". По умолчанию "docx".</param>
-        /// <returns>URL для скачивания документа или null в случае ошибки</returns>
-        public async Task<string> GenerateInvoiceDocument(
+        public Task<string> GenerateInvoiceDocument(
             int invoiceId,
-            int templateId, // Убираем значение по умолчанию, теперь обязательный параметр
+            int templateId,
             string format = "docx")
         {
-            try
-            {
-                Console.WriteLine($"=== ГЕНЕРАЦИЯ ДОКУМЕНТА ДЛЯ СЧЕТА {invoiceId} ===");
-                Console.WriteLine($"Шаблон: {templateId}, Формат: {format}");
-
-                // Важно: для смарт-счетов используем правильный провайдер данных
-                string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.documentgenerator.document.add";
-
-                var requestData = new
-                {
-                    templateId = templateId,
-                    entityTypeId = 31,          // Смарт-счета (Smart Invoice)
-                    entityId = invoiceId,       // ID нашего счета
-                    values = new { }            // Дополнительные значения (можно оставить пустым)
-                };
-
-                string jsonRequest = JsonConvert.SerializeObject(requestData);
-                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
-
-                var response = await _httpClient.PostAsync(webhookUrl, content);
-                string jsonResponse = await response.Content.ReadAsStringAsync();
-
-                Console.WriteLine($"Ответ при создании документа: {jsonResponse}");
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    Console.WriteLine($"❌ Ошибка HTTP при создании документа: {response.StatusCode}");
-                    return null;
-                }
-
-                dynamic result = JsonConvert.DeserializeObject(jsonResponse);
-
-                if (result?.error != null)
-                {
-                    Console.WriteLine($"❌ Ошибка API: {result.error}");
-                    return null;
-                }
-
-                // Проверяем, что документ создан успешно
-                if (result?.result?.document?.id == null)
-                {
-                    Console.WriteLine("⚠️ Не удалось получить ID созданного документа");
-                    return null;
-                }
-
-                int documentId = result.result.document.id;
-                Console.WriteLine($"✅ Документ создан. ID документа: {documentId}");
-
-                // Получаем ссылку для скачивания
-                return await GetDocumentDownloadUrl(documentId, format);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"❌ Исключение при генерации документа: {ex.Message}");
-                return null;
-            }
+            Console.WriteLine("[BitrixService] GenerateInvoiceDocument: заглушка, Bitrix отключен, генерация документов теперь локальная (OpenXML).");
+            return Task.FromResult<string>(null);
         }
 
-        /// <summary>
-        /// Получает прямую ссылку для скачивания созданного документа
-        /// </summary>
-        private async Task<string> GetDocumentDownloadUrl(int documentId, string format)
+        // Больше не используется нигде в проекте (единственный вызывающий код,
+        // InvoicionCreatePage.CheckInvoiceExistsAsync, переписан на новый API напрямую).
+        // Оставлен как безопасная заглушка на случай, если что-то забытое ещё на него ссылается -
+        // Bitrix (crmnvr.ru) отключен, поэтому метод больше никуда не стучится.
+        public async Task<JObject> CallMethodAsync(string method, object parameters)
         {
-            try
-            {
-                // Получаем информацию о документе
-                string infoUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.documentgenerator.document.get";
-                var infoRequest = new { id = documentId };
-
-                string infoJson = JsonConvert.SerializeObject(infoRequest);
-                var infoContent = new StringContent(infoJson, Encoding.UTF8, "application/json");
-
-                var infoResponse = await _httpClient.PostAsync(infoUrl, infoContent);
-                string infoJsonResponse = await infoResponse.Content.ReadAsStringAsync();
-
-                dynamic docInfo = JsonConvert.DeserializeObject(infoJsonResponse);
-
-                // В зависимости от формата возвращаем соответствующую ссылку
-                if (format.ToLower() == "pdf" && docInfo?.result?.document?.pdfUrl != null)
-                {
-                    string pdfUrl = docInfo.result.document.pdfUrl.ToString();
-                    Console.WriteLine($"✅ Ссылка на PDF: {pdfUrl}");
-                    return pdfUrl;
-                }
-                else if (docInfo?.result?.document?.fileUrl != null)
-                {
-                    string docxUrl = docInfo.result.document.fileUrl.ToString();
-                    Console.WriteLine($"✅ Ссылка на DOCX: {docxUrl}");
-                    return docxUrl;
-                }
-
-                // Если не нашли ссылки в ответе, пробуем получить через download
-                string downloadUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.documentgenerator.document.download";
-                var downloadRequest = new { id = documentId };
-
-                string downloadJson = JsonConvert.SerializeObject(downloadRequest);
-                var downloadContent = new StringContent(downloadJson, Encoding.UTF8, "application/json");
-
-                var downloadResponse = await _httpClient.PostAsync(downloadUrl, downloadContent);
-
-                if (downloadResponse.IsSuccessStatusCode)
-                {
-                    // Для простоты возвращаем URL для запроса скачивания
-                    return downloadUrl + $"?id={documentId}";
-                }
-
-                return null;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"❌ Ошибка получения ссылки: {ex.Message}");
-                return null;
-            }
-        }
-        public  async Task<JObject> CallMethodAsync(string method, object parameters)
-        {
-            using (var client = new HttpClient())
-            {
-                var jsonContent = JsonConvert.SerializeObject(parameters);
-                var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
-
-                var response = await client.PostAsync(
-                    $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/{method}",
-                    content);
-
-                response.EnsureSuccessStatusCode();
-                var json = await response.Content.ReadAsStringAsync();
-                return JObject.Parse(json);
-            }
+            await Task.CompletedTask;
+            Console.WriteLine($"[BitrixService] CallMethodAsync('{method}') вызван, но Bitrix отключен - возвращаю пустой результат");
+            return new JObject();
         }
 
         public async Task<int> CreateSmartInvoice(
@@ -456,113 +166,67 @@ namespace ManagerApp.Data.GetInfo
         {
             try
             {
-                Console.WriteLine("=== СОЗДАНИЕ НОВОГО СМАРТ-СЧЕТА (entityTypeId = 31) ===");
-                Console.WriteLine($"📅 Полученная дата: {invoiceDate:dd.MM.yyyy}");
+                Console.WriteLine("=== СОЗДАНИЕ НОВОГО СЧЕТА (новый API каталога) ===");
+                Console.WriteLine($"📅 Дата: {invoiceDate:dd.MM.yyyy}");
 
-                string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.item.add";
+                // 32 = СПК, 34 = НВР (см. MyLocalCompany.TemplateId в InvoicionCreatePage.xaml.cs).
+                // Всё, что не 34, по умолчанию считаем СПК — так же, как раньше вело себя
+                // GetTemplateIdForMyCompany() (дефолт 32/СПК при отсутствии выбора).
+                string sellerCompany = myCompanyId == 34 ? "NVR" : "SPK";
 
+                int? deliveryDays = ParseDeliveryDays(day_dostavka);
 
-                // Группируем товары по ProductId для подсчета уникальных наименований
-                var groupedProducts = products
-                    .GroupBy(p => new { p.ProductId, p.ProductName })
-                    .Select(g => g.First())
+                var itemsPayload = (products ?? new List<InvoiceProduct>())
+                    .Select(p => new
+                    {
+                        productId = p.ProductId > 0 ? (int?)p.ProductId : null,
+                        productName = p.ProductName,
+                        quantity = p.Quantity,
+                        price = p.Price,
+                        unit = string.IsNullOrWhiteSpace(p.UnitName) ? "шт" : p.UnitName
+                    })
                     .ToList();
 
-                // Количество уникальных наименований после группировки
-                int uniqueProductNamesCount = groupedProducts.Count;
-
-                Console.WriteLine($"📊 Всего позиций в списке (с учетом количества): {products.Count}");
-                Console.WriteLine($"📊 Уникальных наименований товаров: {uniqueProductNamesCount}");
-
-                // Выводим уникальные товары для проверки
-                foreach (var product in groupedProducts)
+                var payload = new
                 {
-                    Console.WriteLine($"   - {product.ProductName} (ID: {product.ProductId})");
-                }
-
-                var invoiceRequestData = new
-                {
-                    entityTypeId = 31,
-                    fields = new
-                    {
-                        // ВАЖНО: используем invoiceDate, а не DateTime.Now!
-                        TITLE = $"Счет на оплату № от {invoiceDate:dd.MM.yyyy}",
-
-                        // ОЧЕНЬ ВАЖНО: добавляем поле для генератора документов!
-                        DOCUMENT_CREATE_TIME = invoiceDate.ToString("yyyy-MM-ddTHH:mm:ss"),
-
-                        // Обязательные поля
-                        ACCOUNT_NUMBER = number_chet,
-                        COMPANY_ID = clientCompanyId,
-                        MYCOMPANY_ID = myCompanyId,
-                        ASSIGNED_BY_ID = responsibleId,
-                        STAGE_ID = statusId,
-
-                        // ДАТЫ - используем invoiceDate
-                        BEGINDATE = invoiceDate.ToString("yyyy-MM-ddTHH:mm:ss"),
-                        CLOSEDATE = CalculateBusinessDays(invoiceDate, 3).ToString("yyyy-MM-ddTHH:mm:ss"),
-
-                        // ПОЛЯ ДЛЯ ГЕНЕРАТОРА ДОКУМЕНТОВ
-                        XML_ID = adress ?? string.Empty,
-                        COMMENTS = day_dostavka ?? string.Empty,
-                        SOURCE_DESCRIPTION = sposob_oplata ?? string.Empty,
-
-                        // Пробуем оба поля - одно из них должно сработать
-                        COMPANY_LEAD_TOTAL_ROWS = uniqueProductNamesCount,
-                        COMPANY_LEAD_TOTAL_QUANTITY = uniqueProductNamesCount,
-
-                        // Дополнительные полезные поля
-                        CATEGORY_ID = 3,
-                        UTM_SOURCE = "ManagerApp",
-                        OPPORTUNITY = products.Sum(p => p.Price * p.Quantity)
-                    }
+                    sellerCompany = sellerCompany,
+                    buyerCompanyId = clientCompanyId > 0 ? (int?)clientCompanyId : null,
+                    invoiceDate = invoiceDate,
+                    address = adress,
+                    deliveryDays = deliveryDays,
+                    paymentMethod = sposob_oplata,
+                    status = statusId,
+                    responsible = responsibleId > 0 ? responsibleId.ToString() : null,
+                    items = itemsPayload,
+                    number = string.IsNullOrWhiteSpace(number_chet) ? null : number_chet.Trim()
                 };
 
-                string invoiceJson = JsonConvert.SerializeObject(invoiceRequestData);
-                Console.WriteLine($"📤 Отправляемый JSON:\n{invoiceJson}");
+                string json = JsonConvert.SerializeObject(payload);
+                Console.WriteLine($"📤 Отправляемый JSON:\n{json}");
 
-                var invoiceContent = new StringContent(invoiceJson, Encoding.UTF8, "application/json");
-                var response = await _httpClient.PostAsync(webhookUrl, invoiceContent);
-                string jsonResponse = await response.Content.ReadAsStringAsync();
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var response = await _apiClient.PostAsync($"{ApiBaseUrl}/api/invoices", content);
+                string responseJson = await response.Content.ReadAsStringAsync();
 
-                Console.WriteLine($"📥 Ответ от Bitrix:\n{jsonResponse}");
+                Console.WriteLine($"📥 Ответ API:\n{responseJson}");
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    Console.WriteLine($"❌ Ошибка HTTP: {response.StatusCode}");
+                    Console.WriteLine($"❌ Ошибка HTTP при создании счета: {response.StatusCode}");
                     return 0;
                 }
 
-                dynamic result = JsonConvert.DeserializeObject(jsonResponse);
+                var result = JsonConvert.DeserializeObject<ApiInvoiceCreateResponse>(responseJson);
 
-                if (result?.error != null)
+                if (result == null || result.Id <= 0)
                 {
-                    Console.WriteLine($"❌ Ошибка API: {result.error}");
+                    Console.WriteLine("⚠️ Не удалось получить ID созданного счета");
                     return 0;
                 }
 
-                int invoiceId = result?.result?.item?.id != null ? (int)result.result.item.id : 0;
+                Console.WriteLine($"✅ Счет создан. ID: {result.Id}, номер: {result.Number}, продавец: {result.SellerCompany}");
 
-                if (invoiceId <= 0)
-                {
-                    Console.WriteLine("⚠️ Не удалось получить ID счета");
-                    return 0;
-                }
-
-                Console.WriteLine($"✅ Счет создан. ID: {invoiceId}");
-
-                // Добавляем товары
-                bool productsAdded = await AddProductsToSmartInvoice(invoiceId, products);
-
-                if (productsAdded)
-                {
-                    Console.WriteLine($"✅ Товары добавлены в счет #{invoiceId}");
-                }
-
-                // Проверяем, какие поля реально сохранились
-                await CheckActualInvoiceFields(invoiceId);
-
-                return invoiceId;
+                return result.Id;
             }
             catch (Exception ex)
             {
@@ -571,554 +235,19 @@ namespace ManagerApp.Data.GetInfo
             }
         }
 
-        // Добавьте этот метод для проверки полей
-        private async Task CheckActualInvoiceFields(int invoiceId)
+        private static int? ParseDeliveryDays(string dayDostavka)
         {
-            try
-            {
-                Console.WriteLine($"\n🔍 ПРОВЕРКА ПОЛЕЙ СЧЕТА #{invoiceId}");
+            if (string.IsNullOrWhiteSpace(dayDostavka))
+                return null;
 
-                string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.item.get";
-                var requestData = new
-                {
-                    entityTypeId = 31,
-                    id = invoiceId
-                };
+            if (int.TryParse(dayDostavka.Trim(), out int direct))
+                return direct;
 
-                string jsonRequest = JsonConvert.SerializeObject(requestData);
-                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
+            var digits = new string(dayDostavka.Where(char.IsDigit).ToArray());
+            if (!string.IsNullOrEmpty(digits) && int.TryParse(digits, out int parsed))
+                return parsed;
 
-                var response = await _httpClient.PostAsync(webhookUrl, content);
-                string jsonResponse = await response.Content.ReadAsStringAsync();
-
-                Console.WriteLine($"📊 Данные счета из Bitrix:\n{jsonResponse}");
-
-                // Парсим ответ для проверки конкретных полей
-                dynamic result = JsonConvert.DeserializeObject(jsonResponse);
-
-                if (result?.result?.item != null)
-                {
-                    var item = result.result.item;
-                    Console.WriteLine($"\n📋 СОХРАНЕННЫЕ ПОЛЯ:");
-                    Console.WriteLine($"COMPANY_LEAD_TOTAL_ROWS: {item.companyLeadTotalRows}");
-                    Console.WriteLine($"COMPANY_LEAD_TOTAL_QUANTITY: {item.companyLeadTotalQuantity}");
-                    Console.WriteLine($"PRODUCTS_PRODUCT_QUANTITY: {item.productsProductQuantity}");
-                    Console.WriteLine($"XML_ID: {item.xmlId}");
-                    Console.WriteLine($"COMMENTS: {item.comments}");
-                    Console.WriteLine($"SOURCE_DESCRIPTION: {item.sourceDescription}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Ошибка проверки полей: {ex.Message}");
-            }
-        }
-
-        private async Task<bool> AddProductsToSmartInvoice(int invoiceId, List<InvoiceProduct> products)
-        {
-            Console.WriteLine($"=== ДОБАВЛЕНИЕ ТОВАРОВ В СЧЕТ #{invoiceId} ===");
-
-            if (products == null || products.Count == 0)
-            {
-                Console.WriteLine("Список товаров пуст.");
-                return true;
-            }
-
-            // ПОЛУЧАЕМ СПИСОК ЕДИНИЦ ИЗМЕРЕНИЯ ИЗ BITRIX24
-            var measures = await GetMeasuresAsync();
-            Console.WriteLine($"Загружено единиц измерения из Bitrix24: {measures?.Count ?? 0}");
-
-            if (measures == null || measures.Count == 0)
-            {
-                Console.WriteLine("⚠️ Не удалось загрузить единицы измерения");
-                measures = new List<BitrixMeasure>();
-            }
-
-            // СОЗДАЕМ СЛОВАРЬ ДЛЯ ПОИСКА ПО ID
-            var measureDictById = new Dictionary<string, BitrixMeasure>();
-
-            foreach (var measure in measures)
-            {
-                if (!string.IsNullOrEmpty(measure.ID))
-                {
-                    var id = measure.ID.Trim();
-                    if (!string.IsNullOrEmpty(id))
-                    {
-                        measureDictById[id] = measure;
-                        Console.WriteLine($"Доступна единица: ID={measure.ID}, CODE={measure.CODE}, SYMBOL={measure.SYMBOL_RUS}, TITLE={measure.MEASURE_TITLE}");
-                    }
-                }
-            }
-
-            string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.item.productrow.add";
-            int successCount = 0;
-            int errorCount = 0;
-            int duplicateCount = 0;
-
-            foreach (var product in products)
-            {
-                try
-                {
-                    // Получаем категорию товара
-                    string categoryName = await GetSectionNameForProductFromCache(product.ProductId);
-
-                    // Очищаем название товара от категории в скобках
-                    string cleanProductName = CleanProductNameSkobka(product.ProductName);
-                    Console.WriteLine($"\nТовар: '{cleanProductName}' (ID: {product.ProductId})");
-
-                    // ОПРЕДЕЛЯЕМ КОД ЕДИНИЦЫ ИЗМЕРЕНИЯ
-                    int measureCode = 796; // по умолчанию - Штука
-                    string measureSymbol = "шт"; // по умолчанию
-                    string measureTitle = "Штука"; // по умолчанию
-
-                    if (!string.IsNullOrEmpty(product.MeasureId))
-                    {
-                        var measureId = product.MeasureId.Trim();
-                        Console.WriteLine($"  measureId из продукта: '{measureId}'");
-
-                        if (measureDictById.TryGetValue(measureId, out BitrixMeasure foundMeasure))
-                        {
-                            if (foundMeasure.CODE != null)
-                            {
-                                string codeString = foundMeasure.CODE.ToString();
-                                if (int.TryParse(codeString, out int parsedCode2))
-                                {
-                                    measureCode = parsedCode2;
-                                }
-                            }
-
-                            measureSymbol = !string.IsNullOrEmpty(foundMeasure.SYMBOL_RUS)
-                                ? foundMeasure.SYMBOL_RUS
-                                : "шт";
-
-                            measureTitle = !string.IsNullOrEmpty(foundMeasure.MEASURE_TITLE)
-                                ? foundMeasure.MEASURE_TITLE
-                                : "Штука";
-
-                            Console.WriteLine($"  Найдена единица измерения: ID={foundMeasure.ID}, CODE={foundMeasure.CODE}");
-                            Console.WriteLine($"  Используем: measureCode={measureCode}, symbol='{measureSymbol}', title='{measureTitle}'");
-                        }
-                        else
-                        {
-                            Console.WriteLine($"  ⚠️ Единица измерения с ID='{measureId}' не найдена, используем значения по умолчанию");
-                        }
-                    }
-                    else
-                    {
-                        Console.WriteLine($"  ⚠️ MeasureId не указан, используем по умолчанию: код 796 (Штука)");
-                    }
-
-                    // ПЕРВАЯ ПОПЫТКА - добавляем с оригинальным productId
-                    bool added = await TryAddProductToInvoice(
-                        invoiceId,
-                        product.ProductId,
-                        cleanProductName,
-                        product.Price,
-                        product.Quantity,
-                        measureCode,
-                        measureSymbol);
-
-                    if (added)
-                    {
-                        successCount++;
-                        await Task.Delay(200);
-                        continue;
-                    }
-
-                    // ЕСЛИ НЕ ПОЛУЧИЛОСЬ - создаем дубликат в папке "Прочее"
-                    Console.WriteLine($"  ⚠️ Не удалось добавить товар ID {product.ProductId}. Создаем дубликат в папке 'Прочее'...");
-
-                    int newProductId = await CreateProductInOtherFolder(
-                        cleanProductName,
-                        product.Price,
-                        measureCode);
-
-                    if (newProductId > 0)
-                    {
-                        Console.WriteLine($"  ✅ Создан дубликат товара с ID: {newProductId}");
-
-                        // ВТОРАЯ ПОПЫТКА - добавляем с новым productId
-                        bool addedDuplicate = await TryAddProductToInvoice(
-                            invoiceId,
-                            newProductId,
-                            cleanProductName,
-                            product.Price,
-                            product.Quantity,
-                            measureCode,
-                            measureSymbol);
-
-                        if (addedDuplicate)
-                        {
-                            duplicateCount++;
-                            successCount++;
-                            Console.WriteLine($"  ✅ Товар успешно добавлен в счет через дубликат!");
-                        }
-                        else
-                        {
-                            errorCount++;
-                            Console.WriteLine($"  ❌ Не удалось добавить даже дубликат товара");
-                        }
-                    }
-                    else
-                    {
-                        errorCount++;
-                        Console.WriteLine($"  ❌ Не удалось создать дубликат товара");
-                    }
-
-                    await Task.Delay(200);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"  ❌ Исключение: {ex.Message}");
-                    if (ex.InnerException != null)
-                    {
-                        Console.WriteLine($"  Внутреннее исключение: {ex.InnerException.Message}");
-                    }
-                    errorCount++;
-                }
-            }
-
-            Console.WriteLine($"\n=== ИТОГО: Успешно добавлено {successCount} из {products.Count} товаров. ===");
-            Console.WriteLine($"   - Обычных: {successCount - duplicateCount}");
-            Console.WriteLine($"   - Дубликатов: {duplicateCount}");
-            Console.WriteLine($"   - Ошибок: {errorCount}");
-
-            return successCount > 0;
-        }
-
-        /// <summary>
-        /// Пытается добавить товар в счет
-        /// </summary>
-        private async Task<bool> TryAddProductToInvoice(int invoiceId, int productId, string productName,
-            decimal price, decimal quantity, int measureCode, string measureSymbol)
-        {
-            try
-            {
-                string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.item.productrow.add";
-
-                var productRowRequestData = new
-                {
-                    fields = new
-                    {
-                        ownerId = invoiceId,
-                        ownerType = "SI",
-                        productId = productId,
-                        productName = productName,
-                        price = price,
-                        quantity = quantity,
-                        measureCode = measureCode,
-                        measureName = measureSymbol,
-                        taxRate = 20.0,
-                        taxIncluded = "N"
-                    }
-                };
-
-                string productJson = JsonConvert.SerializeObject(productRowRequestData);
-                Console.WriteLine($"  Отправляем запрос с productId={productId}: measureCode={measureCode}, measureName='{measureSymbol}'");
-
-                var productContent = new StringContent(productJson, Encoding.UTF8, "application/json");
-                var response = await _httpClient.PostAsync(webhookUrl, productContent);
-                string jsonResponse = await response.Content.ReadAsStringAsync();
-
-                Console.WriteLine($"  Ответ Bitrix: {jsonResponse}");
-
-                if (response.IsSuccessStatusCode)
-                {
-                    try
-                    {
-                        dynamic result = JsonConvert.DeserializeObject(jsonResponse);
-                        if (result?.result?.productRow?.id != null)
-                        {
-                            var savedMeasureCode = result?.result?.productRow?.measureCode?.ToString();
-                            var savedMeasureName = result?.result?.productRow?.measureName?.ToString();
-
-                            Console.WriteLine($"  ✅ Товар добавлен. ID позиции: {result?.result?.productRow?.id}");
-                            Console.WriteLine($"     Сохранено в Bitrix: код={savedMeasureCode}, название='{savedMeasureName}'");
-                            return true;
-                        }
-                        else
-                        {
-                            Console.WriteLine($"  ⚠️ Товар добавлен, но не получен ID позиции");
-                            return true;
-                        }
-                    }
-                    catch (Exception jsonEx)
-                    {
-                        Console.WriteLine($"  ⚠️ Ошибка парсинга ответа: {jsonEx.Message}");
-                        return true;
-                    }
-                }
-                else
-                {
-                    Console.WriteLine($"  ❌ Ошибка HTTP: {response.StatusCode}");
-                    Console.WriteLine($"  Тело ошибки: {jsonResponse}");
-
-                    // Проверяем, является ли ошибка проблемой прав
-                    if (jsonResponse.Contains("Insufficient permission") ||
-                        jsonResponse.Contains("permission") ||
-                        jsonResponse.Contains("доступа"))
-                    {
-                        Console.WriteLine($"  🔍 Обнаружена ошибка прав доступа - будем создавать дубликат");
-                    }
-
-                    return false;
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"  ❌ Исключение в TryAddProductToInvoice: {ex.Message}");
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// Создает товар в папке "Прочее" (iblockSectionId = 697)
-        /// </summary>
-        private async Task<int> CreateProductInOtherFolder(string productName, decimal price, int measureCode)
-        {
-            try
-            {
-                Console.WriteLine($"  🔧 Создаем дубликат товара в папке 'Прочее': {productName}");
-
-                string url = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/catalog.product.add";
-
-                // Добавляем суффикс, чтобы отличать от оригинала
-                string duplicateName = $"{productName} (дубликат)";
-
-                var productData = new
-                {
-                    fields = new
-                    {
-                        iblockId = 14,
-                        name = duplicateName,
-                        iblockSectionId = 697, // ID папки "Прочее"
-                        active = "Y",
-                        price = new
-                        {
-                            price = price,
-                            currency = "RUB"
-                        },
-                        measure = measureCode // Код единицы измерения
-                    }
-                };
-
-                string jsonData = System.Text.Json.JsonSerializer.Serialize(productData);
-
-                using (var client = new HttpClient())
-                {
-                    var content = new StringContent(jsonData, Encoding.UTF8, "application/json");
-                    var response = await client.PostAsync(url, content);
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        string error = await response.Content.ReadAsStringAsync();
-                        Console.WriteLine($"  ❌ Ошибка HTTP при создании дубликата: {response.StatusCode}, {error}");
-                        return 0;
-                    }
-
-                    string result = await response.Content.ReadAsStringAsync();
-
-                    using (var doc = System.Text.Json.JsonDocument.Parse(result))
-                    {
-                        var root = doc.RootElement;
-
-                        if (root.TryGetProperty("result", out var resultElement) &&
-                            resultElement.TryGetProperty("element", out var element) &&
-                            element.TryGetProperty("id", out var idElement))
-                        {
-                            int productId = idElement.GetInt32();
-                            Console.WriteLine($"  ✅ Дубликат товара создан с ID: {productId}");
-
-                            // Обновляем кэш, чтобы новый товар был доступен
-                            _ = Task.Run(async () => await BitrixCache.RefreshCacheAsync());
-
-                            return productId;
-                        }
-
-                        Console.WriteLine($"  ❌ Не удалось получить ID дубликата из ответа: {result}");
-                        return 0;
-                    }
-                }
-            }
-            catch (System.Text.Json.JsonException jsonEx)
-            {
-                Console.WriteLine($"  ❌ Ошибка парсинга JSON при создании дубликата: {jsonEx.Message}");
-                return 0;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"  ❌ Общая ошибка при создании дубликата: {ex.Message}");
-                return 0;
-            }
-        }
-
-        /// <summary>
-        /// Проверяет, существует ли уже дубликат товара
-        /// </summary>
-        private async Task<int> FindExistingDuplicate(string originalProductName)
-        {
-            try
-            {
-                string duplicateName = $"{originalProductName} (дубликат)";
-
-                // Используем существующий метод поиска
-                int existingId = await GetProductIdByName(duplicateName);
-
-                if (existingId > 0)
-                {
-                    Console.WriteLine($"  🔍 Найден существующий дубликат товара с ID: {existingId}");
-                    return existingId;
-                }
-
-                return 0;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"  ❌ Ошибка при поиске дубликата: {ex.Message}");
-                return 0;
-            }
-        }
-
-        /// <summary>
-        /// Проверяем какие поля реально сохранены в счете
-        /// </summary>
-        /// 
-
-
-
-        private DateTime CalculateBusinessDays(DateTime startDate, int businessDays)
-        {
-            int direction = businessDays < 0 ? -1 : 1;
-            businessDays = Math.Abs(businessDays);
-
-            DateTime currentDate = startDate;
-
-            while (businessDays > 0)
-            {
-                currentDate = currentDate.AddDays(direction);
-
-                // Пропускаем выходные
-                if (currentDate.DayOfWeek == DayOfWeek.Saturday ||
-                    currentDate.DayOfWeek == DayOfWeek.Sunday)
-                {
-                    continue;
-                }
-
-                businessDays--;
-            }
-
-            return currentDate;
-        }
-
-
-        // Вспомогательный метод для проверки сохраненных данных
-        private async Task TestRetrieveInvoiceData(int invoiceId)
-        {
-            try
-            {
-                Console.WriteLine($"\n=== ПРОВЕРКА ДАННЫХ СЧЕТА #{invoiceId} ===");
-
-                string webhookUrl = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.item.get";
-                var requestData = new
-                {
-                    entityTypeId = 31,
-                    id = invoiceId
-                };
-
-                string jsonRequest = JsonConvert.SerializeObject(requestData);
-                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
-
-                var response = await _httpClient.PostAsync(webhookUrl, content);
-                string jsonResponse = await response.Content.ReadAsStringAsync();
-
-                Console.WriteLine($"Данные счета из Bitrix:\n{jsonResponse}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Ошибка при проверке данных счета: {ex.Message}");
-            }
-        }
-
-
-
-
-       
-
-        // Метод для очистки названия товара от категории в скобках
-        private string CleanProductNameSkobka(string productName)
-        {
-            if (string.IsNullOrEmpty(productName))
-                return productName;
-
-            // Удаляем всё, что в круглых скобках и сами скобки
-            // Ищем последнюю открывающую скобку
-            int lastOpenBracket = productName.LastIndexOf('(');
-
-            if (lastOpenBracket > 0)
-            {
-                // Проверяем, есть ли закрывающая скобка после нее
-                int closeBracket = productName.IndexOf(')', lastOpenBracket);
-                if (closeBracket > lastOpenBracket)
-                {
-                    // Удаляем всё начиная с пробела перед скобкой
-                    // Ищем пробел перед последней открывающей скобкой
-                    int spaceBeforeBracket = productName.LastIndexOf(' ', lastOpenBracket - 1);
-
-                    if (spaceBeforeBracket > 0)
-                    {
-                        // Удаляем от пробела до конца (включая скобки и категорию)
-                        return productName.Substring(0, spaceBeforeBracket).TrimEnd();
-                    }
-                    else
-                    {
-                        // Если пробела нет, удаляем от открывающей скобки
-                        return productName.Substring(0, lastOpenBracket).TrimEnd();
-                    }
-                }
-            }
-
-            // Если скобок нет или они не образуют пару, возвращаем оригинал
-            return productName;
-        }
-
-
-
-
-        // Метод для очистки названия товара от категории в скобках
-        private string CleanProductName(string productName)
-        {
-            if (string.IsNullOrEmpty(productName))
-                return productName;
-
-            // Удаляем всё, что в круглых скобках и сами скобки
-            // Ищем последнюю открывающую скобку
-            int lastOpenBracket = productName.LastIndexOf('(');
-
-            if (lastOpenBracket > 0)
-            {
-                // Проверяем, есть ли закрывающая скобка после нее
-                int closeBracket = productName.IndexOf(')', lastOpenBracket);
-                if (closeBracket > lastOpenBracket)
-                {
-                    // Удаляем всё начиная с пробела перед скобкой
-                    // Ищем пробел перед последней открывающей скобкой
-                    int spaceBeforeBracket = productName.LastIndexOf(' ', lastOpenBracket - 1);
-
-                    if (spaceBeforeBracket > 0)
-                    {
-                        // Удаляем от пробела до конца (включая скобки и категорию)
-                        return productName.Substring(0, spaceBeforeBracket).TrimEnd();
-                    }
-                    else
-                    {
-                        // Если пробела нет, удаляем от открывающей скобки
-                        return productName.Substring(0, lastOpenBracket).TrimEnd();
-                    }
-                }
-            }
-
-            // Если скобок нет или они не образуют пару, возвращаем оригинал
-            return productName;
+            return null;
         }
 
         // ============ МЕТОДЫ ДЛЯ РАБОТЫ С ТОВАРАМИ ============
@@ -1152,34 +281,32 @@ namespace ManagerApp.Data.GetInfo
                         return cachedId;
                 }
 
-                // 2. Если не нашли в кэше, ищем через API
+                // 2. Если не нашли в кэше, ищем через API (/api/products/search)
                 Console.WriteLine($"Товар '{productName}' не найден в кэше, ищем через API...");
 
-                var allProducts = await GetProducts();
                 var searchName = productName.Trim();
+                var searchResults = await SearchProductsAsync(searchName);
 
                 // Ищем точное совпадение
-                var product = allProducts.FirstOrDefault(p =>
+                var product = searchResults.FirstOrDefault(p =>
                     !string.IsNullOrEmpty(p.Name) &&
                     p.Name.Trim().Equals(searchName, StringComparison.OrdinalIgnoreCase));
 
-                if (product != null && Convert.ToInt32(product.Id) > 0)
+                if (product != null && product.Id > 0)
                 {
                     Console.WriteLine($"Найден товар через API: {product.Name}, ID: {product.Id}");
-                    await BitrixCache.RefreshCacheAsync();
-                    return Convert.ToInt32(product.Id);
+                    return product.Id;
                 }
 
                 // Если точного совпадения нет, ищем частичное
-                product = allProducts.FirstOrDefault(p =>
+                product = searchResults.FirstOrDefault(p =>
                     !string.IsNullOrEmpty(p.Name) &&
                     searchName.IndexOf(p.Name.Trim(), StringComparison.OrdinalIgnoreCase) >= 0);
 
-                if (product != null && Convert.ToInt32(product.Id) > 0)
+                if (product != null && product.Id > 0)
                 {
                     Console.WriteLine($"Найден товар через API (частичное совпадение): {product.Name}, ID: {product.Id}");
-                    await BitrixCache.RefreshCacheAsync();
-                    return Convert.ToInt32(product.Id);
+                    return product.Id;
                 }
 
                 Console.WriteLine($"Товар '{productName}' не найден ни в кэше, ни через API");
@@ -1192,26 +319,31 @@ namespace ManagerApp.Data.GetInfo
             }
         }
 
-
-
-
-
-        /// <summary>
-        /// Нормализует строку для сравнения (убирает лишние пробелы, символы)
-        /// </summary>
-        private string NormalizeString(string input)
+        private async Task<List<ApiProductSearchDto>> SearchProductsAsync(string query)
         {
-            if (string.IsNullOrEmpty(input))
-                return input;
+            try
+            {
+                if (string.IsNullOrWhiteSpace(query))
+                    return new List<ApiProductSearchDto>();
 
-            return input.Trim()
-                        .Replace("  ", " ")
-                        .Replace("\t", " ")
-                        .Replace("\n", " ")
-                        .Replace("\r", " ");
+                string url = $"{ApiBaseUrl}/api/products/search?q={Uri.EscapeDataString(query)}";
+                var response = await _apiClient.GetAsync(url);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine($"[BitrixService] Ошибка HTTP при поиске товаров: {response.StatusCode}");
+                    return new List<ApiProductSearchDto>();
+                }
+
+                string json = await response.Content.ReadAsStringAsync();
+                return JsonConvert.DeserializeObject<List<ApiProductSearchDto>>(json) ?? new List<ApiProductSearchDto>();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[BitrixService] Ошибка поиска товаров '{query}': {ex.Message}");
+                return new List<ApiProductSearchDto>();
+            }
         }
-
-
 
         /// <summary>
         /// Создает товар, если он не существует
@@ -1228,37 +360,12 @@ namespace ManagerApp.Data.GetInfo
                     return existingId;
                 }
 
-                string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.product.add";
-
-                var requestData = new
-                {
-                    fields = new
-                    {
-                        NAME = productName.Trim(),
-                        PRICE = price,
-                        CURRENCY_ID = "RUB"
-                    }
-                };
-
-                Console.WriteLine($"Создаем товар: {productName}");
-                string jsonRequest = JsonConvert.SerializeObject(requestData);
-                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
-
-                var response = await _httpClient.PostAsync(webhookUrl, content);
-                string jsonResponse = await response.Content.ReadAsStringAsync();
-
-                var result = JsonConvert.DeserializeObject<BitrixAddResponse>(jsonResponse);
-
-                if (result?.Result > 0)
-                {
-                    Console.WriteLine($"✅ Товар '{productName}' создан с ID: {result.Result}");
-                    return result.Result;
-                }
-                else
-                {
-                    Console.WriteLine($"❌ Не удалось создать товар '{productName}': {result?.Error}");
-                    return 0;
-                }
+                // ПРОБЕЛ В API: сервер каталога не предоставляет endpoint для создания товара
+                // (каталог read-only, импортирован из Bitrix). Возвращаем 0 — вызывающий код
+                // (InvoicionCreatePage.PrepareProductsAsync) уже трактует 0 как "товар не создан"
+                // и добавляет позицию в notFoundProducts, не прерывая создание счета.
+                Console.WriteLine($"⚠️ Товар '{productName}' не найден. Создание нового товара не поддерживается новым API (нет endpoint создания товара).");
+                return 0;
             }
             catch (Exception ex)
             {
@@ -1315,88 +422,34 @@ namespace ManagerApp.Data.GetInfo
                     }
                 }
 
-                Console.WriteLine("[BitrixService] Загрузка категорий из Bitrix...");
+                Console.WriteLine("[BitrixService] Загрузка категорий из нового API...");
 
-                string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.productsection.list";
+                var response = await _apiClient.GetAsync($"{ApiBaseUrl}/api/categories");
 
-                var categories = new List<Category>();
-                int start = 0;
-                const int pageSize = 50;
-
-                while (true)
+                if (!response.IsSuccessStatusCode)
                 {
-                    var requestData = new
+                    Console.WriteLine($"[BitrixService] Ошибка HTTP при загрузке категорий: {response.StatusCode}");
+
+                    lock (_categoriesLock)
                     {
-                        order = new { NAME = "ASC" },
-                        select = new[] { "ID", "NAME", "SECTION_ID", "CODE" },
-                        start = start
-                    };
-
-                    string jsonRequest = JsonConvert.SerializeObject(requestData);
-                    var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
-
-                    var response = await _httpClient.PostAsync(webhookUrl, content);
-
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        Console.WriteLine($"[BitrixService] Ошибка HTTP при загрузке категорий: {response.StatusCode}");
-                        break;
+                        if (_cachedCategories != null)
+                            return _cachedCategories;
                     }
-
-                    string jsonResponse = await response.Content.ReadAsStringAsync();
-
-                    // Дебаг
-                    Console.WriteLine($"[BitrixService] Ответ от Bitrix (категории): {jsonResponse.Length} символов");
-
-                    // Парсим JSON - используем правильный класс
-                    var data = JsonConvert.DeserializeObject<BitrixCategoryListResponse>(jsonResponse);
-
-                    if (data?.Result == null || data.Result.Count == 0)
-                        break;
-
-                    foreach (var item in data.Result)
-                    {
-                        try
-                        {
-                            Category category = new Category
-                            {
-                                Name = item.Name ?? "Без названия",
-                                SelectionId = item.Id ?? "0",
-                                ParentId = item.SectionId,
-                                Code = item.Code
-                            };
-                            categories.Add(category);
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine($"[BitrixService] Ошибка обработки категории: {ex.Message}");
-                        }
-                    }
-
-                    // Пагинация - проверяем по next
-                    if (data.Next.HasValue && data.Next.Value > 0)
-                    {
-                        start = data.Next.Value;
-                    }
-                    else if (data.Result.Count < pageSize)
-                    {
-                        break;
-                    }
-                    else
-                    {
-                        start += pageSize;
-                    }
-
-                    // Защита от бесконечного цикла
-                    if (start > 500) // Максимум 500 категорий
-                    {
-                        Console.WriteLine("[BitrixService] Достигнут лимит выборки категорий (500)");
-                        break;
-                    }
-
-                    // Небольшая задержка для Bitrix API
-                    await Task.Delay(100);
+                    return new List<Category>();
                 }
+
+                string jsonResponse = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"[BitrixService] Ответ API (категории): {jsonResponse.Length} символов");
+
+                var raw = JsonConvert.DeserializeObject<List<ApiCategoryDto>>(jsonResponse) ?? new List<ApiCategoryDto>();
+
+                var categories = raw.Select(item => new Category
+                {
+                    Name = item.Name ?? "Без названия",
+                    SelectionId = item.Id ?? "0",
+                    ParentId = item.ParentId,
+                    Code = null
+                }).ToList();
 
                 // Сохраняем в кэш
                 lock (_categoriesLock)
@@ -1426,206 +479,138 @@ namespace ManagerApp.Data.GetInfo
             }
         }
 
-        public async Task<List<Product>> GetProducts()
+        // Загружает (и кратковременно кэширует в памяти) полный дамп товаров нового API,
+        // чтобы GetProducts()/GetProductsByCategory() не тянули по 50к строк из сети
+        // при каждом вызове подряд.
+        private async Task<List<ApiProductDto>> GetAllProductsRawAsync(bool forceRefresh = false)
         {
-            var allProducts = new List<Product>();
-            int start = 0;
-            const int pageSize = 50; // Bitrix24 обычно использует 50
-
-            while (true)
+            if (!forceRefresh)
             {
-                string webhookUrl = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.product.list?start={start}";
-
-                // Делаем запрос
-                var response = await _httpClient.GetAsync(webhookUrl);
-
-                // Получаем ответ как текст
-                string jsonResponse = await response.Content.ReadAsStringAsync();
-
-                // Парсим JSON и берем только нужные поля
-                BitrixProductResponse data = JsonConvert.DeserializeObject<BitrixProductResponse>(jsonResponse);
-
-                if (data.Products == null || data.Products.Count == 0)
-                    break;
-
-                allProducts.AddRange(data.Products);
-
-                // Если получено меньше записей, чем размер страницы - значит это последняя страница
-                if (data.Products.Count < pageSize)
-                    break;
-
-                start += pageSize;
+                var cached = _allProductsRawCache;
+                if (cached != null && (DateTime.Now - _allProductsRawCacheTime) < _allProductsRawCacheDuration)
+                    return cached;
             }
 
-            return allProducts;
+            await _allProductsRawLock.WaitAsync();
+            try
+            {
+                if (!forceRefresh)
+                {
+                    var cached = _allProductsRawCache;
+                    if (cached != null && (DateTime.Now - _allProductsRawCacheTime) < _allProductsRawCacheDuration)
+                        return cached;
+                }
+
+                Console.WriteLine("[BitrixService] Загрузка полного каталога товаров из нового API...");
+
+                var response = await _apiClient.GetAsync($"{ApiBaseUrl}/api/products/all");
+                if (!response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine($"[BitrixService] Ошибка HTTP при загрузке товаров: {response.StatusCode}");
+                    return _allProductsRawCache ?? new List<ApiProductDto>();
+                }
+
+                string json = await response.Content.ReadAsStringAsync();
+                var products = JsonConvert.DeserializeObject<List<ApiProductDto>>(json) ?? new List<ApiProductDto>();
+
+                Console.WriteLine($"[BitrixService] Загружено {products.Count} товаров из нового API");
+
+                _allProductsRawCache = products;
+                _allProductsRawCacheTime = DateTime.Now;
+
+                return products;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[BitrixService] Ошибка загрузки товаров: {ex.Message}");
+                return _allProductsRawCache ?? new List<ApiProductDto>();
+            }
+            finally
+            {
+                _allProductsRawLock.Release();
+            }
+        }
+
+        private static Product MapToProduct(ApiProductDto p)
+        {
+            return new Product
+            {
+                Id = p.Id.ToString(),
+                Name = p.Name,
+                Code = p.Article,
+                SectionId = p.CategoryId,
+                Price = p.Price,
+                Measure = p.Unit,
+                PurchasingPrice = p.PriceBase
+            };
+        }
+
+        public async Task<List<Product>> GetProducts()
+        {
+            var raw = await GetAllProductsRawAsync();
+            return raw.Select(MapToProduct).ToList();
         }
 
         public async Task<List<Product>> GetProductsByCategory(int categoryId)
         {
-            var allProducts = new List<Product>();
-            int start = 0;
-            const int pageSize = 50; // Bitrix24 обычно использует 50
-
-            while (true)
-            {
-                string webhookUrl = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.product.list?filter[SECTION_ID]={categoryId}&start={start}";
-
-                var response = await _httpClient.GetAsync(webhookUrl);
-                string jsonResponse = await response.Content.ReadAsStringAsync();
-
-                BitrixProductResponse data = JsonConvert.DeserializeObject<BitrixProductResponse>(jsonResponse);
-
-                if (data.Products == null || data.Products.Count == 0)
-                    break;
-
-                allProducts.AddRange(data.Products);
-
-                // Если получено меньше записей, чем размер страницы - значит это последняя страница
-                if (data.Products.Count < pageSize)
-                    break;
-
-                start += pageSize;
-            }
-
-            return allProducts;
+            var raw = await GetAllProductsRawAsync();
+            string catStr = categoryId.ToString();
+            return raw
+                .Where(p => string.Equals(p.CategoryId, catStr, StringComparison.OrdinalIgnoreCase))
+                .Select(MapToProduct)
+                .ToList();
         }
 
         /// <summary>
         /// Получает все товары с информацией о категории, цене, количестве и единице измерения
         /// </summary>
         /// <returns>Список товаров с расширенной информацией</returns>
-       
 
-    
+
         public async Task<List<Company>> GetAllCompanies()
         {
-            var allCompanies = new List<Company>();
-            int start = 0;
-            const int pageSize = 50; // Bitrix24 использует по 50 записей на страницу
-
-            while (true)
+            try
             {
-                // entityTypeId = 4 для компаний
-                string webhookUrl = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.item.list";
-                
-                // Подготавливаем POST-запрос с параметрами
-                var requestData = new
+                var response = await _apiClient.GetAsync($"{ApiBaseUrl}/api/companies");
+
+                if (!response.IsSuccessStatusCode)
                 {
-                    entityTypeId = 4, // 4 - компании
-                    select = new[] { "id", "title", "assignedById", "createdTime" }, // Основные поля
-                    start = start
-                };
+                    Console.WriteLine($"[BitrixService] Ошибка HTTP при загрузке компаний: {response.StatusCode}");
+                    return new List<Company>();
+                }
 
-                string jsonRequest = JsonConvert.SerializeObject(requestData);
-                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
-
-                // Делаем POST-запрос
-                var response = await _httpClient.PostAsync(webhookUrl, content);
-
-                // Получаем ответ как текст
                 string jsonResponse = await response.Content.ReadAsStringAsync();
+                var raw = JsonConvert.DeserializeObject<List<ApiCompanyDto>>(jsonResponse) ?? new List<ApiCompanyDto>();
 
-                // Парсим JSON
-                var result = JsonConvert.DeserializeObject<BitrixListResponse>(jsonResponse);
-
-                if (result?.Result?.Items == null || result.Result.Items.Count == 0)
-                    break;
-
-                // Преобразуем в список компаний
-                foreach (var item in result.Result.Items)
+                return raw.Select(c => new Company
                 {
-                    var company = new Company
-                    {
-                        Id = item.Id,
-                        Title = item.Title,
-                        AssignedById = item.AssignedById,
-                        CreatedTime = item.CreatedTime
-                    };
-                    allCompanies.Add(company);
-                }
-
-                // Если получено меньше записей, чем размер страницы - значит это последняя страница
-                if (result.Result.Items.Count < pageSize)
-                    break;
-
-                // Проверяем, есть ли еще данные
-                if (result.Next.HasValue && result.Next.Value > start)
-                {
-                    start = result.Next.Value;
-                }
-                else
-                {
-                    start += pageSize;
-                }
+                    Id = c.Id,
+                    Title = c.Title,
+                    // AssignedById/CreatedTime/IsMyCompany не имеют аналога в новом API
+                    // (это чисто отображаемые поля Bitrix) — зануляем.
+                    AssignedById = 0,
+                    CreatedTime = default(DateTime),
+                    IsMyCompany = null
+                }).ToList();
             }
-
-            return allCompanies;
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[BitrixService] Ошибка получения компаний: {ex.Message}");
+                return new List<Company>();
+            }
         }
 
         /// <summary>
-        /// Получает список только моих компаний (компании где isMyCompany = "Y")
+        /// Раньше возвращал компании Bitrix с флагом isMyCompany=Y (это и были СПК/НВР).
+        /// Теперь "мои компании" (продавцы) — это два статических значения в
+        /// InvoicionCreatePage.MyLocalCompanies (СПК/НВР), а не записи в таблице покупателей
+        /// нового API (она хранит только компании-покупателей). Метод оставлен для
+        /// совместимости вызовов (InvoicionCreatePage использует его только чтобы исключить
+        /// "мои компании" из списка покупателей), поэтому безопасно возвращает пустой список.
         /// </summary>
-        /// <returns>Список моих компаний</returns>
         public async Task<List<Company>> GetMyCompanies()
         {
-            var myCompanies = new List<Company>();
-            int start = 0;
-            const int pageSize = 50;
-
-            while (true)
-            {
-                string webhookUrl = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.item.list";
-                
-                // Используем фильтр isMyCompany = "Y" как показано в документации
-                var requestData = new
-                {
-                    entityTypeId = 4, // 4 - компании
-                    select = new[] { "id", "title", "assignedById", "createdTime", "isMyCompany" },
-                    filter = new
-                    {
-                        isMyCompany = "Y"
-                    },
-                    start = start
-                };
-
-                string jsonRequest = JsonConvert.SerializeObject(requestData);
-                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
-
-                var response = await _httpClient.PostAsync(webhookUrl, content);
-                string jsonResponse = await response.Content.ReadAsStringAsync();
-
-                var result = JsonConvert.DeserializeObject<BitrixListResponse>(jsonResponse);
-
-                if (result?.Result?.Items == null || result.Result.Items.Count == 0)
-                    break;
-
-                foreach (var item in result.Result.Items)
-                {
-                    var company = new Company
-                    {
-                        Id = item.Id,
-                        Title = item.Title,
-                        AssignedById = item.AssignedById,
-                        CreatedTime = item.CreatedTime,
-                        IsMyCompany = item.IsMyCompany
-                    };
-                    myCompanies.Add(company);
-                }
-
-                if (result.Result.Items.Count < pageSize)
-                    break;
-
-                if (result.Next.HasValue && result.Next.Value > start)
-                {
-                    start = result.Next.Value;
-                }
-                else
-                {
-                    start += pageSize;
-                }
-            }
-
-            return myCompanies;
+            return await Task.FromResult(new List<Company>());
         }
 
         public async Task<int> CreateCompany(string title, string phone = null, string address = null,
@@ -1636,52 +621,18 @@ namespace ManagerApp.Data.GetInfo
                 throw new ArgumentException("Название компании обязательно");
             }
 
-            if (string.IsNullOrWhiteSpace(inn))
-            {
-                throw new ArgumentException("ИНН обязательно");
-            }
-
-            if (string.IsNullOrWhiteSpace(kpp))
-            {
-                throw new ArgumentException("КПП обязательно");
-            }
-
-            if (string.IsNullOrWhiteSpace(address))
-            {
-                throw new ArgumentException("Адрес обязателен");
-            }
-
-            string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.company.add";
-
-            // Подготавливаем данные для создания компании с новыми полями
-            var requestData = new
-            {
-                fields = new
-                {
-                    TITLE = title.Trim(),
-                    UF_CRM_67055523A3E63 = inn.Trim(), // ИНН
-                    UF_CRM_67055523AA362 = kpp.Trim(), // КПП
-                    ADDRESS = address.Trim(), // Адрес
-                    PHONE = !string.IsNullOrWhiteSpace(phone) ?
-                           new[] { new { VALUE = phone.Trim(), VALUE_TYPE = "WORK" } } :
-                           null,
-                    // НЕ УКАЗЫВАЕМ OWNER_ID - Bitrix назначит автоматически
-                    // НЕ УКАЗЫВАЕМ ASSIGNED_BY_ID - будет использован текущий пользователь
-                },
-                @params = new
-                {
-                    REGISTER_SONET_EVENT = registerEvent ? "Y" : "N"
-                }
-            };
-
             try
             {
-                // Используем настройки игнорирования null-значений
-                string jsonRequest = JsonConvert.SerializeObject(requestData,
-                    new JsonSerializerSettings
-                    {
-                        NullValueHandling = NullValueHandling.Ignore
-                    });
+                var payload = new
+                {
+                    title = title.Trim(),
+                    inn = string.IsNullOrWhiteSpace(inn) ? null : inn.Trim(),
+                    kpp = string.IsNullOrWhiteSpace(kpp) ? null : kpp.Trim(),
+                    address = string.IsNullOrWhiteSpace(address) ? null : address.Trim(),
+                    phone = string.IsNullOrWhiteSpace(phone) ? null : phone.Trim()
+                };
+
+                string jsonRequest = JsonConvert.SerializeObject(payload);
 
                 Console.WriteLine("=== ДАННЫЕ ДЛЯ СОЗДАНИЯ КОМПАНИИ ===");
                 Console.WriteLine(jsonRequest);
@@ -1689,31 +640,20 @@ namespace ManagerApp.Data.GetInfo
 
                 var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
 
-                // Делаем POST-запрос
-                var response = await _httpClient.PostAsync(webhookUrl, content);
+                var response = await _apiClient.PostAsync($"{ApiBaseUrl}/api/companies", content);
                 string jsonResponse = await response.Content.ReadAsStringAsync();
 
-                Console.WriteLine($"Ответ от Bitrix: {jsonResponse}");
+                Console.WriteLine($"Ответ API: {jsonResponse}");
 
-                // Парсим ответ
-                var result = JsonConvert.DeserializeObject<BitrixAddResponse>(jsonResponse);
-
-                // Проверяем на ошибки
-                if (!string.IsNullOrEmpty(result?.Error))
+                if (!response.IsSuccessStatusCode)
                 {
-                    // Проверяем специфическую ошибку про OWNER
-                    if (result.Error.Contains("невозможно указать себя в свойстве Owner"))
-                    {
-                        Console.WriteLine("⚠️ Обнаружена ошибка OWNER. Пробуем создать без параметров...");
-                        return await CreateCompanyMinimal(title, phone, address);
-                    }
-
-                    Console.WriteLine($"Ошибка создания компании: {result.Error}");
+                    Console.WriteLine($"Ошибка создания компании: {response.StatusCode} {jsonResponse}");
                     return 0;
                 }
 
-                // Возвращаем ID созданной компании
-                int companyId = result?.Result ?? 0;
+                var result = JsonConvert.DeserializeObject<ApiIdResponse>(jsonResponse);
+
+                int companyId = result?.Id ?? 0;
                 if (companyId > 0)
                 {
                     Console.WriteLine($"✅ Компания '{title}' создана с ID: {companyId}");
@@ -1731,46 +671,6 @@ namespace ManagerApp.Data.GetInfo
                 return 0;
             }
         }
-
-        // Метод для минимального создания компании (без дополнительных полей)
-        private async Task<int> CreateCompanyMinimal(string title, string phone = null, string address = null)
-        {
-            string webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.company.add";
-
-            var requestData = new
-            {
-                fields = new
-                {
-                    TITLE = title.Trim()
-                }
-            };
-
-            try
-            {
-                string jsonRequest = JsonConvert.SerializeObject(requestData);
-                var content = new StringContent(jsonRequest, Encoding.UTF8, "application/json");
-
-                var response = await _httpClient.PostAsync(webhookUrl, content);
-                string jsonResponse = await response.Content.ReadAsStringAsync();
-
-                var result = JsonConvert.DeserializeObject<BitrixAddResponse>(jsonResponse);
-
-                if (!string.IsNullOrEmpty(result?.Error))
-                {
-                    Console.WriteLine($"Ошибка минимального создания: {result.Error}");
-                    return 0;
-                }
-
-                return result?.Result ?? 0;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Исключение при минимальном создании компании: {ex.Message}");
-                return 0;
-            }
-        }
-
-       
 
 
         public async Task<List<ProductWithCategoryInfo>> GetProductsWithCategoryInfoByCategory(int categoryId)
@@ -1794,15 +694,20 @@ namespace ManagerApp.Data.GetInfo
                 {
                     try
                     {
+                        var purchasingPrice = product.GetPurchasingPrice();
+
                         var productInfo = new ProductWithCategoryInfo
                         {
                             CategoryName = categoryName,
                             ProductName = product.Name ?? "Без названия",
                             Price = product.Price.HasValue ? product.Price.Value : 0m,
-                            HasPrice = product.Price.HasValue,
+                            HasPrice = product.Price.HasValue && product.Price.Value > 0,
                             SectionId = product.SectionId,
                             ProductCode = product.Code,
-                            ProductId = product.Id
+                            ProductId = product.Id,
+                            Measure = product.Measure,
+                            PurchasingPrice = purchasingPrice,
+                            HasPurchasingPrice = purchasingPrice.HasValue && purchasingPrice.Value > 0
                         };
 
                         result.Add(productInfo);
@@ -1942,16 +847,20 @@ namespace ManagerApp.Data.GetInfo
                         product.SectionId ?? string.Empty,
                         out var path) ? path : "Без категории";
 
+                    var purchasingPrice = product.GetPurchasingPrice();
+
                     var productInfo = new ProductWithCategoryInfo
                     {
                         CategoryName = categoryPath,
                         ProductName = product.Name ?? "Без названия",
                         Price = product.Price.GetValueOrDefault(),
-                        HasPrice = product.Price.HasValue,
+                        HasPrice = product.Price.HasValue && product.Price.Value > 0,
                         SectionId = product.SectionId,
                         ProductCode = product.Code,
                         ProductId = product.Id,
-                        Measure = product.Measure
+                        Measure = product.Measure,
+                        PurchasingPrice = purchasingPrice,
+                        HasPurchasingPrice = purchasingPrice.HasValue && purchasingPrice.Value > 0
 
                     };
 
@@ -2024,15 +933,8 @@ namespace ManagerApp.Data.GetInfo
             public string Phone { get; set; }
             public string Email { get; set; }
         }
-        /// <summary>
-        /// Создает компанию с расширенными полями (все поля необязательные, кроме названия)
-        /// </summary>
-     
-        /// <summary>
-        /// Пытается создать компанию, если не существует компаний с таким названием
-        /// </summary>
-     
-        // Вспомогательный класс для десериализации ответа от метода add
+
+        // Вспомогательный класс для десериализации ответа от метода add (Bitrix, оставлен для совместимости)
         public class BitrixAddResponse
         {
             [JsonProperty("result")]
@@ -2044,10 +946,128 @@ namespace ManagerApp.Data.GetInfo
             [JsonProperty("error_description")]
             public string ErrorDescription { get; set; }
         }
+
+        // ============ DTO НОВОГО API КАТАЛОГА (http://83.217.203.29:8090) ============
+
+        private class ApiProductDto
+        {
+            [JsonProperty("id")]
+            public int Id { get; set; }
+
+            [JsonProperty("name")]
+            public string Name { get; set; }
+
+            [JsonProperty("article")]
+            public string Article { get; set; }
+
+            [JsonProperty("barcode")]
+            public string Barcode { get; set; }
+
+            [JsonProperty("unit")]
+            public string Unit { get; set; }
+
+            [JsonProperty("categoryId")]
+            public string CategoryId { get; set; }
+
+            [JsonProperty("price")]
+            public decimal Price { get; set; }
+
+            [JsonProperty("priceBase")]
+            public decimal PriceBase { get; set; }
+
+            [JsonProperty("priceAlt")]
+            public decimal PriceAlt { get; set; }
+
+            [JsonProperty("stockQty")]
+            public decimal StockQty { get; set; }
+
+            [JsonProperty("taxRate")]
+            public decimal TaxRate { get; set; }
+        }
+
+        private class ApiProductSearchDto
+        {
+            [JsonProperty("id")]
+            public int Id { get; set; }
+
+            [JsonProperty("name")]
+            public string Name { get; set; }
+
+            [JsonProperty("article")]
+            public string Article { get; set; }
+
+            [JsonProperty("barcode")]
+            public string Barcode { get; set; }
+
+            [JsonProperty("unit")]
+            public string Unit { get; set; }
+
+            [JsonProperty("categoryId")]
+            public string CategoryId { get; set; }
+
+            [JsonProperty("price")]
+            public decimal Price { get; set; }
+
+            [JsonProperty("stockQty")]
+            public decimal StockQty { get; set; }
+        }
+
+        private class ApiCategoryDto
+        {
+            [JsonProperty("id")]
+            public string Id { get; set; }
+
+            [JsonProperty("parentId")]
+            public string ParentId { get; set; }
+
+            [JsonProperty("name")]
+            public string Name { get; set; }
+        }
+
+        private class ApiCompanyDto
+        {
+            [JsonProperty("id")]
+            public int Id { get; set; }
+
+            [JsonProperty("title")]
+            public string Title { get; set; }
+
+            [JsonProperty("inn")]
+            public string Inn { get; set; }
+
+            [JsonProperty("kpp")]
+            public string Kpp { get; set; }
+
+            [JsonProperty("address")]
+            public string Address { get; set; }
+
+            [JsonProperty("phone")]
+            public string Phone { get; set; }
+        }
+
+        private class ApiIdResponse
+        {
+            [JsonProperty("id")]
+            public int Id { get; set; }
+        }
+
+        private class ApiInvoiceCreateResponse
+        {
+            [JsonProperty("id")]
+            public int Id { get; set; }
+
+            [JsonProperty("number")]
+            public string Number { get; set; }
+
+            [JsonProperty("sellerCompany")]
+            public string SellerCompany { get; set; }
+        }
     }
 
 
-    // Вспомогательные классы для десериализации ответа от Bitrix24
+    // Вспомогательные классы для десериализации ответа от Bitrix24 (оставлены для совместимости,
+    // используются моделями ниже — CreateSmartInvoice/CreateCompany/GetAllCompanies/GetСategories
+    // больше не десериализуют в них напрямую, но публичные типы сохранены как есть)
     public class BitrixListResponse
     {
         [JsonProperty("result")]
@@ -2123,6 +1143,3 @@ namespace ManagerApp.Data.GetInfo
         public string XmlId { get; set; }
     }
 }
-
-
-

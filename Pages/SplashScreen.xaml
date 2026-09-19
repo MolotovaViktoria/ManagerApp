@@ -29,7 +29,7 @@
                            Foreground="#1a73e8"
                            HorizontalAlignment="Center"/>
 
-                <TextBlock Text="Bitrix24 Integration" 
+                <TextBlock Text="Синхронизация с базой данных"
                            FontSize="12" 
                            Foreground="#5f6368"
                            Margin="0,5,0,0"

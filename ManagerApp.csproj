@@ -19,7 +19,7 @@
     <NuGetPackageImportStamp>
     </NuGetPackageImportStamp>
     <IsWebBootstrapper>false</IsWebBootstrapper>
-    <PublishUrl>C:\Users\vimol\Desktop\scrins\Приложение\</PublishUrl>
+    <PublishUrl>C:\Users\vimol\Desktop\APP\</PublishUrl>
     <Install>true</Install>
     <InstallFrom>Disk</InstallFrom>
     <UpdateEnabled>false</UpdateEnabled>
@@ -29,7 +29,7 @@
     <UpdatePeriodically>false</UpdatePeriodically>
     <UpdateRequired>false</UpdateRequired>
     <MapFileExtensions>true</MapFileExtensions>
-    <ApplicationRevision>41</ApplicationRevision>
+    <ApplicationRevision>43</ApplicationRevision>
     <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <PublishWizardCompleted>true</PublishWizardCompleted>
@@ -265,6 +265,11 @@
     </Compile>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Classes\Invoicing\CompanyRequisites.cs" />
+    <Compile Include="Classes\Invoicing\InvoiceData.cs" />
+    <Compile Include="Classes\Invoicing\InvoiceDocxBuilder.cs" />
+    <Compile Include="Classes\Invoicing\InvoicePdfBuilder.cs" />
+    <Compile Include="Classes\Invoicing\NumberToWordsRu.cs" />
     <Compile Include="Classes\ModelsStudy\MLParserRequst.cs" />
     <Compile Include="Classes\ModelsStudy\ProductClassifier .cs" />
     <Compile Include="Classes\ModelsStudy\ProductMLClassifier.cs" />

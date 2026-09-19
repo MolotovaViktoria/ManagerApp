@@ -125,7 +125,7 @@ namespace ManagerApp.Pages
                     worker.ReportProgress(0, "Подготовка к обновлению...");
                     System.Threading.Thread.Sleep(500);
 
-                    worker.ReportProgress(10, "Загрузка данных из Bitrix...");
+                    worker.ReportProgress(10, "Загрузка данных с сервера...");
 
                     // Синхронный вызов вместо асинхронного
                     var task = Task.Run(async () => await BitrixCache.ForceUpdateCacheAsync());
@@ -1631,6 +1631,9 @@ namespace ManagerApp.Pages
         }
 
         // Асинхронный метод для получения цен батча (ЧЕРЕЗ API)
+        // Bitrix (crmnvr.ru/batch.json) отключен. Закупочные цены теперь берутся из нового
+        // каталога через BitrixPurchasePriceService (GET /api/products/{id}, priceBase),
+        // который сам кэширует результаты по productId на несколько минут.
         private async Task<Dictionary<string, decimal?>> GetPurchasingPricesBatchAsync(List<string> productIds)
         {
             var result = new Dictionary<string, decimal?>();
@@ -1640,55 +1643,18 @@ namespace ManagerApp.Pages
 
             try
             {
-                using (var httpClient = new HttpClient())
+                var idMap = productIds
+                    .Select(idStr => new { idStr, ok = int.TryParse(idStr, out int id), id })
+                    .Where(x => x.ok && x.id > 0)
+                    .ToList();
+
+                var intIds = idMap.Select(x => x.id).Distinct().ToList();
+
+                var prices = await ManagerApp.Data.ScharedData.BitrixPurchasePriceService.GetPurchasingPricesBatchAsync(intIds);
+
+                foreach (var x in idMap)
                 {
-                    httpClient.Timeout = TimeSpan.FromSeconds(60);
-
-                    var batch = new Dictionary<string, string>();
-
-                    foreach (var id in productIds)
-                    {
-                        batch[$"product_{id}"] = $"catalog.product.get?id={id}";
-                    }
-
-                    var batchRequest = new
-                    {
-                        halt = 0,
-                        cmd = batch
-                    };
-
-                    var json = JsonConvert.SerializeObject(batchRequest);
-                    var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
-
-                    string apiUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/batch.json";
-                    var response = await httpClient.PostAsync(apiUrl, content);
-
-                    if (response.IsSuccessStatusCode)
-                    {
-                        var responseJson = await response.Content.ReadAsStringAsync();
-                        var batchResponse = JObject.Parse(responseJson);
-
-                        var resultObj = batchResponse["result"]?["result"];
-                        if (resultObj != null)
-                        {
-                            foreach (var id in productIds)
-                            {
-                                try
-                                {
-                                    var productData = resultObj[$"product_{id}"]?["product"];
-                                    if (productData != null)
-                                    {
-                                        var purchasingPrice = productData["purchasingPrice"]?.Value<decimal?>();
-                                        result[id] = purchasingPrice;
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    Console.WriteLine($"Ошибка парсинга для товара {id}: {ex.Message}");
-                                }
-                            }
-                        }
-                    }
+                    result[x.idStr] = prices.TryGetValue(x.id, out var price) ? (decimal?)price : null;
                 }
             }
             catch (Exception ex)

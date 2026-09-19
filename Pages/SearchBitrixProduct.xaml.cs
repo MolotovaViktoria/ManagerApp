@@ -65,7 +65,7 @@ namespace ManagerApp.Pages
             try
             {
                 _isLoading = true;
-                txtStatus.Text = "Загрузка товаров из Bitrix...";
+                txtStatus.Text = "Загрузка товаров...";
 
                 // ИСПОЛЬЗУЕМ НОВЫЙ МЕТОД: получаем все товары с нижними разделами
                 var productsWithSections = await BitrixCache.GetAllProductsWithLowerSections();

@@ -9,6 +9,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -929,36 +930,42 @@ namespace ManagerApp.Pages
 
     // ============ КЛАССЫ ДЛЯ BITRIX API ============
 
-    // Класс модели для единицы измерения из Bitrix
+    // Класс модели для единицы измерения из Bitrix (catalog.measure.* API, поля camelCase)
     public class BitrixMeasure
     {
-        [JsonProperty("ID")]
+        [JsonProperty("id")]
         public string ID { get; set; }
 
-        [JsonProperty("CODE")]
+        [JsonProperty("code")]
         public string CODE { get; set; }
 
-        [JsonProperty("MEASURE_TITLE")]
+        [JsonProperty("measureTitle")]
         public string MEASURE_TITLE { get; set; }
 
-        [JsonProperty("SYMBOL_RUS")]
+        [JsonProperty("symbol")]
         public string SYMBOL_RUS { get; set; }
 
-        [JsonProperty("SYMBOL_INTL")]
+        [JsonProperty("symbolIntl")]
         public string SYMBOL_INTL { get; set; }
 
-        [JsonProperty("SYMBOL_LETTER_INTL")]
+        [JsonProperty("symbolLetterIntl")]
         public string SYMBOL_LETTER_INTL { get; set; }
 
-        [JsonProperty("IS_DEFAULT")]
+        [JsonProperty("isDefault")]
         public string IS_DEFAULT { get; set; }
     }
 
-    // Класс для ответа от Bitrix API для единиц измерения
+    // Класс для ответа от Bitrix API для единиц измерения (catalog.measure.list -> result.measures)
     public class BitrixMeasureResponse
     {
         [JsonProperty("result")]
-        public List<BitrixMeasure> Result { get; set; }
+        public BitrixMeasureListResult Result { get; set; }
+    }
+
+    public class BitrixMeasureListResult
+    {
+        [JsonProperty("measures")]
+        public List<BitrixMeasure> Measures { get; set; }
     }
 
     // Класс для деталей товара из Bitrix с правильной десериализацией
@@ -1044,57 +1051,18 @@ namespace ManagerApp.Pages
         {
             public static async Task<BitrixCatalogProductDetail> GetCatalogProductAsync(int productId)
             {
+                // Bitrix (crmnvr.ru) отключен. Закупочная цена теперь берётся из поля priceBase
+                // нового каталога через BitrixPurchasePriceService (кэширует полный дамп товаров
+                // в памяти на несколько минут, т.к. у нового API нет метода "получить товар по id").
                 try
                 {
-                    Console.WriteLine($"BitrixCatalogProductService.GetCatalogProductAsync: Запрос товара ID={productId}");
+                    decimal purchasingPrice = await ManagerApp.Data.ScharedData.BitrixPurchasePriceService.GetPurchasingPriceAsync(productId);
 
-                    using (var httpClient = new HttpClient())
+                    return new BitrixCatalogProductDetail
                     {
-                        httpClient.Timeout = TimeSpan.FromSeconds(30);
-
-                        string apiUrl = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/catalog.product.get?id={productId}";
-                        Console.WriteLine($"Запрос товара из каталога: {apiUrl}");
-
-                        var response = await httpClient.GetAsync(apiUrl);
-
-                        if (response.IsSuccessStatusCode)
-                        {
-                            var json = await response.Content.ReadAsStringAsync();
-                            Console.WriteLine($"Получены детали товара из каталога ID={productId}, длина: {json.Length} символов");
-
-                            // Для отладки
-                            int previewLength = Math.Min(300, json.Length);
-                            Console.WriteLine($"Начало ответа: {json.Substring(0, previewLength)}...");
-
-                            try
-                            {
-                                var result = JsonConvert.DeserializeObject<BitrixCatalogProductResponse>(json);
-                                var productDetail = result?.GetProductDetail();
-
-                                if (productDetail != null)
-                                {
-                                    Console.WriteLine($"Успешно загружены детали товара из каталога ID={productId}");
-                                    Console.WriteLine($"PurchasingPrice: {productDetail.PurchasingPrice}, Quantity: {productDetail.Quantity}");
-                                    return productDetail;
-                                }
-                                else
-                                {
-                                    Console.WriteLine($"Не удалось десериализовать ответ для товара ID={productId}");
-                                    return null;
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine($"Ошибка JSON при десериализации товара ID={productId}: {ex.Message}");
-                                return null;
-                            }
-                        }
-                        else
-                        {
-                            Console.WriteLine($"HTTP ошибка при загрузке товара ID={productId}: {response.StatusCode} - {response.ReasonPhrase}");
-                            return null;
-                        }
-                    }
+                        Id = productId,
+                        PurchasingPrice = purchasingPrice > 0 ? (decimal?)purchasingPrice : null
+                    };
                 }
                 catch (Exception ex)
                 {
@@ -1117,178 +1085,65 @@ namespace ManagerApp.Pages
     // Сервис для загрузки единиц измерения из Bitrix
     public static class BitrixMeasureService
     {
+        // Единицы измерения меняются крайне редко: кэшируем в памяти процесса,
+        // чтобы переключение между экранами (EditPricePage/ComparisonProduct) не
+        // выполняло повторный сетевой запрос при каждом создании страницы (см. зависания при "далее/назад").
+        private static List<BitrixMeasure> _cachedMeasures;
+        private static readonly SemaphoreSlim _cacheLock = new SemaphoreSlim(1, 1);
+
         public static async Task<List<BitrixMeasure>> GetMeasuresAsync()
         {
+            if (_cachedMeasures != null)
+                return _cachedMeasures;
+
+            await _cacheLock.WaitAsync();
             try
             {
-                Console.WriteLine("BitrixMeasureService.GetMeasuresAsync: Начало запроса...");
+                if (_cachedMeasures != null)
+                    return _cachedMeasures;
 
-                using (var httpClient = new HttpClient())
+                var measures = await FetchMeasuresAsync();
+                if (measures != null && measures.Any())
                 {
-                    httpClient.Timeout = TimeSpan.FromSeconds(30);
-
-                    string apiUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.measure.list.json";
-                    Console.WriteLine($"Запрос единиц измерения: {apiUrl}");
-
-                    var response = await httpClient.GetAsync(apiUrl);
-
-                    if (response.IsSuccessStatusCode)
-                    {
-                        var json = await response.Content.ReadAsStringAsync();
-                        Console.WriteLine($"Получены единицы измерения, длина ответа: {json.Length} символов");
-
-                        var result = JsonConvert.DeserializeObject<BitrixMeasureResponse>(json);
-
-                        if (result?.Result != null)
-                        {
-                            Console.WriteLine($"Успешно загружено {result.Result.Count} единиц измерения");
-                            return result.Result;
-                        }
-                        else
-                        {
-                            Console.WriteLine("Не удалось десериализовать ответ с единицами измерения");
-                            return new List<BitrixMeasure>();
-                        }
-                    }
-                    else
-                    {
-                        Console.WriteLine($"HTTP ошибка при загрузке единиц измерения: {response.StatusCode} - {response.ReasonPhrase}");
-                        return new List<BitrixMeasure>();
-                    }
+                    _cachedMeasures = measures;
                 }
+                return measures;
             }
-            catch (Exception ex)
+            finally
             {
-                Console.WriteLine($"Ошибка в BitrixMeasureService: {ex.Message}");
-                return new List<BitrixMeasure>();
+                _cacheLock.Release();
             }
+        }
+
+        private static async Task<List<BitrixMeasure>> FetchMeasuresAsync()
+        {
+            // Bitrix (crmnvr.ru) отключен. Новый каталог хранит единицы измерения простым
+            // текстом (шт/м/кг/упак), а не через справочник, поэтому обходимся без сетевого
+            // запроса и возвращаем тот же статический список, что и BitrixService.GetMeasuresAsync().
+            return await Task.FromResult(new List<BitrixMeasure>
+            {
+                new BitrixMeasure { ID = "796", CODE = "796", SYMBOL_RUS = "шт",   MEASURE_TITLE = "Штука" },
+                new BitrixMeasure { ID = "006", CODE = "006", SYMBOL_RUS = "м",    MEASURE_TITLE = "Метр" },
+                new BitrixMeasure { ID = "166", CODE = "166", SYMBOL_RUS = "кг",   MEASURE_TITLE = "Килограмм" },
+                new BitrixMeasure { ID = "778", CODE = "778", SYMBOL_RUS = "упак", MEASURE_TITLE = "Упаковка" },
+            });
         }
     }
 
     // Сервис для получения деталей товара из Bitrix
     public static class BitrixProductService
     {
-        public static async Task<BitrixProductDetail> GetProductAsync(int productId)
+        public static Task<BitrixProductDetail> GetProductAsync(int productId)
         {
-            try
-            {
-                Console.WriteLine($"BitrixProductService.GetProductAsync: Запрос товара ID={productId}");
-
-                using (var httpClient = new HttpClient())
-                {
-                    httpClient.Timeout = TimeSpan.FromSeconds(30);
-
-                    string apiUrl = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.product.get.json?id={productId}";
-                    Console.WriteLine($"Запрос товара: {apiUrl}");
-
-                    var response = await httpClient.GetAsync(apiUrl);
-
-                    if (response.IsSuccessStatusCode)
-                    {
-                        var json = await response.Content.ReadAsStringAsync();
-                        Console.WriteLine($"Получены детали товара ID={productId}, длина: {json.Length} символов");
-
-                        // Для отладки показываем часть ответа
-                        if (json.Length > 0)
-                        {
-                            int previewLength = Math.Min(500, json.Length);
-                            Console.WriteLine($"Начало ответа: {json.Substring(0, previewLength)}...");
-                        }
-
-                        try
-                        {
-                            // Десериализуем с использованием кастомного конвертера
-                            var settings = new JsonSerializerSettings
-                            {
-                                Converters = new List<JsonConverter> { new NullableDecimalConverter() },
-                                NullValueHandling = NullValueHandling.Ignore
-                            };
-
-                            var result = JsonConvert.DeserializeObject<BitrixProductResponse>(json, settings);
-
-                            if (result?.Result != null)
-                            {
-                                Console.WriteLine($"Успешно загружены детали товара ID={productId}");
-                                Console.WriteLine($"MEASURE поле: '{result.Result.MEASURE}'");
-
-                                // Если MEASURE пустое, проверяем PROPERTY_4935
-                                if (string.IsNullOrEmpty(result.Result.MEASURE))
-                                {
-                                    Console.WriteLine("MEASURE пустое, проверяем PROPERTY_4935...");
-
-                                    // Парсим JSON для поиска PROPERTY_4935
-                                    var jObject = JObject.Parse(json);
-                                    var property4935 = jObject["result"]?["PROPERTY_4935"]?["value"]?.ToString();
-
-                                    if (!string.IsNullOrEmpty(property4935))
-                                    {
-                                        Console.WriteLine($"Найдено PROPERTY_4935: '{property4935}'");
-                                        // Можно попробовать сопоставить значение с единицами измерения
-                                    }
-                                }
-
-                                return result.Result;
-                            }
-                            else
-                            {
-                                Console.WriteLine($"Не удалось десериализовать ответ для товара ID={productId}");
-                                return null;
-                            }
-                        }
-                        catch (JsonException jex)
-                        {
-                            Console.WriteLine($"Ошибка JSON при десериализации товара ID={productId}: {jex.Message}");
-
-                            // Попробуем ручной парсинг
-                            try
-                            {
-                                var jObject = JObject.Parse(json);
-                                var result = jObject["result"];
-
-                                if (result != null)
-                                {
-                                    var productDetail = new BitrixProductDetail
-                                    {
-                                        ID = result["ID"]?.ToString(),
-                                        NAME = result["NAME"]?.ToString(),
-                                        MEASURE = result["MEASURE"]?.ToString(),
-                                        CODE = result["CODE"]?.ToString(),
-                                        ACTIVE = result["ACTIVE"]?.ToString()
-                                    };
-
-                                    // Парсим PRICE
-                                    if (result["PRICE"] != null && result["PRICE"].Type != JTokenType.Null)
-                                    {
-                                        if (decimal.TryParse(result["PRICE"].ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var price))
-                                        {
-                                            productDetail.PRICE = price;
-                                        }
-                                    }
-
-                                    Console.WriteLine($"Ручной парсинг успешен. MEASURE: '{productDetail.MEASURE}'");
-                                    return productDetail;
-                                }
-                            }
-                            catch (Exception parseEx)
-                            {
-                                Console.WriteLine($"Ошибка ручного парсинга: {parseEx.Message}");
-                            }
-
-                            return null;
-                        }
-                    }
-                    else
-                    {
-                        Console.WriteLine($"HTTP ошибка при загрузке товара ID={productId}: {response.StatusCode} - {response.ReasonPhrase}");
-                        return null;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Ошибка в BitrixProductService.GetProductAsync для ID={productId}: {ex.Message}");
-                return null;
-            }
+            // Bitrix (crmnvr.ru) отключен. Раньше это использовалось только для того, чтобы
+            // получить числовой ID единицы измерения товара (MEASURE) из Bitrix-справочника.
+            // Новый каталог отдаёт единицу измерения обычным текстом (шт/м/кг/упак) прямо в
+            // карточке товара (BitrixProductViewModel.Measure), поэтому единственный вызывающий
+            // код (ComparisonProduct.AutoSetMeasureFromBitrixProduct) переписан на использование
+            // этого текста напрямую и больше не вызывает данный метод. Метод оставлен для
+            // обратной совместимости сигнатуры и безопасно возвращает null без сетевого запроса.
+            Console.WriteLine($"BitrixProductService.GetProductAsync({productId}): Bitrix отключен, метод не используется, возвращаем null.");
+            return Task.FromResult<BitrixProductDetail>(null);
         }
     }
 
@@ -1380,16 +1235,6 @@ namespace ManagerApp.Pages
                 {
                     _selectedMeasureId = value;
                     MeasureId = value;
-
-                    // Обновляем Unit и UnitFullName при изменении выбора
-                    if (!string.IsNullOrEmpty(value))
-                    {
-                        Unit = GetMeasureSymbol(value);
-                        UnitFullName = GetMeasureName(value);
-                        OnPropertyChanged(nameof(Unit));
-                        OnPropertyChanged(nameof(UnitFullName));
-                    }
-
                     OnPropertyChanged(nameof(SelectedMeasureId));
                 }
             }
@@ -1417,17 +1262,6 @@ namespace ManagerApp.Pages
         protected virtual void OnPropertyChanged(string propertyName)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
-
-        // Временные методы (будут заменены внешними)
-        private string GetMeasureSymbol(string measureId)
-        {
-            return "шт."; // Заменится на реальную логику
-        }
-
-        private string GetMeasureName(string measureId)
-        {
-            return "Штука"; // Заменится на реальную логику
         }
     }
 

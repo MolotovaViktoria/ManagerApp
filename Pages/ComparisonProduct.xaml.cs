@@ -927,63 +927,48 @@ namespace ManagerApp.Pages
             });
         }
 
-        // Метод для автоматической подстановки единицы измерения из Bitrix
+        // Метод для автоматической подстановки единицы измерения выбранного товара.
+        // Bitrix (crmnvr.ru) отключен. Новый каталог хранит единицу измерения прямым текстом
+        // (шт/м/кг/упак) прямо в карточке товара (selectedProduct.Measure), а не как числовой ID
+        // Bitrix-справочника, поэтому сетевой запрос больше не нужен — сопоставляем текст
+        // со статическим списком единиц измерения (тот же список, что грузит BitrixMeasureService).
         private async Task AutoSetMeasureFromBitrixProduct(ProductItemViewModel item, Data.ScharedData.BitrixProductViewModel selectedProduct)
         {
             try
             {
-                // Пробуем получить детали товара из Bitrix
-                if (int.TryParse(selectedProduct.ProductId, out int productId) && productId > 0)
+                string unitText = selectedProduct?.Measure;
+                if (string.IsNullOrWhiteSpace(unitText))
+                    return;
+
+                BitrixMeasure measure = FindMeasureByUnitText(unitText);
+
+                if (measure == null)
                 {
-                    var productDetail = await BitrixProductService.GetProductAsync(productId);
+                    Console.WriteLine($"⚠️ Единица измерения '{unitText}' не найдена в справочнике для товара {item.OriginalProduct}");
+                    return;
+                }
 
-                    if (productDetail != null && !string.IsNullOrEmpty(productDetail.MEASURE))
+                lock (_measuresLock)
+                {
+                    if (!string.IsNullOrEmpty(measure.ID) && !_measuresDictionary.ContainsKey(measure.ID))
                     {
-                        string measureId = productDetail.MEASURE;
-
-                        // Проверяем, существует ли такая единица измерения в нашем словаре
-                        lock (_measuresLock)
-                        {
-                            if (_measuresDictionary.TryGetValue(measureId, out var measure))
-                            {
-                                item.SelectedMeasureId = measureId;
-                                item.MeasureSymbol = measure.SYMBOL_RUS ?? measure.SYMBOL_INTL ?? "шт.";
-                                item.MeasureName = measure.MEASURE_TITLE ?? "Штука";
-
-                                Console.WriteLine($"✅ Автоматически установлена единица измерения: {item.MeasureSymbol} ({item.MeasureName}) для товара {item.OriginalProduct}");
-                                return;
-                            }
-                        }
-
-                        // Если единица измерения не найдена в словаре, пробуем загрузить её отдельно
-                        var singleMeasure = await GetMeasureById(measureId);
-                        if (singleMeasure != null)
-                        {
-                            lock (_measuresLock)
-                            {
-                                if (!_measuresDictionary.ContainsKey(measureId))
-                                {
-                                    _measuresDictionary[measureId] = singleMeasure;
-                                }
-                            }
-
-                            // Обновляем UI
-                            await Dispatcher.InvokeAsync(() =>
-                            {
-                                if (!AllMeasures.Any(m => m.ID == measureId))
-                                {
-                                    AllMeasures.Add(singleMeasure);
-                                }
-                            });
-
-                            item.SelectedMeasureId = measureId;
-                            item.MeasureSymbol = singleMeasure.SYMBOL_RUS ?? singleMeasure.SYMBOL_INTL ?? "шт.";
-                            item.MeasureName = singleMeasure.MEASURE_TITLE ?? "Штука";
-
-                            Console.WriteLine($"✅ Загружена и установлена единица измерения: {item.MeasureSymbol} для товара {item.OriginalProduct}");
-                        }
+                        _measuresDictionary[measure.ID] = measure;
                     }
                 }
+
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    if (AllMeasures != null && !AllMeasures.Any(m => m.ID == measure.ID))
+                    {
+                        AllMeasures.Add(measure);
+                    }
+                });
+
+                item.SelectedMeasureId = measure.ID;
+                item.MeasureSymbol = measure.SYMBOL_RUS ?? measure.SYMBOL_INTL ?? unitText;
+                item.MeasureName = measure.MEASURE_TITLE ?? unitText;
+
+                Console.WriteLine($"✅ Автоматически установлена единица измерения: {item.MeasureSymbol} ({item.MeasureName}) для товара {item.OriginalProduct}");
             }
             catch (Exception ex)
             {
@@ -991,30 +976,19 @@ namespace ManagerApp.Pages
             }
         }
 
-        // Метод для получения единицы измерения по ID
-        private async Task<BitrixMeasure> GetMeasureById(string measureId)
+        // Сопоставляет текстовую единицу измерения из нового каталога (шт/м/кг/упак и т.п.)
+        // со статическим справочником BitrixMeasure по символу или полному названию.
+        private static BitrixMeasure FindMeasureByUnitText(string unitText)
         {
-            try
-            {
-                using (var httpClient = new HttpClient())
-                {
-                    httpClient.Timeout = TimeSpan.FromSeconds(30);
-                    string apiUrl = $"https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/crm.measure.get.json?id={measureId}";
+            if (string.IsNullOrWhiteSpace(unitText))
+                return null;
 
-                    var response = await httpClient.GetAsync(apiUrl);
-                    if (response.IsSuccessStatusCode)
-                    {
-                        var json = await response.Content.ReadAsStringAsync();
-                        var result = JsonConvert.DeserializeObject<BitrixMeasureGetResponse>(json);
-                        return result?.Result;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Ошибка получения единицы измерения {measureId}: {ex.Message}");
-            }
-            return null;
+            string normalized = unitText.Trim().TrimEnd('.').ToLowerInvariant();
+
+            return ManagerApp.Data.GetInfo.BitrixService.GetStaticMeasures().FirstOrDefault(m =>
+                string.Equals(m.SYMBOL_RUS?.TrimEnd('.'), normalized, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(m.MEASURE_TITLE, normalized, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(m.ID, normalized, StringComparison.OrdinalIgnoreCase));
         }
         // Обработчики для ComboBox
         private async void ComboBox_DropDownOpened(object sender, EventArgs e)
@@ -1642,7 +1616,13 @@ namespace ManagerApp.Pages
     public class BitrixMeasureGetResponse
     {
         [JsonProperty("result")]
-        public BitrixMeasure Result { get; set; }
+        public BitrixMeasureGetResult Result { get; set; }
+    }
+
+    public class BitrixMeasureGetResult
+    {
+        [JsonProperty("measure")]
+        public BitrixMeasure Measure { get; set; }
     }
 
 }

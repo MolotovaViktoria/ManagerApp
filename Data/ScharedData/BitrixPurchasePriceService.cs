@@ -1,47 +1,84 @@
-﻿using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using Newtonsoft.Json;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ManagerApp.Data.ScharedData
 {
+    // Закупочная (себестоимостная) цена товара. Раньше бралась из Bitrix (catalog.product.get ->
+    // purchasingPrice), теперь берётся из поля priceBase нового каталога через
+    // GET /api/products/{id} (http://83.217.203.29:8090) — эндпоинт для получения одного товара
+    // по id. Результаты кратковременно кэшируются в памяти по productId, чтобы повторные обращения
+    // к одному и тому же товару (например, при перерисовке грида) не били в сеть каждый раз.
     public class BitrixPurchasePriceService
     {
-        private static readonly HttpClient _httpClient = new HttpClient();
-        private static readonly string _webhookUrl = "https://crmnvr.ru/rest/241/5gkwkk4657uafc2x/";
-        private static readonly TimeSpan _timeout = TimeSpan.FromSeconds(10);
+        private const string ApiBaseUrl = "http://83.217.203.29:8090";
+        private const string ApiKey = "aXmKuJy2EHRLOrUDF8IRTNolTkvPgmLYssA0S54m-Vc";
 
-        static BitrixPurchasePriceService()
+        // Ограничиваем параллелизм при пакетных запросах, чтобы не заддосить сервер каталога.
+        private const int MaxParallelRequests = 8;
+
+        private static readonly HttpClient _httpClient = CreateClient();
+
+        private static readonly ConcurrentDictionary<int, (decimal Price, DateTime CachedAt)> _priceCache =
+            new ConcurrentDictionary<int, (decimal, DateTime)>();
+        private static readonly TimeSpan _cacheDuration = TimeSpan.FromMinutes(10);
+
+        private static HttpClient CreateClient()
         {
-            _httpClient.Timeout = _timeout;
+            var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+            client.DefaultRequestHeaders.Add("X-Api-Key", ApiKey);
+            return client;
+        }
+
+        private class ApiProductPriceDto
+        {
+            [JsonProperty("id")]
+            public int Id { get; set; }
+
+            [JsonProperty("priceBase")]
+            public decimal PriceBase { get; set; }
         }
 
         public static async Task<decimal> GetPurchasingPriceAsync(int productId)
         {
+            if (productId <= 0)
+                return 0;
+
             try
             {
-                // Используем метод catalog.product.get, который содержит purchasingPrice
-                string url = $"{_webhookUrl}catalog.product.get?id={productId}";
-
-                var response = await _httpClient.GetAsync(url);
-                response.EnsureSuccessStatusCode();
-
-                string json = await response.Content.ReadAsStringAsync();
-                var data = JsonConvert.DeserializeObject<JObject>(json);
-
-                // Извлекаем закупочную цену
-                var purchasingPrice = data?["result"]?["product"]?["purchasingPrice"]?.Value<decimal>();
-
-                if (purchasingPrice.HasValue && purchasingPrice.Value > 0)
+                if (_priceCache.TryGetValue(productId, out var cached) &&
+                    (DateTime.Now - cached.CachedAt) < _cacheDuration)
                 {
-                    return purchasingPrice.Value;
+                    return cached.Price;
                 }
 
-                return 0;
+                var response = await _httpClient.GetAsync($"{ApiBaseUrl}/api/products/{productId}");
+
+                if (response.StatusCode == HttpStatusCode.NotFound)
+                {
+                    _priceCache[productId] = (0, DateTime.Now);
+                    return 0;
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine($"Ошибка HTTP при получении товара {productId}: {response.StatusCode}");
+                    return 0;
+                }
+
+                string json = await response.Content.ReadAsStringAsync();
+                var dto = JsonConvert.DeserializeObject<ApiProductPriceDto>(json);
+                decimal price = dto != null && dto.PriceBase > 0 ? dto.PriceBase : 0;
+
+                _priceCache[productId] = (price, DateTime.Now);
+                return price;
             }
             catch (Exception ex)
             {
@@ -55,18 +92,31 @@ namespace ManagerApp.Data.ScharedData
         {
             var result = new Dictionary<int, decimal>();
 
-            // Для оптимизации можно использовать batch-запросы, но для простоты делаем последовательно
-            // (у вас небольшое количество товаров)
-            foreach (var productId in productIds)
+            if (productIds == null || !productIds.Any())
+                return result;
+
+            var distinctIds = productIds.Distinct().ToList();
+
+            using (var throttler = new SemaphoreSlim(MaxParallelRequests))
             {
-                try
+                var tasks = distinctIds.Select(async id =>
                 {
-                    var price = await GetPurchasingPriceAsync(productId);
-                    result[productId] = price;
-                }
-                catch
+                    await throttler.WaitAsync();
+                    try
+                    {
+                        decimal price = await GetPurchasingPriceAsync(id);
+                        return (Id: id, Price: price);
+                    }
+                    finally
+                    {
+                        throttler.Release();
+                    }
+                });
+
+                var results = await Task.WhenAll(tasks);
+                foreach (var item in results)
                 {
-                    result[productId] = 0;
+                    result[item.Id] = item.Price;
                 }
             }
 

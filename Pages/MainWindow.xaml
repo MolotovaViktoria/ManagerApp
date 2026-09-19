@@ -49,7 +49,7 @@
 
                     <!-- Удалены кнопки Debug, TestApi, CheckServer -->
                     <Button x:Name="btnTestBitrixCache" 
-        Content="🧪 Тест Bitrix" 
+        Content="🧪 Тест каталога"
         Click="btnTestBitrixCache_Click"
         Background="White"
         Foreground="Blue"

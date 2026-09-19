@@ -1,5 +1,6 @@
 ﻿using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
+using ManagerApp.Classes.Invoicing;
 using ManagerApp.Classes.Setting;
 using ManagerApp.Data.GetInfo;
 using ManagerApp.Data.ScharedData;
@@ -409,15 +410,15 @@ namespace ManagerApp.Pages
         }
 
         private async Task ProcessSuccessfulInvoiceAsync(int invoiceId,
-     List<(string Name, int Id)> foundProducts, List<string> notFoundProducts)
+     List<InvoiceProduct> invoiceProducts, DateTime invoiceDate, List<string> notFoundProducts)
         {
             UpdateStatus($"✅ Счет создан! ID: {invoiceId}", "✅");
 
             // ОПРЕДЕЛЯЕМ ID ШАБЛОНА В ЗАВИСИМОСТИ ОТ ВЫБРАННОЙ КОМПАНИИ
             int templateId = GetTemplateIdForMyCompany();
 
-            // ГЕНЕРАЦИЯ ДОКУМЕНТА WORD СРАЗУ ПОСЛЕ СОЗДАНИЯ СЧЕТА
-            await GenerateAndDownloadDocumentAsync(invoiceId, templateId, foundProducts, notFoundProducts);
+            // ГЕНЕРАЦИЯ ДОКУМЕНТА СЧЕТА (PDF+DOCX) СРАЗУ ПОСЛЕ СОЗДАНИЯ СЧЕТА - полностью локально
+            await GenerateAndDownloadDocumentAsync(invoiceId, templateId, invoiceProducts, invoiceDate, notFoundProducts);
         }
         private string RemoveRubleSymbolFromText(string text)
         {
@@ -431,38 +432,65 @@ namespace ManagerApp.Pages
         }
 
         private async Task GenerateAndDownloadDocumentAsync(int invoiceId, int templateId,
-      List<(string Name, int Id)> foundProducts, List<string> notFoundProducts)
+      List<InvoiceProduct> invoiceProducts, DateTime invoiceDate, List<string> notFoundProducts)
         {
             try
             {
-                string companyType = templateId == 32 ? "СПК" : "НВР";
-                UpdateStatus($"Генерация документа Word (шаблон {companyType})...", "⏳");
+                string sellerCode = templateId == 32 ? "SPK" : "NVR";
+                string companyType = sellerCode == "SPK" ? "СПК" : "НВР";
+                UpdateStatus($"Формирование документа счета ({companyType})...", "⏳");
 
-                // ГЕНЕРАЦИЯ И СКАЧИВАНИЕ ДОКУМЕНТА с указанием шаблона
-                string downloadUrl = await _bitrixService.GenerateInvoiceDocument(invoiceId, templateId, "docx");
+                var seller = CompanyRequisitesProvider.Get(sellerCode);
+                var buyer = await FetchBuyerRequisitesAsync(SelectedCompany.Id);
+
+                var invoiceData = new InvoiceData
+                {
+                    SellerCompanyCode = sellerCode,
+                    Number = string.IsNullOrWhiteSpace(InvoiceNumber) ? invoiceId.ToString() : InvoiceNumber,
+                    Date = invoiceDate,
+                    BuyerTitle = buyer?.Title ?? SelectedCompany?.Title ?? "",
+                    BuyerInn = buyer?.Inn ?? "",
+                    BuyerKpp = buyer?.Kpp ?? "",
+                    BuyerAddress = buyer?.Address ?? "",
+                    BuyerPhone = buyer?.Phone ?? "",
+                    DeliveryTerms = string.IsNullOrWhiteSpace(Address) ? seller?.DeliveryTerms : Address,
+                    DeliveryDays = int.TryParse(DeliveryDays, out var days) ? days : (int?)null,
+                    PaymentTerms = SelectedPaymentMethod?.Name ?? "",
+                    OrderTopic = $"Счет для {SelectedCompany?.Title} от {invoiceDate:dd.MM.yyyy}",
+                    Items = invoiceProducts.Select(p => new InvoiceLineItem
+                    {
+                        Name = p.ProductName,
+                        Quantity = p.Quantity,
+                        Unit = string.IsNullOrWhiteSpace(p.UnitName) ? "шт" : p.UnitName,
+                        Price = p.Price
+                    }).ToList()
+                };
+
+                byte[] pdfBytes = InvoicePdfBuilder.Build(invoiceData, seller);
+                byte[] docxBytes = InvoiceDocxBuilder.Build(invoiceData, seller);
+
+                string safeCompanyName = RemoveInvalidFileNameChars(SelectedCompany?.Title ?? "БезНазвания");
+                string historyPdfPath = GetAppHistoryFilePath(invoiceId, safeCompanyName, "pdf");
+                string historyDocxPath = GetAppHistoryFilePath(invoiceId, safeCompanyName, "docx");
+                string downloadsPdfPath = GetDownloadsFilePath(invoiceId, safeCompanyName, "pdf");
+                string downloadsDocxPath = GetDownloadsFilePath(invoiceId, safeCompanyName, "docx");
+
+                await SaveToFileAsync(pdfBytes, historyPdfPath);
+                await SaveToFileAsync(docxBytes, historyDocxPath);
+                await SaveToFileAsync(pdfBytes, downloadsPdfPath);
+                await SaveToFileAsync(docxBytes, downloadsDocxPath);
+
+                // Открываем PDF - он гарантированно откроется даже без установленного Word (через Edge)
+                OpenFile(downloadsPdfPath);
 
                 string successMessage = $"Счет #{invoiceId} создан!\n" +
-                                       $"Товаров: {foundProducts.Count}\n" +
-                                       $"Итого: {GrandTotal:#,##0.00} ₽";
+                                       $"Товаров: {invoiceProducts.Count}\n" +
+                                       $"Итого: {GrandTotal:#,##0.00} ₽\n\n" +
+                                       $"📄 Документ готов ({companyType})!\nФайл сохранен в:\n{historyPdfPath}";
 
-                if (!string.IsNullOrEmpty(downloadUrl))
+                if (!seller.HasBankDetails)
                 {
-                    successMessage += $"\n\n📄 Документ Word готов (шаблон {companyType})!";
-
-                    // Автоматическое скачивание файла в несколько мест
-                    string mainPath = await DownloadDocumentFileAsync(
-                        downloadUrl,
-                        invoiceId,
-                        SelectedCompany?.Title ?? "БезНазвания");
-
-                    if (!string.IsNullOrEmpty(mainPath))
-                    {
-                        successMessage += $"\n\nФайл сохранен в:\n1. {mainPath}";
-                    }
-                }
-                else
-                {
-                    successMessage += $"\n\n⚠️ Документ не сгенерирован";
+                    successMessage += "\n\n⚠️ Внимание: банковские реквизиты для НВР ещё не заполнены - в счете они будут показаны как «—».";
                 }
 
                 if (notFoundProducts.Any())
@@ -470,7 +498,7 @@ namespace ManagerApp.Pages
                     successMessage += $"\n\nПропущено: {notFoundProducts.Count} товаров";
                 }
 
-                UpdateStatus($"Документ счета #{invoiceId} (шаблон {companyType}) готов", "✅");
+                UpdateStatus($"Документ счета #{invoiceId} ({companyType}) готов", "✅");
             }
             catch (Exception ex)
             {
@@ -479,6 +507,38 @@ namespace ManagerApp.Pages
                 MessageBox.Show($"Счет создан, но документ не сгенерирован:\n{ex.Message}",
                     "Внимание", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
+        }
+
+        // Реквизиты покупателя (ИНН/КПП/адрес/телефон) не входят в модель Company - подтягиваем их
+        // напрямую с нашего сервера по id компании.
+        private async Task<BuyerRequisites> FetchBuyerRequisitesAsync(int companyId)
+        {
+            try
+            {
+                using (var client = new HttpClient())
+                {
+                    client.DefaultRequestHeaders.Add("X-Api-Key", "aXmKuJy2EHRLOrUDF8IRTNolTkvPgmLYssA0S54m-Vc");
+                    var response = await client.GetAsync($"http://83.217.203.29:8090/api/companies/{companyId}");
+                    if (!response.IsSuccessStatusCode) return null;
+                    var json = await response.Content.ReadAsStringAsync();
+                    return JsonConvert.DeserializeObject<BuyerRequisites>(json);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Не удалось получить реквизиты покупателя: {ex.Message}");
+                return null;
+            }
+        }
+
+        private class BuyerRequisites
+        {
+            public int Id { get; set; }
+            public string Title { get; set; }
+            public string Inn { get; set; }
+            public string Kpp { get; set; }
+            public string Address { get; set; }
+            public string Phone { get; set; }
         }
 
         /// <summary>
@@ -588,7 +648,7 @@ namespace ManagerApp.Pages
 
                 if (invoiceId > 0)
                 {
-                    await ProcessSuccessfulInvoiceAsync(invoiceId, foundProducts, notFoundProducts);
+                    await ProcessSuccessfulInvoiceAsync(invoiceId, invoiceProducts, invoiceDate, notFoundProducts);
                 }
                 else
                 {
@@ -755,7 +815,7 @@ namespace ManagerApp.Pages
             return await _bitrixService.CreateSmartInvoice(
                 invoiceDate, // передаем дату
                 SelectedCompany.Id,
-                6,
+                GetTemplateIdForMyCompany(), // 32 = СПК, 34 = НВР - однозначно определяет продавца по счету
                 orderTopic,
                 invoiceProducts.Where(p => p.ProductId > 0).ToList(),
                 InvoiceNumber,
@@ -764,60 +824,6 @@ namespace ManagerApp.Pages
                 SelectedPaymentMethod?.Value ?? "Не указано",
                 responsibleEmployeeId
             );
-        }
-
-        private async Task<string> DownloadDocumentFileAsync(string documentUrl, int invoiceId, string companyName)
-        {
-            try
-            {
-                byte[] fileBytes = await _bitrixService.DownloadDocumentBytes(documentUrl);
-
-                if (fileBytes == null || fileBytes.Length == 0)
-                {
-                    Console.WriteLine("❌ Не удалось загрузить документ");
-                    return null;
-                }
-
-                // ОЧИЩАЕМ ДОКУМЕНТ ОТ СИМВОЛА РУБЛЯ
-                byte[] cleanedBytes = RemoveRubleSymbolFromDocument(fileBytes);
-
-                List<string> savedPaths = new List<string>();
-
-                // 1. Сохраняем в папку ManagerApp\History (ОЧИЩЕННЫЙ)
-                string appHistoryPath = GetAppHistoryFilePath(invoiceId, companyName);
-                await SaveToFileAsync(cleanedBytes, appHistoryPath);
-                savedPaths.Add(appHistoryPath);
-
-                // 2. Сохраняем в папку Downloads (ОЧИЩЕННЫЙ) И СРАЗУ ОТКРЫВАЕМ
-                string downloadsPath = GetDownloadsFilePath(invoiceId, companyName);
-                await SaveToFileAsync(cleanedBytes, downloadsPath);
-                savedPaths.Add(downloadsPath);
-
-                // ОТКРЫВАЕМ ФАЙЛ СРАЗУ ПОСЛЕ СОХРАНЕНИЯ
-                OpenFile(downloadsPath);
-
-
-
-                Console.WriteLine($"✅ Документ сохранен в {savedPaths.Count} местах (без символа ₽):");
-                foreach (var path in savedPaths)
-                {
-                    Console.WriteLine($"   📁 {path}");
-                }
-
-                return appHistoryPath;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"❌ Ошибка скачивания: {ex.Message}");
-
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = documentUrl,
-                    UseShellExecute = true
-                });
-
-                return null;
-            }
         }
 
         private void OpenFile(string filePath)
@@ -844,7 +850,7 @@ namespace ManagerApp.Pages
             }
         }
 
-        private string GetAppHistoryFilePath(int invoiceId, string companyName)
+        private string GetAppHistoryFilePath(int invoiceId, string companyName, string extension = "docx")
         {
             try
             {
@@ -867,7 +873,7 @@ namespace ManagerApp.Pages
                 // Убираем недопустимые символы
                 safeCompanyName = RemoveInvalidFileNameChars(safeCompanyName);
 
-                string fileName = $"Счет_{invoiceId}_{safeCompanyName}_{DateTime.Now:yyyyMMdd_HHmmss}.docx";
+                string fileName = $"Счет_{invoiceId}_{safeCompanyName}_{DateTime.Now:yyyyMMdd_HHmmss}.{extension}";
 
                 return Path.Combine(yearMonthPath, fileName);
             }
@@ -878,7 +884,7 @@ namespace ManagerApp.Pages
             }
         }
 
-        private string GetDownloadsFilePath(int invoiceId, string companyName)
+        private string GetDownloadsFilePath(int invoiceId, string companyName, string extension = "docx")
         {
             try
             {
@@ -887,7 +893,7 @@ namespace ManagerApp.Pages
                     "Downloads");
 
                 string safeCompanyName = RemoveInvalidFileNameChars(companyName);
-                string fileName = $"Счет_{invoiceId}_{safeCompanyName}_{DateTime.Now:yyyyMMdd}.docx";
+                string fileName = $"Счет_{invoiceId}_{safeCompanyName}_{DateTime.Now:yyyyMMdd_HHmmss}.{extension}";
 
                 return Path.Combine(downloadsPath, fileName);
             }
@@ -1390,58 +1396,36 @@ namespace ManagerApp.Pages
         }
 
 
+        // Проверяет, есть ли уже счёт с таким номером у выбранной "нашей" компании (СПК/НВР).
+        // Раньше стучалось напрямую в Bitrix (crm.item.list) - теперь через наш API. Дублирующая
+        // проверка: сервер и так отклонит вставку с занятым номером (409), но так ошибка видна
+        // пользователю раньше, до попытки создания счёта.
         private async Task<bool> CheckInvoiceExistsAsync(string invoiceNumber)
         {
-            Console.WriteLine($"=== НАЧАЛО ПРОВЕРКИ НОМЕРА '{invoiceNumber}' ===");
-
-            BitrixService bitrixService = new BitrixService();
+            if (string.IsNullOrWhiteSpace(invoiceNumber))
+                return false;
 
             try
             {
-                // Пробуем разные варианты фильтра
-                var filtersToTry = new List<Dictionary<string, object>>
-        {
-            new Dictionary<string, object> { ["ACCOUNT_NUMBER"] = invoiceNumber },
-            new Dictionary<string, object> { ["=ACCOUNT_NUMBER"] = invoiceNumber }
-        };
+                string sellerCompany = GetTemplateIdForMyCompany() == 34 ? "NVR" : "SPK";
 
-                foreach (var filter in filtersToTry)
+                using (var client = new HttpClient())
                 {
-                    Console.WriteLine($"Пробуем фильтр: {JsonConvert.SerializeObject(filter)}");
+                    client.DefaultRequestHeaders.Add("X-Api-Key", "aXmKuJy2EHRLOrUDF8IRTNolTkvPgmLYssA0S54m-Vc");
+                    string url = $"http://83.217.203.29:8090/api/invoices?sellerCompany={sellerCompany}&q={Uri.EscapeDataString(invoiceNumber)}";
+                    var response = await client.GetAsync(url);
+                    if (!response.IsSuccessStatusCode)
+                        return false;
 
-                    var result = await bitrixService.CallMethodAsync("crm.item.list", new
-                    {
-                        entityTypeId = 31,
-                        filter = filter,
-                        select = new[] { "id", "ACCOUNT_NUMBER", "TITLE" }
-                    });
-
-                    Console.WriteLine($"Ответ Bitrix: {result.ToString(Newtonsoft.Json.Formatting.None)}");
-
-                    JArray items = null;
-                    if (result["result"]?["items"] is JArray r1)
-                        items = r1;
-                    else if (result["items"] is JArray r2)
-                        items = r2;
-
-                    if (items != null && items.Count > 0)
-                    {
-                        Console.WriteLine($"УСПЕХ! Найден счет: ID={items[0]["id"]}, Номер={items[0]["accountNumber"]}");
-                        return true;
-                    }
+                    string json = await response.Content.ReadAsStringAsync();
+                    var items = JArray.Parse(json);
+                    return items.Any(i => string.Equals((string)i["number"], invoiceNumber.Trim(), StringComparison.OrdinalIgnoreCase));
                 }
-
-                Console.WriteLine($"Номер '{invoiceNumber}' не найден в системе");
-                return false;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"ОШИБКА: {ex.Message}");
+                Console.WriteLine($"Ошибка проверки номера счета: {ex.Message}");
                 return false;
-            }
-            finally
-            {
-                Console.WriteLine($"=== КОНЕЦ ПРОВЕРКИ НОМЕРА '{invoiceNumber}' ===");
             }
         }
         private async void btnFinish_Click(object sender, RoutedEventArgs e)
